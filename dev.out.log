@@ -1,0 +1,16 @@
+
+> nextjs_tailwind_shadcn_ts@0.2.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.2.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.10.64:3000
+- Environments: .env
+✓ Ready in 747ms
+Creating turbopack project {
+  dir: 'C:\\Users\\Bibek Gupta\\Downloads\\projectManagement',
+  testMode: true
+}
+- Experiments (use with caution):
+  · cpus: 1
+

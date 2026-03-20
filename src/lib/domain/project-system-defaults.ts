@@ -1,0 +1,313 @@
+export type DefaultField = {
+  key: string
+  label: string
+  description?: string
+  dataType:
+    | 'text'
+    | 'markdown'
+    | 'number'
+    | 'date'
+    | 'boolean'
+    | 'single_select'
+    | 'multi_select'
+    | 'user'
+    | 'iteration'
+    | 'area'
+    | 'team'
+  required?: boolean
+  placeholder?: string
+  options?: string[]
+  config?: Record<string, unknown>
+}
+
+export type DefaultSection = {
+  key: string
+  title: string
+  description?: string
+  sectionType?: 'fields' | 'markdown' | 'system'
+  isCollapsible?: boolean
+  fields: DefaultField[]
+}
+
+export type DefaultWorkItemType = {
+  key: string
+  name: string
+  description: string
+  icon: string
+  color: string
+  hierarchyLevel: number
+  order: number
+  sections: DefaultSection[]
+}
+
+export const DEFAULT_PROJECT_STATES = [
+  {
+    name: 'Backlog',
+    color: '#64748b',
+    category: 'New',
+    order: 10,
+    isFinal: false,
+  },
+  {
+    name: 'To Do',
+    color: '#475569',
+    category: 'New',
+    order: 20,
+    isFinal: false,
+  },
+  {
+    name: 'In Progress',
+    color: '#2563eb',
+    category: 'In Progress',
+    order: 30,
+    isFinal: false,
+  },
+  {
+    name: 'In Review',
+    color: '#d97706',
+    category: 'In Progress',
+    order: 40,
+    isFinal: false,
+  },
+  {
+    name: 'Done',
+    color: '#16a34a',
+    category: 'Done',
+    order: 50,
+    isFinal: true,
+  },
+  {
+    name: 'Cancelled',
+    color: '#dc2626',
+    category: 'Done',
+    order: 60,
+    isFinal: true,
+  },
+] as const
+
+export const DEFAULT_WORK_ITEM_TYPES: DefaultWorkItemType[] = [
+  {
+    key: 'epic',
+    name: 'Epic',
+    description: 'Large portfolio-level initiative.',
+    icon: 'Layers3',
+    color: '#4f46e5',
+    hierarchyLevel: 1,
+    order: 10,
+    sections: [
+      {
+        key: 'strategy',
+        title: 'Strategy',
+        fields: [
+          {
+            key: 'objective',
+            label: 'Objective',
+            dataType: 'markdown',
+            required: true,
+            placeholder: 'Document the business objective and expected outcome.',
+          },
+          {
+            key: 'success_metrics',
+            label: 'Success Metrics',
+            dataType: 'markdown',
+            placeholder: 'Define measurable indicators for success.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'feature',
+    name: 'Feature',
+    description: 'A significant product capability delivered to customers.',
+    icon: 'Flag',
+    color: '#0891b2',
+    hierarchyLevel: 2,
+    order: 20,
+    sections: [
+      {
+        key: 'delivery',
+        title: 'Delivery',
+        fields: [
+          {
+            key: 'acceptance_criteria',
+            label: 'Acceptance Criteria',
+            dataType: 'markdown',
+            placeholder: 'List the acceptance conditions for this feature.',
+          },
+          {
+            key: 'rollout_notes',
+            label: 'Rollout Notes',
+            dataType: 'markdown',
+            placeholder: 'Capture rollout constraints, dependencies, and mitigation steps.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'story',
+    name: 'User Story',
+    description: 'A user-focused increment of value.',
+    icon: 'Star',
+    color: '#7c3aed',
+    hierarchyLevel: 3,
+    order: 30,
+    sections: [
+      {
+        key: 'requirements',
+        title: 'Requirements',
+        fields: [
+          {
+            key: 'acceptance_criteria',
+            label: 'Acceptance Criteria',
+            dataType: 'markdown',
+            placeholder: 'Describe the expected behavior and constraints.',
+          },
+          {
+            key: 'user_value',
+            label: 'User Value',
+            dataType: 'markdown',
+            placeholder: 'Explain the customer value unlocked by this story.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'task',
+    name: 'Task',
+    description: 'Implementation or operational work tracked to completion.',
+    icon: 'CheckSquare',
+    color: '#059669',
+    hierarchyLevel: 4,
+    order: 40,
+    sections: [
+      {
+        key: 'execution',
+        title: 'Execution',
+        fields: [
+          {
+            key: 'implementation_notes',
+            label: 'Implementation Notes',
+            dataType: 'markdown',
+            placeholder: 'Capture implementation detail, caveats, and hand-off information.',
+          },
+          {
+            key: 'qa_notes',
+            label: 'QA Notes',
+            dataType: 'markdown',
+            placeholder: 'Document validation steps or evidence.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'bug',
+    name: 'Bug',
+    description: 'A defect affecting product quality.',
+    icon: 'Bug',
+    color: '#dc2626',
+    hierarchyLevel: 4,
+    order: 50,
+    sections: [
+      {
+        key: 'triage',
+        title: 'Triage',
+        fields: [
+          {
+            key: 'reproduction_steps',
+            label: 'Reproduction Steps',
+            dataType: 'markdown',
+            placeholder: 'Describe the steps needed to reproduce the issue.',
+          },
+          {
+            key: 'expected_behavior',
+            label: 'Expected Behavior',
+            dataType: 'markdown',
+            placeholder: 'Describe what should happen instead.',
+          },
+          {
+            key: 'observed_behavior',
+            label: 'Observed Behavior',
+            dataType: 'markdown',
+            placeholder: 'Describe the incorrect behavior or system impact.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'design_doc',
+    name: 'Design Doc',
+    description: 'Structured design proposal or technical decision record.',
+    icon: 'FilePenLine',
+    color: '#0f766e',
+    hierarchyLevel: 3,
+    order: 60,
+    sections: [
+      {
+        key: 'proposal',
+        title: 'Proposal',
+        fields: [
+          {
+            key: 'hypothesis',
+            label: 'Hypothesis',
+            dataType: 'markdown',
+            placeholder: 'What problem does this design address and why is it the right solution?',
+          },
+          {
+            key: 'design_notes',
+            label: 'Design Notes',
+            dataType: 'markdown',
+            placeholder: 'Capture architecture, tradeoffs, and implementation detail.',
+          },
+          {
+            key: 'decision_log',
+            label: 'Decision Log',
+            dataType: 'markdown',
+            placeholder: 'Track key decisions and alternatives considered.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'release_item',
+    name: 'Release Item',
+    description: 'Release-scoped work used for launch readiness and coordination.',
+    icon: 'PackageCheck',
+    color: '#ea580c',
+    hierarchyLevel: 2,
+    order: 70,
+    sections: [
+      {
+        key: 'release',
+        title: 'Release Readiness',
+        fields: [
+          {
+            key: 'release_notes',
+            label: 'Release Notes',
+            dataType: 'markdown',
+            placeholder: 'Summarize externally visible changes for release communication.',
+          },
+          {
+            key: 'rollout_plan',
+            label: 'Rollout Plan',
+            dataType: 'markdown',
+            placeholder: 'Document deployment steps, timings, and dependencies.',
+          },
+          {
+            key: 'rollback_plan',
+            label: 'Rollback Plan',
+            dataType: 'markdown',
+            placeholder: 'Document rollback criteria and execution steps.',
+          },
+        ],
+      },
+    ],
+  },
+]
+
+export const DEFAULT_WORK_ITEM_TYPE_KEYS = DEFAULT_WORK_ITEM_TYPES.map((type) => type.key)
