@@ -81,9 +81,15 @@ export async function PUT(
     const body = await request.json()
     const data = updateUserSchema.parse(body)
 
+    const normalizedUpdate = {
+      ...data,
+      name: data.name?.trim(),
+      email: data.email?.trim().toLowerCase(),
+    }
+
     const user = await db.user.update({
       where: { id },
-      data,
+      data: normalizedUpdate,
       select: {
         id: true,
         email: true,

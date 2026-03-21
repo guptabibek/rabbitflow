@@ -13,9 +13,11 @@ import {
   getInitialStateForType,
   statusFromStateCategory,
 } from '@/lib/domain/state-machine'
+import { sendWorkItemAssignmentEmail } from '@/lib/domain/notifications'
 import {
   issueMutationInclude,
   serializeIssueRecord,
+  validateSprintAssignmentTeamContext,
   validateIssueReferences,
 } from '@/lib/domain/issues'
 
@@ -40,9 +42,13 @@ const createIssueSchema = z.object({
   priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).optional(),
   severity: z.enum(['critical', 'high', 'medium', 'low']).nullable().optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  estimatedHours: z.number().min(0).max(10000).nullable().optional(),
+  remainingHours: z.number().min(0).max(10000).nullable().optional(),
+  completedHours: z.number().min(0).max(10000).nullable().optional(),
   dueDate: nullableDateStringSchema,
   assigneeId: nullableReferenceIdSchema,
   iterationId: nullableReferenceIdSchema,
+  iterationTeamId: nullableReferenceIdSchema,
   areaId: nullableReferenceIdSchema,
   stateId: nullableReferenceIdSchema,
   parentIssueId: nullableReferenceIdSchema,
@@ -211,6 +217,16 @@ export async function POST(request: NextRequest) {
 
     await ensureProjectSystemRecords(data.projectId, auth.actor.userId)
 
+    const sprintContextError = await validateSprintAssignmentTeamContext({
+      projectId: data.projectId,
+      iterationId: data.iterationId,
+      iterationTeamId: data.iterationTeamId,
+    })
+
+    if (sprintContextError) {
+      return NextResponse.json({ error: sprintContextError }, { status: 400 })
+    }
+
     const validationError = await validateIssueReferences({
       projectId: data.projectId,
       workItemType: data.workItemType,
@@ -287,6 +303,9 @@ export async function POST(request: NextRequest) {
         priority: data.priority || 'medium',
         severity: data.severity ?? null,
         storyPoints: data.storyPoints ?? null,
+        estimatedHours: data.estimatedHours ?? null,
+        remainingHours: data.remainingHours ?? null,
+        completedHours: data.completedHours ?? null,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         assigneeId: data.assigneeId ?? null,
         reporterId: auth.actor.userId,
@@ -329,6 +348,15 @@ export async function POST(request: NextRequest) {
         workItemType: issue.workItemType,
       },
     })
+
+    if (issue.assignee?.id) {
+      void sendWorkItemAssignmentEmail({
+        issueId: issue.id,
+        assigneeUserId: issue.assignee.id,
+        actorUserId: auth.actor.userId,
+        origin: request.nextUrl.origin,
+      })
+    }
 
     await invalidateSprintCaches(data.projectId, data.iterationId)
 

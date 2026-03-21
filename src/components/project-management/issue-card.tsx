@@ -1,9 +1,7 @@
 'use client'
 
 import { memo } from 'react'
-import { useRouter } from 'next/navigation'
-import { Issue } from '@/store/app-store'
-import { canonicalWorkItemRoute } from '@/lib/domain/work-item-view'
+import { Issue, useAppStore } from '@/store/app-store'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useSortable } from '@dnd-kit/sortable'
@@ -56,7 +54,7 @@ interface IssueCardProps {
 }
 
 export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCardProps) {
-  const router = useRouter()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
 
   const {
     attributes,
@@ -85,7 +83,7 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
           ? 'opacity-60 shadow-xl ring-2 ring-primary/30 scale-[1.02]'
           : 'hover:border-primary/30 hover:shadow-sm'
       }`}
-      onClick={() => router.push(canonicalWorkItemRoute(issue.id))}
+      onClick={() => openWorkItem(issue.id)}
     >
       {/* Header: type icon + key + priority */}
       <div className="flex items-center justify-between mb-2">

@@ -16,6 +16,8 @@ const loginSchema = z.object({
 })
 
 const MFA_REQUIRE_ENROLLMENT = process.env.MFA_REQUIRE_ENROLLMENT !== 'false'
+const MAX_FAILED_LOGIN_ATTEMPTS = 3
+const LOCKOUT_DURATION_MS = 60 * 60 * 1000
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,33 +25,23 @@ export async function POST(request: NextRequest) {
     const { email, password } = loginSchema.parse(body)
     const normalizedEmail = email.trim().toLowerCase()
 
-    const users = await db.$queryRaw<Array<{
-      id: string
-      email: string
-      name: string
-      avatar: string | null
-      globalRole: string
-      passwordHash: string | null
-      mfaSecret: string | null
-      mfaEnabled: boolean
-      mfaReenrollRequired: boolean
-    }>>`
-      SELECT
-        "id",
-        "email",
-        "name",
-        "avatar",
-        "globalRole",
-        "passwordHash",
-        "mfaSecret",
-        "mfaEnabled",
-        "mfaReenrollRequired"
-      FROM "User"
-      WHERE "email" = ${normalizedEmail}
-      LIMIT 1
-    `
-
-    const user = users[0] || null
+    const user = await db.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        globalRole: true,
+        passwordHash: true,
+        mfaSecret: true,
+        mfaEnabled: true,
+        mfaReenrollRequired: true,
+        mustResetPassword: true,
+        failedLoginAttempts: true,
+        lockoutUntil: true,
+      },
+    })
 
     if (!user || !user.passwordHash) {
       return NextResponse.json(
@@ -58,11 +50,69 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (user.lockoutUntil && user.lockoutUntil.getTime() > Date.now()) {
+      const retryAfterMinutes = Math.max(
+        1,
+        Math.ceil((user.lockoutUntil.getTime() - Date.now()) / 60000)
+      )
+
+      return NextResponse.json(
+        {
+          error: `Account temporarily locked. Try again in ${retryAfterMinutes} minute${retryAfterMinutes === 1 ? '' : 's'}.`,
+          code: 'ACCOUNT_LOCKED',
+          retryAfterMinutes,
+        },
+        { status: 423 }
+      )
+    }
+
     const valid = await verifyPassword(password, user.passwordHash)
     if (!valid) {
+      const nextFailedAttempts = user.failedLoginAttempts + 1
+      const shouldLock = nextFailedAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: shouldLock ? 0 : nextFailedAttempts,
+          lockoutUntil: shouldLock ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null,
+        },
+      })
+
+      if (shouldLock) {
+        return NextResponse.json(
+          {
+            error: 'Account temporarily locked due to repeated failed sign-in attempts. Try again in 60 minutes.',
+            code: 'ACCOUNT_LOCKED',
+            retryAfterMinutes: 60,
+          },
+          { status: 423 }
+        )
+      }
+
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
+      )
+    }
+
+    if (user.failedLoginAttempts > 0 || user.lockoutUntil) {
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockoutUntil: null,
+        },
+      })
+    }
+
+    if (user.mustResetPassword) {
+      return NextResponse.json(
+        {
+          error: 'Password reset required before continuing.',
+          code: 'PASSWORD_RESET_REQUIRED',
+        },
+        { status: 403 }
       )
     }
 

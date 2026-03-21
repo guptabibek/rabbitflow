@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/app-store'
 import {
   AppSidebar,
   BacklogView,
   AdminConfigPanel,
+  AdminSecurityView,
   CreateIssueDialog,
   DashboardView,
   FilterBar,
@@ -17,6 +19,7 @@ import {
   TeamManagement,
   UserProfile,
 } from '@/components/project-management'
+import { WorkItemPage } from '@/components/project-management/work-item-page'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,6 +52,7 @@ type ViewType =
   | 'admin-panel'
   | 'work-item-types'
   | 'teams'
+  | 'admin-security'
   | 'settings'
 
 export default function HomePage() {
@@ -79,11 +83,13 @@ export default function HomePage() {
     isSprintModalOpen,
     isLoading,
     setIsLoading,
+    openWorkItemId,
+    closeWorkItem,
   } = useAppStore()
 
+  const { theme, setTheme } = useTheme()
   const [currentView, setCurrentView] = useState<ViewType>('dashboard')
   const [isInitialized, setIsInitialized] = useState(false)
-  const [isDark, setIsDark] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
 
@@ -323,8 +329,7 @@ export default function HomePage() {
   const isCreateScreenVisible = useAppStore((state) => state.isCreateIssueOpen)
 
   const toggleTheme = () => {
-    setIsDark((value) => !value)
-    document.documentElement.classList.toggle('dark')
+    setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
   const handleLogout = async () => {
@@ -350,44 +355,44 @@ export default function HomePage() {
   if (!isInitialized) {
     return (
       <div className="flex h-screen bg-background">
-        <div className="flex w-64 flex-col border-r border-border bg-sidebar">
-          <div className="border-b border-border p-4">
-            <Skeleton className="h-8 w-36" />
+        <div className="flex w-52 flex-col border-r border-border bg-sidebar">
+          <div className="border-b border-border p-3">
+            <Skeleton className="h-6 w-32" />
           </div>
-          <div className="space-y-1 p-3">
-            <Skeleton className="h-9 w-full rounded-md" />
-            <Skeleton className="h-9 w-full rounded-md" />
-            <Skeleton className="h-9 w-full rounded-md" />
-            <Skeleton className="h-9 w-full rounded-md" />
+          <div className="space-y-1 p-2">
+            <Skeleton className="h-8 w-full rounded-md" />
+            <Skeleton className="h-8 w-full rounded-md" />
+            <Skeleton className="h-8 w-full rounded-md" />
+            <Skeleton className="h-8 w-full rounded-md" />
           </div>
-          <div className="mt-4 p-3">
-            <Skeleton className="mb-3 h-4 w-20" />
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full rounded-md" />
-              <Skeleton className="h-8 w-full rounded-md" />
+          <div className="mt-3 p-2">
+            <Skeleton className="mb-2 h-3.5 w-16" />
+            <div className="space-y-1.5">
+              <Skeleton className="h-7 w-full rounded-md" />
+              <Skeleton className="h-7 w-full rounded-md" />
             </div>
           </div>
         </div>
         <div className="flex flex-1 flex-col">
-          <div className="flex h-14 items-center justify-between border-b border-border px-6">
-            <Skeleton className="h-7 w-48" />
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-8 w-8 rounded-md" />
-              <Skeleton className="h-8 w-8 rounded-full" />
+          <div className="flex h-11 items-center justify-between border-b border-border px-4">
+            <Skeleton className="h-6 w-44" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-7 rounded-md" />
+              <Skeleton className="h-7 w-7 rounded-full" />
             </div>
           </div>
-          <div className="flex-1 p-6">
-            <div className="mb-6 flex items-center gap-3">
-              <Skeleton className="h-9 w-64 rounded-md" />
-              <Skeleton className="h-9 w-32 rounded-md" />
-              <Skeleton className="h-9 w-32 rounded-md" />
+          <div className="flex-1 p-4">
+            <div className="mb-4 flex items-center gap-2">
+              <Skeleton className="h-8 w-56 rounded-md" />
+              <Skeleton className="h-8 w-28 rounded-md" />
+              <Skeleton className="h-8 w-28 rounded-md" />
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               {[1, 2, 3, 4].map((index) => (
-                <div key={index} className="w-72 space-y-3">
-                  <Skeleton className="h-10 w-full rounded-lg" />
-                  <Skeleton className="h-28 w-full rounded-lg" />
-                  <Skeleton className="h-28 w-full rounded-lg" />
+                <div key={index} className="w-64 space-y-2">
+                  <Skeleton className="h-9 w-full rounded-lg" />
+                  <Skeleton className="h-24 w-full rounded-lg" />
+                  <Skeleton className="h-24 w-full rounded-lg" />
                 </div>
               ))}
             </div>
@@ -401,40 +406,40 @@ export default function HomePage() {
     <div className="flex h-screen overflow-hidden bg-background">
       <aside
         className={`${
-          sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-60'
+          sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-52'
         } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out`}
       >
         <AppSidebar currentView={currentView} onViewChange={handleViewChange} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-background px-4">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="flex h-11 flex-shrink-0 items-center justify-between border-b border-border bg-background px-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 flex-shrink-0"
+              className="h-7 w-7 flex-shrink-0"
               onClick={() => setSidebarCollapsed((value) => !value)}
             >
               {sidebarCollapsed ? (
-                <PanelLeft className="h-4 w-4" />
+                <PanelLeft className="h-3.5 w-3.5" />
               ) : (
-                <PanelLeftClose className="h-4 w-4" />
+                <PanelLeftClose className="h-3.5 w-3.5" />
               )}
             </Button>
 
             {currentProject && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-8 max-w-[320px] gap-2 px-2 text-sm font-medium">
+                  <Button variant="ghost" className="h-7 max-w-[280px] gap-1.5 px-2 text-[13px] font-medium">
                     <div
-                      className="flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-white"
+                      className="flex h-4.5 w-4.5 items-center justify-center rounded text-[9px] font-bold text-white"
                       style={{ backgroundColor: currentProject.color }}
                     >
                       {currentProject.key.slice(0, 2)}
                     </div>
                     <span className="truncate">{currentProject.name}</span>
-                    <ChevronDown className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
@@ -470,21 +475,21 @@ export default function HomePage() {
             )}
           </div>
 
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefresh}>
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <div className="flex items-center gap-0.5">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefresh}>
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
 
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme}>
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 gap-2 px-2">
-                  <Avatar className="h-6 w-6">
+                <Button variant="ghost" className="h-7 gap-1.5 px-1.5">
+                  <Avatar className="h-5 w-5">
                     <AvatarImage src={currentUser?.avatar || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                    <AvatarFallback className="bg-primary/10 text-[10px] text-primary">
                       {(currentUser?.name || 'User')
                         .split(' ')
                         .map((segment) => segment[0])
@@ -492,7 +497,7 @@ export default function HomePage() {
                         .toUpperCase() || 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden text-sm sm:inline">
+                  <span className="hidden text-[13px] sm:inline">
                     {currentUser?.name || 'User'}
                   </span>
                 </Button>
@@ -524,37 +529,48 @@ export default function HomePage() {
         </header>
 
         <main className="flex flex-1 flex-col overflow-hidden">
-          {!isCreateScreenVisible &&
-            !isSprintModalOpen &&
-            (currentView === 'backlog' || currentView === 'board' || currentView === 'list') && (
-            <FilterBar
-              onViewModeChange={handleViewModeChange}
-              showViewModeToggle={currentView === 'board' || currentView === 'list'}
+          {openWorkItemId ? (
+            <WorkItemPage
+              issueId={openWorkItemId}
+              embedded
+              onClose={closeWorkItem}
             />
-            )}
-
-          <div className="flex-1 overflow-auto">
-            {isCreateScreenVisible ? (
-              <CreateIssueDialog
-                mode="screen"
-                onClose={() => setCreateIssueOpen(false)}
-              />
-            ) : isSprintModalOpen ? (
-              <SprintManagement />
-            ) : (
-              <>
-                {currentView === 'dashboard' && <DashboardView />}
-                {currentView === 'backlog' && <BacklogView />}
-                {currentView === 'board' && <KanbanBoard />}
-                {currentView === 'sprints' && <SprintView />}
-                {currentView === 'list' && <ListView />}
-                {(currentView === 'work-item-types' || currentView === 'admin-panel') && (
-                  <AdminConfigPanel />
+          ) : (
+            <>
+              {!isCreateScreenVisible &&
+                !isSprintModalOpen &&
+                (currentView === 'backlog' || currentView === 'board' || currentView === 'list') && (
+                <FilterBar
+                  onViewModeChange={handleViewModeChange}
+                  showViewModeToggle={currentView === 'board' || currentView === 'list'}
+                />
                 )}
-                {currentView === 'teams' && <TeamManagement mode="screen" />}
-              </>
-            )}
-          </div>
+
+              <div className="flex-1 overflow-auto">
+                {isCreateScreenVisible ? (
+                  <CreateIssueDialog
+                    mode="screen"
+                    onClose={() => setCreateIssueOpen(false)}
+                  />
+                ) : isSprintModalOpen ? (
+                  <SprintManagement />
+                ) : (
+                  <>
+                    {currentView === 'dashboard' && <DashboardView />}
+                    {currentView === 'backlog' && <BacklogView />}
+                    {currentView === 'board' && <KanbanBoard />}
+                    {currentView === 'sprints' && <SprintView />}
+                    {currentView === 'list' && <ListView />}
+                    {(currentView === 'work-item-types' || currentView === 'admin-panel') && (
+                      <AdminConfigPanel />
+                    )}
+                    {currentView === 'teams' && <TeamManagement mode="screen" />}
+                    {currentView === 'admin-security' && <AdminSecurityView />}
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </main>
       </div>
 

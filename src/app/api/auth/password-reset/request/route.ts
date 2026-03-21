@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { createPasswordResetOtp } from '@/lib/auth-otp'
 import { isSmtpConfigured, sendEmail } from '@/lib/email'
+import { buildPasswordResetEmail } from '@/lib/domain/email-templates'
 
 const requestSchema = z.object({
   email: z.string().email(),
@@ -30,12 +31,11 @@ export async function POST(request: NextRequest) {
     if (user) {
       const { code } = await createPasswordResetOtp(normalizedEmail, user.id)
 
-      await sendEmail({
-        to: user.email,
-        subject: 'RabbitFlow password reset code',
-        text: `Hello ${user.name},\n\nUse this one-time password to reset your RabbitFlow account password: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.`,
-        html: `<p>Hello ${user.name},</p><p>Use this one-time password to reset your RabbitFlow account password:</p><p style="font-size:24px;font-weight:700;letter-spacing:4px">${code}</p><p>This code expires in 10 minutes.</p><p>If you did not request this, you can ignore this email.</p>`,
+      const email = buildPasswordResetEmail({
+        userName: user.name,
+        otpCode: code,
       })
+      await sendEmail({ to: user.email, ...email })
     }
 
     return NextResponse.json({
@@ -50,8 +50,13 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('Password reset request error:', error)
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : 'Failed to send password reset OTP'
+
     return NextResponse.json(
-      { error: 'Failed to send password reset OTP' },
+      { error: message },
       { status: 500 }
     )
   }

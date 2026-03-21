@@ -48,6 +48,9 @@ function createDraft(overrides: Partial<WorkItemDraft> = {}): WorkItemDraft {
     stateId: 'state-1',
     parentIssueId: UNASSIGNED_VALUE,
     storyPoints: '5',
+    estimatedHours: '',
+    remainingHours: '',
+    completedHours: '',
     customFields: { hypothesis: 'Current hypothesis', reason: 'Investigate' },
     ...overrides,
   }
@@ -81,7 +84,7 @@ test('buildWorkItemPatchPayload emits only changed persisted fields', () => {
   })
 })
 
-test('buildWorkItemPatchPayload sends full custom field state when work item type changes', () => {
+test('buildWorkItemPatchPayload does not mutate work item type after creation', () => {
   const issue = createIssue()
   const draft = createDraft({
     workItemType: 'bug',
@@ -89,7 +92,7 @@ test('buildWorkItemPatchPayload sends full custom field state when work item typ
   })
 
   const payload = buildWorkItemPatchPayload(issue, draft)
-  assert.equal(payload?.workItemType, 'bug')
+  assert.equal(payload?.workItemType, undefined)
   assert.deepEqual(payload?.customFields, {
     repro_steps: 'Step 1',
     expected: 'Expected',

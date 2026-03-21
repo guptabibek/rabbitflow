@@ -131,6 +131,9 @@ export type Issue = {
   priority: 'lowest' | 'low' | 'medium' | 'high' | 'highest'
   severity?: 'critical' | 'high' | 'medium' | 'low' | null
   storyPoints: number | null
+  estimatedHours?: number | null
+  remainingHours?: number | null
+  completedHours?: number | null
   dueDate: string | null
   startDate?: string | null
   completedDate?: string | null
@@ -312,6 +315,27 @@ interface AppState {
   }
   setFilters: (filters: Partial<AppState['filters']>) => void
 
+  sprintViewSelectionByProject: Record<
+    string,
+    {
+      selectedTeamId: string
+      selectedSprintId: string | null
+      activeTab: 'overview' | 'board' | 'backlog' | 'capacity'
+      boardGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
+      backlogGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
+    }
+  >
+  setSprintViewSelection: (
+    projectId: string,
+    selection: {
+      selectedTeamId?: string
+      selectedSprintId?: string | null
+      activeTab?: 'overview' | 'board' | 'backlog' | 'capacity'
+      boardGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
+      backlogGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
+    }
+  ) => void
+
   isCreateIssueOpen: boolean
   setCreateIssueOpen: (open: boolean) => void
   isSprintModalOpen: boolean
@@ -319,6 +343,10 @@ interface AppState {
 
   isLoading: boolean
   setIsLoading: (loading: boolean) => void
+
+  openWorkItemId: string | null
+  openWorkItem: (id: string) => void
+  closeWorkItem: () => void
 
   resetProjectContext: () => void
 }
@@ -435,6 +463,46 @@ export const useAppStore = create<AppState>()(
       setFilters: (filters) =>
         set((state) => ({ filters: { ...state.filters, ...filters } })),
 
+      sprintViewSelectionByProject: {},
+      setSprintViewSelection: (projectId, selection) =>
+        set((state) => {
+          const currentSelection = state.sprintViewSelectionByProject[projectId] ?? {
+            selectedTeamId: '__all_teams__',
+            selectedSprintId: null,
+            activeTab: 'backlog',
+            boardGroupBy: 'none',
+            backlogGroupBy: 'story',
+          }
+
+          const nextSelection = {
+            selectedTeamId: selection.selectedTeamId ?? currentSelection.selectedTeamId,
+            selectedSprintId:
+              selection.selectedSprintId !== undefined
+                ? selection.selectedSprintId
+                : currentSelection.selectedSprintId,
+            activeTab: selection.activeTab ?? currentSelection.activeTab,
+            boardGroupBy: selection.boardGroupBy ?? currentSelection.boardGroupBy,
+            backlogGroupBy: selection.backlogGroupBy ?? currentSelection.backlogGroupBy,
+          }
+
+          if (
+            nextSelection.selectedTeamId === currentSelection.selectedTeamId &&
+            nextSelection.selectedSprintId === currentSelection.selectedSprintId &&
+            nextSelection.activeTab === currentSelection.activeTab &&
+            nextSelection.boardGroupBy === currentSelection.boardGroupBy &&
+            nextSelection.backlogGroupBy === currentSelection.backlogGroupBy
+          ) {
+            return state
+          }
+
+          return {
+            sprintViewSelectionByProject: {
+              ...state.sprintViewSelectionByProject,
+              [projectId]: nextSelection,
+            },
+          }
+        }),
+
       isCreateIssueOpen: false,
       setCreateIssueOpen: (open) => set({ isCreateIssueOpen: open }),
       isSprintModalOpen: false,
@@ -442,6 +510,10 @@ export const useAppStore = create<AppState>()(
 
       isLoading: false,
       setIsLoading: (loading) => set({ isLoading: loading }),
+
+      openWorkItemId: null,
+      openWorkItem: (id) => set({ openWorkItemId: id }),
+      closeWorkItem: () => set({ openWorkItemId: null }),
 
       resetProjectContext: () =>
         set({
@@ -475,6 +547,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
         hierarchyExpandedByProject: state.hierarchyExpandedByProject,
+        sprintViewSelectionByProject: state.sprintViewSelectionByProject,
       }),
     }
   )

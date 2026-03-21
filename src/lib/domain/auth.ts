@@ -28,9 +28,11 @@ type RequestIdentity = {
   sessionId: string | null
 }
 
+const ALLOW_HEADER_AUTH = process.env.ALLOW_HEADER_AUTH === 'true'
+
 async function getIdentityFromRequest(request: NextRequest): Promise<RequestIdentity | null> {
   const headerUser = request.headers.get('x-user-id')
-  if (headerUser) {
+  if (ALLOW_HEADER_AUTH && headerUser) {
     return {
       userId: headerUser,
       sessionId: request.headers.get('x-session-id') || null,

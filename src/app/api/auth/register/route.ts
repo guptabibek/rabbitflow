@@ -14,9 +14,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const data = registerSchema.parse(body)
+    const normalizedEmail = data.email.trim().toLowerCase()
 
     const existing = await db.user.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       select: { id: true },
     })
 
@@ -31,10 +32,11 @@ export async function POST(request: NextRequest) {
 
     const user = await db.user.create({
       data: {
-        email: data.email,
-        name: data.name,
+        email: normalizedEmail,
+        name: data.name.trim(),
         passwordHash,
         globalRole: 'member',
+        mustResetPassword: false,
       },
       select: {
         id: true,

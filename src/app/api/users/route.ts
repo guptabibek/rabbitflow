@@ -15,6 +15,7 @@ const createUserSchema = z.object({
   password: z.string().min(8),
   avatar: z.string().optional(),
   globalRole: z.enum(['admin', 'member']).optional(),
+  addToProject: z.boolean().optional(),
   projectId: z.string().optional(),
   projectRole: z.enum(['Admin', 'PM', 'Dev', 'QA', 'Viewer']).optional(),
 })
@@ -128,8 +129,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const data = createUserSchema.parse(body)
+    const normalizedEmail = data.email.trim().toLowerCase()
+    const shouldAddToProject = Boolean(data.addToProject)
 
-    if (data.projectId) {
+    if (shouldAddToProject) {
+      if (!data.projectId) {
+        return NextResponse.json(
+          { error: 'projectId is required when addToProject is true' },
+          { status: 400 }
+        )
+      }
+
       const permission = await requireProjectPermission(
         request,
         data.projectId,
@@ -142,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = await db.user.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
       select: { id: true },
     })
 
@@ -157,11 +167,12 @@ export async function POST(request: NextRequest) {
 
     const user = await db.user.create({
       data: {
-        name: data.name,
-        email: data.email,
+        name: data.name.trim(),
+        email: normalizedEmail,
         avatar: data.avatar,
         passwordHash,
         globalRole: data.globalRole ?? 'member',
+        mustResetPassword: true,
       },
       select: {
         id: true,
@@ -172,7 +183,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    if (data.projectId) {
+    if (shouldAddToProject && data.projectId) {
       await db.projectMember.create({
         data: {
           projectId: data.projectId,

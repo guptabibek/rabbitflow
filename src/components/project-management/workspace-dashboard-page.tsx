@@ -16,6 +16,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   ArrowRight,
@@ -24,6 +31,7 @@ import {
   LogOut,
   Plus,
   Search,
+  UserPlus,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -46,6 +54,8 @@ const PROJECT_COLORS = [
   '#64748b',
 ]
 
+const PROJECT_ROLE_OPTIONS = ['Admin', 'PM', 'Dev', 'QA', 'Viewer'] as const
+
 export function WorkspaceDashboardPage() {
   const router = useRouter()
   const {
@@ -60,13 +70,23 @@ export function WorkspaceDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showCreateUser, setShowCreateUser] = useState(false)
   const [createForm, setCreateForm] = useState({
     name: '',
     key: '',
     description: '',
     color: '#6366f1',
   })
+  const [createUserForm, setCreateUserForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    assignToProject: false,
+    projectId: '',
+    projectRole: 'Dev' as (typeof PROJECT_ROLE_OPTIONS)[number],
+  })
   const [isCreating, setIsCreating] = useState(false)
+  const [isCreatingUser, setIsCreatingUser] = useState(false)
   const canCreateProject = currentUser?.globalRole === 'admin'
 
   useEffect(() => {
@@ -163,6 +183,65 @@ export function WorkspaceDashboardPage() {
     }
   }
 
+  const handleCreateUser = async () => {
+    if (
+      !createUserForm.name.trim() ||
+      !createUserForm.email.trim() ||
+      createUserForm.password.length < 8
+    ) {
+      return
+    }
+
+    const availableProjects = projects.filter((project) => !project.isArchived)
+    const targetProjectId = createUserForm.projectId || availableProjects[0]?.id || ''
+
+    if (createUserForm.assignToProject && !targetProjectId) {
+      toast.error('No active project available for assignment')
+      return
+    }
+
+    setIsCreatingUser(true)
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createUserForm.name.trim(),
+          email: createUserForm.email.trim().toLowerCase(),
+          password: createUserForm.password,
+          addToProject: createUserForm.assignToProject,
+          projectId: createUserForm.assignToProject ? targetProjectId : undefined,
+          projectRole: createUserForm.assignToProject ? createUserForm.projectRole : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        toast.error(error.error || 'Failed to create user')
+        return
+      }
+
+      setShowCreateUser(false)
+      setCreateUserForm({
+        name: '',
+        email: '',
+        password: '',
+        assignToProject: false,
+        projectId: '',
+        projectRole: 'Dev',
+      })
+      toast.success(
+        createUserForm.assignToProject
+          ? 'User created and assigned to project. They must reset password on first login.'
+          : 'User created successfully. They must reset password on first login.'
+      )
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setIsCreatingUser(false)
+    }
+  }
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     resetProjectContext()
@@ -251,10 +330,20 @@ export function WorkspaceDashboardPage() {
             />
           </div>
           {canCreateProject ? (
-            <Button onClick={() => setShowCreate(true)} className="h-11 gap-2 px-5">
-              <Plus className="h-4 w-4" />
-              New Project
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowCreateUser(true)}
+                className="h-11 gap-2 px-5"
+              >
+                <UserPlus className="h-4 w-4" />
+                New User
+              </Button>
+              <Button onClick={() => setShowCreate(true)} className="h-11 gap-2 px-5">
+                <Plus className="h-4 w-4" />
+                New Project
+              </Button>
+            </div>
           ) : null}
         </div>
 
@@ -405,6 +494,153 @@ export function WorkspaceDashboardPage() {
               disabled={isCreating || !createForm.name.trim() || createForm.key.length < 2}
             >
               {isCreating ? 'Creating...' : 'Create Project'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={canCreateProject && showCreateUser}
+        onOpenChange={(open) => {
+          setShowCreateUser(open)
+          if (!open && !isCreatingUser) {
+            setCreateUserForm({
+              name: '',
+              email: '',
+              password: '',
+              assignToProject: false,
+              projectId: '',
+              projectRole: 'Dev',
+            })
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label>Full Name</Label>
+              <Input
+                value={createUserForm.name}
+                onChange={(event) =>
+                  setCreateUserForm((state) => ({ ...state, name: event.target.value }))
+                }
+                placeholder="Jane Doe"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={createUserForm.email}
+                onChange={(event) =>
+                  setCreateUserForm((state) => ({ ...state, email: event.target.value }))
+                }
+                placeholder="jane@example.com"
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label>Temporary Password</Label>
+              <Input
+                type="password"
+                value={createUserForm.password}
+                onChange={(event) =>
+                  setCreateUserForm((state) => ({ ...state, password: event.target.value }))
+                }
+                placeholder="Minimum 8 characters"
+                className="mt-1.5"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                The user will be forced to reset password on first login.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
+              <input
+                type="checkbox"
+                checked={createUserForm.assignToProject}
+                onChange={(event) =>
+                  setCreateUserForm((state) => ({
+                    ...state,
+                    assignToProject: event.target.checked,
+                  }))
+                }
+              />
+              Assign user to a project now
+            </label>
+            {createUserForm.assignToProject && (
+              <>
+                <div>
+                  <Label>Project</Label>
+                  <Select
+                    value={
+                      createUserForm.projectId ||
+                      projects.find((project) => !project.isArchived)?.id ||
+                      ''
+                    }
+                    onValueChange={(value) =>
+                      setCreateUserForm((state) => ({ ...state, projectId: value }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue placeholder="Select project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects
+                        .filter((project) => !project.isArchived)
+                        .map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name} ({project.key})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Project Role</Label>
+                  <Select
+                    value={createUserForm.projectRole}
+                    onValueChange={(value) =>
+                      setCreateUserForm((state) => ({
+                        ...state,
+                        projectRole: value as (typeof PROJECT_ROLE_OPTIONS)[number],
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_ROLE_OPTIONS.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            <Button
+              className="w-full"
+              onClick={handleCreateUser}
+              disabled={
+                isCreatingUser ||
+                !createUserForm.name.trim() ||
+                !createUserForm.email.trim() ||
+                createUserForm.password.length < 8 ||
+                (createUserForm.assignToProject &&
+                  projects.filter((project) => !project.isArchived).length === 0)
+              }
+            >
+              {isCreatingUser
+                ? 'Creating...'
+                : createUserForm.assignToProject
+                  ? 'Create User & Assign'
+                  : 'Create User'}
             </Button>
           </div>
         </DialogContent>

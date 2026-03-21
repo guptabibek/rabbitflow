@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/app-store'
-import { canonicalWorkItemRoute } from '@/lib/domain/work-item-view'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -82,7 +80,7 @@ const priorityMap: Record<string, string> = {
 }
 
 export function BacklogView() {
-  const router = useRouter()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
 
   function applyReorder(nodes: BacklogNode[], oldSiblings: BacklogNode[], newSiblings: BacklogNode[]): BacklogNode[] {
     if (nodes === oldSiblings) return newSiblings
@@ -214,7 +212,7 @@ export function BacklogView() {
             className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/50 transition-colors rounded-md cursor-pointer"
             style={{ paddingLeft: `${12 + depth * 24}px` }}
             onClick={() => {
-              router.push(canonicalWorkItemRoute(node.id))
+              openWorkItem(node.id)
             }}
           >
             {/* Expand toggle */}

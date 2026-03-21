@@ -7,6 +7,7 @@ import { requireProjectPermission } from '@/lib/domain/auth'
 import { sanitizeRichText, toPlainTextPreview } from '@/lib/domain/content'
 import { parseCommentMentions } from '@/lib/domain/mentions'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
+import { sendMentionNotificationEmails } from '@/lib/domain/notifications'
 
 const updateCommentSchema = z.object({
   content: z.string().min(1),
@@ -24,6 +25,11 @@ export async function PUT(
     const existing = await db.comment.findUnique({
       where: { id },
       include: {
+        mentions: {
+          select: {
+            userId: true,
+          },
+        },
         issue: {
           select: {
             projectId: true,
@@ -119,6 +125,21 @@ export async function PUT(
         contentPreview: toPlainTextPreview(sanitizedContent, 100),
       },
     })
+
+    const previousMentionUserIds = new Set(existing.mentions.map((mention) => mention.userId))
+    const newlyMentionedUserIds = comment.mentions
+      .map((mention) => mention.userId)
+      .filter((userId) => !previousMentionUserIds.has(userId))
+
+    if (newlyMentionedUserIds.length > 0) {
+      void sendMentionNotificationEmails({
+        issueId: existing.issueId,
+        mentionUserIds: newlyMentionedUserIds,
+        actorUserId: auth.actor.userId,
+        commentContent: sanitizedContent,
+        origin: request.nextUrl.origin,
+      })
+    }
 
     await invalidateSprintCaches(existing.issue.projectId, existing.issue.iterationId)
 

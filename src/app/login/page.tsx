@@ -57,6 +57,19 @@ export default function LoginPage() {
 
       if (!response.ok) {
         const data = await response.json()
+
+        if (data?.code === 'PASSWORD_RESET_REQUIRED') {
+          setResetEmail(email.trim())
+          setMode('reset-request')
+          toast.error('You must reset your password before signing in.')
+          return
+        }
+
+        if (data?.code === 'ACCOUNT_LOCKED') {
+          toast.error(toErrorMessage(data?.error, 'Account temporarily locked'))
+          return
+        }
+
         toast.error(toErrorMessage(data?.error, 'Login failed'))
         return
       }

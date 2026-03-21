@@ -52,7 +52,7 @@ export async function createAuthSession(args: {
 }) {
   const now = new Date()
   const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000)
-  const userAgent = request.headers.get('user-agent')
+  const userAgent = args.request.headers.get('user-agent')
 
   return db.authSession.create({
     data: {

@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAppStore, type Issue } from '@/store/app-store'
-import { canonicalWorkItemRoute } from '@/lib/domain/work-item-view'
 import {
   Table,
   TableBody,
@@ -120,7 +118,7 @@ function SortHeaderButton({
 }
 
 export function ListView() {
-  const router = useRouter()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
   const {
     issues,
     currentProject,
@@ -355,7 +353,7 @@ export function ListView() {
                 <TableRow
                   key={issue.id}
                   className="cursor-pointer hover:bg-accent/40 transition-colors border-b border-border/50"
-                  onClick={() => router.push(canonicalWorkItemRoute(issue.id))}
+                  onClick={() => openWorkItem(issue.id)}
                 >
                   <TableCell className="py-2">
                     <Checkbox

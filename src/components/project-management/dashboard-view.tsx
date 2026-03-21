@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/app-store'
-import { canonicalWorkItemRoute } from '@/lib/domain/work-item-view'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -69,7 +67,7 @@ const statusColorMap: Record<string, { bg: string; text: string; bar: string }> 
 }
 
 export function DashboardView() {
-  const router = useRouter()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
   const { currentProject, projects, users } = useAppStore()
   const [stats, setStats] = useState<DashboardStats>({})
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
@@ -305,7 +303,7 @@ export function DashboardView() {
                     <div
                       key={issue.id}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-accent/50 transition-colors cursor-pointer"
-                      onClick={() => router.push(canonicalWorkItemRoute(issue.id))}
+                      onClick={() => openWorkItem(issue.id)}
                     >
                       <div
                         className="h-2 w-2 rounded-full flex-shrink-0"

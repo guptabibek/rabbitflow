@@ -92,6 +92,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserPassword, setNewUserPassword] = useState('')
   const [newUserRole, setNewUserRole] = useState<(typeof ROLE_OPTIONS)[number]['value']>('Dev')
+  const [assignNewUserToProject, setAssignNewUserToProject] = useState(false)
 
   const canManageMembers = currentProjectPermissions.includes('project:members:manage')
   const isSystemAdmin = currentUser?.globalRole === 'admin'
@@ -200,8 +201,9 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
           email: newUserEmail,
           name: newUserName,
           password: newUserPassword,
-          projectId: currentProject.id,
-          projectRole: newUserRole,
+          addToProject: assignNewUserToProject,
+          projectId: assignNewUserToProject ? currentProject.id : undefined,
+          projectRole: assignNewUserToProject ? newUserRole : undefined,
         }),
       })
       if (!res.ok) {
@@ -209,7 +211,11 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
         toast.error(error.error || 'Failed to create user')
         return
       }
-      toast.success('User created and added to project')
+      toast.success(
+        assignNewUserToProject
+          ? 'User created and added to project'
+          : 'User created. Add them to a project when ready.'
+      )
       resetAddForm()
       setAddMemberOpen(false)
       refreshMembers()
@@ -230,6 +236,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
     setNewUserEmail('')
     setNewUserPassword('')
     setNewUserRole('Dev')
+    setAssignNewUserToProject(false)
   }
 
   const handleRemoveMember = async (memberId: string) => {
@@ -510,28 +517,38 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           className="h-8 text-sm"
                         />
                       </div>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                          Project Role
-                        </label>
-                        <Select
-                          value={newUserRole}
-                          onValueChange={(v) =>
-                            setNewUserRole(v as (typeof ROLE_OPTIONS)[number]['value'])
-                          }
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLE_OPTIONS.map((role) => (
-                              <SelectItem key={role.value} value={role.value}>
-                                {role.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={assignNewUserToProject}
+                          onChange={(event) => setAssignNewUserToProject(event.target.checked)}
+                        />
+                        Add this user to current project immediately
+                      </label>
+                      {assignNewUserToProject && (
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Project Role
+                          </label>
+                          <Select
+                            value={newUserRole}
+                            onValueChange={(v) =>
+                              setNewUserRole(v as (typeof ROLE_OPTIONS)[number]['value'])
+                            }
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLE_OPTIONS.map((role) => (
+                                <SelectItem key={role.value} value={role.value}>
+                                  {role.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Temporary Password
@@ -559,7 +576,11 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             !newUserEmail || !newUserName || newUserPassword.length < 8 || isAdding
                           }
                         >
-                          {isAdding ? 'Creating...' : 'Create & Add'}
+                          {isAdding
+                            ? 'Creating...'
+                            : assignNewUserToProject
+                              ? 'Create & Add'
+                              : 'Create User'}
                         </Button>
                       </div>
                     </div>

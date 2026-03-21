@@ -59,7 +59,7 @@ const SEVERITY_OPTIONS = [
   { value: 'low', label: 'Low' },
 ]
 
-const LINK_TYPES = [
+const RELATION_LINK_TYPES = [
   { value: 'related', label: 'Related' },
   { value: 'blocked_by', label: 'Blocked By' },
   { value: 'blocks', label: 'Blocks' },
@@ -67,6 +67,13 @@ const LINK_TYPES = [
   { value: 'tests', label: 'Tests' },
   { value: 'tested_by', label: 'Tested By' },
 ]
+
+const HIERARCHY_LINK_TYPES = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+]
+
+const LINK_TYPES = [...RELATION_LINK_TYPES, ...HIERARCHY_LINK_TYPES]
 
 const UNASSIGNED_VALUE = '__none__'
 
@@ -124,6 +131,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setCreateIssueOpen,
     states,
     teams,
+    updateIssue,
     users,
     workItemTypes,
   } = useAppStore()
@@ -137,7 +145,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [priority, setPriority] = useState('medium')
   const [severity, setSeverity] = useState(UNASSIGNED_VALUE)
   const [storyPoints, setStoryPoints] = useState('')
+  const [estimatedHours, setEstimatedHours] = useState('')
+  const [remainingHours, setRemainingHours] = useState('')
+  const [completedHours, setCompletedHours] = useState('')
   const [assigneeId, setAssigneeId] = useState(UNASSIGNED_VALUE)
+  const [selectedIterationTeamId, setSelectedIterationTeamId] = useState(UNASSIGNED_VALUE)
   const [iterationId, setIterationId] = useState(UNASSIGNED_VALUE)
   const [areaId, setAreaId] = useState(UNASSIGNED_VALUE)
   const [stateId, setStateId] = useState(UNASSIGNED_VALUE)
@@ -145,6 +157,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [parentIssueId, setParentIssueId] = useState<string | null>(null)
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({})
   const [linkedItems, setLinkedItems] = useState<LinkedItem[]>([])
+  const [childIssueIds, setChildIssueIds] = useState<string[]>([])
   const [newLinkType, setNewLinkType] = useState('related')
   const [searchLink, setSearchLink] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -240,9 +253,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     return issues.filter(
       (issue) =>
         issue.id !== parentIssueId &&
+        !childIssueIds.includes(issue.id) &&
         !linkedItems.some((link) => link.issueId === issue.id)
     )
-  }, [issues, linkedItems, parentIssueId])
+  }, [childIssueIds, issues, linkedItems, parentIssueId])
 
   const availableParents = useMemo(
     () =>
@@ -268,9 +282,83 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   const selectedType = activeTypeDefinition ?? typeOptions[0]
   const availableStates = typeScopedStates.length > 0 ? typeScopedStates : states
+  const sortedTeams = useMemo(
+    () => [...teams].sort((left, right) => left.name.localeCompare(right.name)),
+    [teams]
+  )
+  const filteredIterations = useMemo(() => {
+    if (selectedIterationTeamId === UNASSIGNED_VALUE) {
+      return iterations.filter((iteration) => iteration.iterationType !== 'sprint')
+    }
+
+    return iterations.filter(
+      (iteration) =>
+        iteration.iterationType !== 'sprint' || iteration.teamId === selectedIterationTeamId
+    )
+  }, [iterations, selectedIterationTeamId])
+
+  const formatIterationLabel = (iteration: (typeof iterations)[number]) => {
+    const baseLabel = iteration.path || iteration.name
+    if (iteration.iterationType !== 'sprint') {
+      return baseLabel
+    }
+
+    const teamName =
+      iteration.team?.name ||
+      teams.find((team) => team.id === iteration.teamId)?.name ||
+      'No team'
+
+    return `${baseLabel} (${teamName})`
+  }
+
   const TypeIcon = TYPE_ICONS[selectedType?.key || 'task'] || CircleDot
   const typeColor = TYPE_COLORS[selectedType?.key || 'task'] || 'text-muted-foreground'
   const typeBackground = TYPE_BACKGROUNDS[selectedType?.key || 'task'] || 'bg-muted'
+
+  useEffect(() => {
+    if (iterationId === UNASSIGNED_VALUE) {
+      return
+    }
+
+    const selectedIteration = iterations.find((iteration) => iteration.id === iterationId)
+    if (!selectedIteration) {
+      setIterationId(UNASSIGNED_VALUE)
+      return
+    }
+
+    if (
+      selectedIterationTeamId === UNASSIGNED_VALUE &&
+      selectedIteration.iterationType === 'sprint'
+    ) {
+      setIterationId(UNASSIGNED_VALUE)
+      return
+    }
+
+    if (
+      selectedIterationTeamId !== UNASSIGNED_VALUE &&
+      selectedIteration.teamId !== selectedIterationTeamId
+    ) {
+      setIterationId(UNASSIGNED_VALUE)
+    }
+  }, [iterationId, iterations, selectedIterationTeamId])
+
+  useEffect(() => {
+    if (iterationId === UNASSIGNED_VALUE) {
+      return
+    }
+
+    const selectedIteration = iterations.find((iteration) => iteration.id === iterationId)
+    if (!selectedIteration) {
+      return
+    }
+
+    if (
+      selectedIteration.teamId &&
+      selectedIterationTeamId === UNASSIGNED_VALUE
+    ) {
+      setSelectedIterationTeamId(selectedIteration.teamId)
+    }
+  }, [iterationId, iterations, selectedIterationTeamId])
 
   const resetForm = () => {
     setTitle('')
@@ -280,7 +368,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setPriority('medium')
     setSeverity(UNASSIGNED_VALUE)
     setStoryPoints('')
+    setEstimatedHours('')
+    setRemainingHours('')
+    setCompletedHours('')
     setAssigneeId(UNASSIGNED_VALUE)
+    setSelectedIterationTeamId(UNASSIGNED_VALUE)
     setIterationId(UNASSIGNED_VALUE)
     setAreaId(UNASSIGNED_VALUE)
     setStateId(UNASSIGNED_VALUE)
@@ -288,6 +380,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setParentIssueId(null)
     setCustomFields({})
     setLinkedItems([])
+    setChildIssueIds([])
     setNewLinkType('related')
     setSearchLink('')
     setActiveTab('basic')
@@ -307,6 +400,22 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   }
 
   const handleAddLink = (issueId: string, linkType: string) => {
+    if (linkType === 'parent') {
+      setParentIssueId(issueId)
+      setChildIssueIds((previous) => previous.filter((id) => id !== issueId))
+      setSearchLink('')
+      return
+    }
+
+    if (linkType === 'child') {
+      setChildIssueIds((previous) => (previous.includes(issueId) ? previous : [...previous, issueId]))
+      if (parentIssueId === issueId) {
+        setParentIssueId(null)
+      }
+      setSearchLink('')
+      return
+    }
+
     setLinkedItems((previous) =>
       previous.some((link) => link.issueId === issueId && link.linkType === linkType)
         ? previous
@@ -333,8 +442,15 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           priority,
           severity: severity === UNASSIGNED_VALUE ? undefined : severity,
           storyPoints: storyPoints ? parseInt(storyPoints, 10) : undefined,
+          estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
+          remainingHours: remainingHours ? parseFloat(remainingHours) : undefined,
+          completedHours: completedHours ? parseFloat(completedHours) : undefined,
           assigneeId: assigneeId === UNASSIGNED_VALUE ? undefined : assigneeId,
           iterationId: iterationId === UNASSIGNED_VALUE ? undefined : iterationId,
+          iterationTeamId:
+            iterationId === UNASSIGNED_VALUE || selectedIterationTeamId === UNASSIGNED_VALUE
+              ? undefined
+              : selectedIterationTeamId,
           areaId: areaId === UNASSIGNED_VALUE ? undefined : areaId,
           stateId: stateId === UNASSIGNED_VALUE ? undefined : stateId,
           labelIds: selectedLabels.length > 0 ? selectedLabels : undefined,
@@ -373,6 +489,39 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
         if (failedRelations) {
           toast.error('Work item created, but one or more links could not be saved')
+        }
+      }
+
+      if (childIssueIds.length > 0) {
+        const hierarchyResults = await Promise.allSettled(
+          childIssueIds.map((childIssueId) =>
+            fetch(`/api/issues/${childIssueId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ parentIssueId: newIssue.id }),
+            })
+          )
+        )
+
+        const failedHierarchyUpdates = hierarchyResults.some(
+          (result) => result.status === 'rejected' || !result.value.ok
+        )
+
+        await Promise.all(
+          hierarchyResults.map(async (result) => {
+            if (result.status !== 'fulfilled' || !result.value.ok) {
+              return
+            }
+
+            const updatedIssue = await result.value.json().catch(() => null)
+            if (updatedIssue && typeof updatedIssue === 'object' && 'id' in updatedIssue) {
+              updateIssue(String(updatedIssue.id), updatedIssue)
+            }
+          })
+        )
+
+        if (failedHierarchyUpdates) {
+          toast.error('Work item created, but one or more child hierarchy links could not be saved')
         }
       }
 
@@ -561,6 +710,22 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   </Select>
                 </div>
                 <div>
+                  <Label className="text-xs">Sprint Team</Label>
+                  <Select value={selectedIterationTeamId} onValueChange={setSelectedIterationTeamId}>
+                    <SelectTrigger className="h-8 text-xs mt-1">
+                      <SelectValue placeholder="All teams" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED_VALUE}>All teams</SelectItem>
+                      {sortedTeams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label className="text-xs">Iteration Path</Label>
                   <Select value={iterationId} onValueChange={setIterationId}>
                     <SelectTrigger className="h-8 text-xs mt-1">
@@ -568,13 +733,18 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED_VALUE}>No iteration</SelectItem>
-                      {iterations.map((iteration) => (
+                      {filteredIterations.map((iteration) => (
                         <SelectItem key={iteration.id} value={iteration.id}>
-                          {iteration.path || iteration.name}
+                          {formatIterationLabel(iteration)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {selectedIterationTeamId === UNASSIGNED_VALUE ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Select a sprint team to assign this work item to a sprint.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <Label className="text-xs">Area Path</Label>
@@ -612,6 +782,42 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                       </Button>
                     ))}
                   </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Estimated Hours</Label>
+                  <Input
+                    className="h-8 text-xs mt-1"
+                    inputMode="decimal"
+                    placeholder="e.g. 16"
+                    value={estimatedHours}
+                    onChange={(event) =>
+                      setEstimatedHours(event.target.value.replace(/[^0-9.]/g, ''))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Remaining Hours</Label>
+                  <Input
+                    className="h-8 text-xs mt-1"
+                    inputMode="decimal"
+                    placeholder="e.g. 10"
+                    value={remainingHours}
+                    onChange={(event) =>
+                      setRemainingHours(event.target.value.replace(/[^0-9.]/g, ''))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Completed Hours</Label>
+                  <Input
+                    className="h-8 text-xs mt-1"
+                    inputMode="decimal"
+                    placeholder="e.g. 6"
+                    value={completedHours}
+                    onChange={(event) =>
+                      setCompletedHours(event.target.value.replace(/[^0-9.]/g, ''))
+                    }
+                  />
                 </div>
                 <div>
                   <Label className="text-xs">Parent</Label>
@@ -697,7 +903,76 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     )}
                   </div>
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Use <span className="font-medium">Parent</span> to make this item a child of another work item,
+                  or <span className="font-medium">Child</span> to make another work item a child of this item.
+                </p>
               </div>
+
+              {parentIssueId && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Parent Link</Label>
+                  {(() => {
+                    const parentIssue = issues.find((issue) => issue.id === parentIssueId)
+                    if (!parentIssue) return null
+
+                    return (
+                      <div className="group flex items-center justify-between px-3 py-2 border border-border/50 rounded-md bg-muted/20">
+                        <div className="flex items-center gap-2 text-xs min-w-0">
+                          <span className="text-muted-foreground">Parent:</span>
+                          <span className="font-mono text-[10px]">{parentIssue.key}</span>
+                          <span className="truncate">{parentIssue.title}</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                          onClick={() => setParentIssueId(null)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {childIssueIds.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Child Links</Label>
+                  {childIssueIds.map((childIssueId) => {
+                    const childIssue = issues.find((issue) => issue.id === childIssueId)
+                    if (!childIssue) return null
+
+                    return (
+                      <div
+                        key={`child:${childIssue.id}`}
+                        className="group flex items-center justify-between px-3 py-2 border border-border/50 rounded-md bg-muted/20"
+                      >
+                        <div className="flex items-center gap-2 text-xs min-w-0">
+                          <span className="text-muted-foreground">Child:</span>
+                          <span className="font-mono text-[10px]">{childIssue.key}</span>
+                          <span className="truncate">{childIssue.title}</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                          onClick={() =>
+                            setChildIssueIds((previous) =>
+                              previous.filter((issueId) => issueId !== childIssue.id)
+                            )
+                          }
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               {linkedItems.length > 0 && (
                 <div className="space-y-1.5">

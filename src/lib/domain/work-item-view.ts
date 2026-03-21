@@ -14,13 +14,15 @@ export type WorkItemDraft = {
   stateId: string
   parentIssueId: string
   storyPoints: string
+  estimatedHours: string
+  remainingHours: string
+  completedHours: string
   customFields: Record<string, unknown>
 }
 
 type PatchPayload = {
   title?: string
   description?: string | null
-  workItemType?: string
   status?: Issue['status']
   priority?: Issue['priority']
   assigneeId?: string | null
@@ -29,6 +31,9 @@ type PatchPayload = {
   stateId?: string | null
   parentIssueId?: string | null
   storyPoints?: number | null
+  estimatedHours?: number | null
+  remainingHours?: number | null
+  completedHours?: number | null
   customFields?: Record<string, unknown>
 }
 
@@ -65,7 +70,6 @@ export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft):
 
   if (draft.title.trim() !== current.title) payload.title = draft.title.trim()
   if (draft.description !== (current.description ?? '')) payload.description = draft.description || null
-  if (draft.workItemType !== current.workItemType) payload.workItemType = draft.workItemType
   if (draft.status !== current.status) payload.status = draft.status
   if (draft.priority !== current.priority) payload.priority = draft.priority
 
@@ -99,6 +103,24 @@ export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft):
     payload.storyPoints = draft.storyPoints ? parseInt(draft.storyPoints, 10) : null
   }
 
+  const currentEstimatedHours = current.estimatedHours?.toString() ?? ''
+  const draftEstimatedHours = draft.estimatedHours ?? ''
+  if (draftEstimatedHours !== currentEstimatedHours) {
+    payload.estimatedHours = draftEstimatedHours ? parseFloat(draftEstimatedHours) : null
+  }
+
+  const currentRemainingHours = current.remainingHours?.toString() ?? ''
+  const draftRemainingHours = draft.remainingHours ?? ''
+  if (draftRemainingHours !== currentRemainingHours) {
+    payload.remainingHours = draftRemainingHours ? parseFloat(draftRemainingHours) : null
+  }
+
+  const currentCompletedHours = current.completedHours?.toString() ?? ''
+  const draftCompletedHours = draft.completedHours ?? ''
+  if (draftCompletedHours !== currentCompletedHours) {
+    payload.completedHours = draftCompletedHours ? parseFloat(draftCompletedHours) : null
+  }
+
   const currentCustomFields = normalizeCustomFields(current.customFields ?? {})
   const nextCustomFields = normalizeCustomFields(draft.customFields)
   const changedCustomFieldKeys = new Set<string>([
@@ -107,7 +129,7 @@ export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft):
   ])
 
   const changedCustomFields: Record<string, unknown> = {}
-  const typeChanged = payload.workItemType !== undefined
+  const typeChanged = false
   for (const key of changedCustomFieldKeys) {
     const currentValue = currentCustomFields[key]
     const nextValue = nextCustomFields[key]

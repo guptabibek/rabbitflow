@@ -1,9 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAppStore, type Issue, type WorkItemType, type User } from '@/store/app-store'
-import { canonicalWorkItemRoute } from '@/lib/domain/work-item-view'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -120,6 +118,7 @@ const STATUS_BADGE: Record<string, string> = {
   done: 'bg-emerald-900/60 text-emerald-300', cancelled: 'bg-red-900/60 text-red-300',
 }
 const PIE_COLORS = ['#6366f1', '#06b6d4', '#a855f7', '#10b981', '#ef4444', '#f59e0b']
+const ALL_TEAMS_VALUE = '__all_teams__'
 
 type GroupBy = 'none' | 'status' | 'assignee' | 'priority' | 'story'
 
@@ -135,11 +134,23 @@ type CapacityEntry = {
   user: { id: string; name: string; email: string; avatar: string | null }
   role: string; hoursPerDay: number; daysOff: number; totalCapacity: number
   assignedPoints: number; assignedItems: number; notes: string | null
+  assignedEstimatedHours: number
+  assignedRemainingHours: number
+  assignedCompletedHours: number
 }
 
 type CapacityData = {
   capacities: CapacityEntry[]
-  totals: { totalCapacity: number; totalAssignedPoints: number; totalAssignedItems: number; sprintDays: number; memberCount: number }
+  totals: {
+    totalCapacity: number
+    totalAssignedPoints: number
+    totalAssignedEstimatedHours: number
+    totalAssignedRemainingHours: number
+    totalAssignedCompletedHours: number
+    totalAssignedItems: number
+    sprintDays: number
+    memberCount: number
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -248,50 +259,162 @@ function DroppableColumn({ id, label, color, count, children }: { id: string; la
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function SprintView() {
-  const router = useRouter()
-  const { currentProject, iterations, setSprintModalOpen, updateIssue } = useAppStore()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
+  const {
+    currentProject,
+    iterations,
+    teams,
+    setSprintModalOpen,
+    updateIssue,
+    sprintViewSelectionByProject,
+    setSprintViewSelection,
+  } = useAppStore()
 
   const isActiveStatus = (value: string | null | undefined) =>
     value === 'active' || value === 'Active'
   const isClosedStatus = (value: string | null | undefined) =>
     value === 'completed' || value === 'Closed'
 
-  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'backlog' | 'capacity'>('backlog')
+  const projectSelection = currentProject
+    ? sprintViewSelectionByProject[currentProject.id]
+    : undefined
+
+  const initialActiveTab: 'overview' | 'board' | 'backlog' | 'capacity' =
+    projectSelection?.activeTab ?? 'backlog'
+  const initialBoardGroupBy: GroupBy = projectSelection?.boardGroupBy ?? 'none'
+  const initialBacklogGroupBy: GroupBy = projectSelection?.backlogGroupBy ?? 'story'
+
+  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(
+    projectSelection?.selectedSprintId ?? null
+  )
+  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'backlog' | 'capacity'>(
+    initialActiveTab
+  )
   const [loadedTabs, setLoadedTabs] = useState<Set<'overview' | 'board' | 'backlog' | 'capacity'>>(
-    () => new Set(['backlog'])
+    () => new Set([initialActiveTab])
   )
   const [sprintIssues, setSprintIssues] = useState<Issue[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [analyticsSprintId, setAnalyticsSprintId] = useState<string | null>(null)
   const [capacityData, setCapacityData] = useState<CapacityData | null>(null)
   const [capacitySprintId, setCapacitySprintId] = useState<string | null>(null)
+  const analyticsRequestRef = useRef<string | null>(null)
+  const capacityRequestRef = useRef<string | null>(null)
+  const analyticsLoadedRef = useRef<string | null>(null)
+  const capacityLoadedRef = useRef<string | null>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(
+    projectSelection?.selectedTeamId ?? ALL_TEAMS_VALUE
+  )
+  const hasInitializedTeamSelection = useRef(false)
   const [isLoading, setIsLoading] = useState(false)
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
-  const [boardGroupBy, setBoardGroupBy] = useState<GroupBy>('none')
-  const [backlogGroupBy, setBacklogGroupBy] = useState<GroupBy>('story')
+  const [boardGroupBy, setBoardGroupBy] = useState<GroupBy>(initialBoardGroupBy)
+  const [backlogGroupBy, setBacklogGroupBy] = useState<GroupBy>(initialBacklogGroupBy)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
-  const sprints = useMemo(() =>
+  const allSprints = useMemo(() =>
     iterations.filter((i) => i.iterationType === 'sprint').sort((a, b) => {
       if (isActiveStatus(a.status) && !isActiveStatus(b.status)) return -1
       if (isActiveStatus(b.status) && !isActiveStatus(a.status)) return 1
       return (a.startDate || '').localeCompare(b.startDate || '')
     }), [iterations])
 
+  const sprintTeams = useMemo(
+    () => [...teams].sort((left, right) => left.name.localeCompare(right.name)),
+    [teams]
+  )
+
+  const sprints = useMemo(() => {
+    if (selectedTeamId === ALL_TEAMS_VALUE) {
+      return allSprints
+    }
+
+    return allSprints.filter((sprint) => sprint.teamId === selectedTeamId)
+  }, [allSprints, selectedTeamId])
+
+  const isAllTeamsMode = selectedTeamId === ALL_TEAMS_VALUE && sprintTeams.length > 1
+
   const resolvedSelectedSprintId = useMemo(() => {
+    if (isAllTeamsMode) {
+      return null
+    }
+
     if (selectedSprintId && sprints.some((sprint) => sprint.id === selectedSprintId)) {
       return selectedSprintId
     }
 
     const activeSprint = sprints.find((sprint) => isActiveStatus(sprint.status))
     return activeSprint?.id || sprints[0]?.id || null
-  }, [selectedSprintId, sprints])
+  }, [isAllTeamsMode, selectedSprintId, sprints])
 
   const selectedSprint = useMemo(
     () => sprints.find((sprint) => sprint.id === resolvedSelectedSprintId) ?? null,
     [resolvedSelectedSprintId, sprints]
   )
+
+  useEffect(() => {
+    if (selectedTeamId === ALL_TEAMS_VALUE) return
+
+    const isValidTeam = sprintTeams.some((team) => team.id === selectedTeamId)
+    if (!isValidTeam) {
+      setSelectedTeamId(ALL_TEAMS_VALUE)
+    }
+  }, [selectedTeamId, sprintTeams])
+
+  useEffect(() => {
+    if (!hasInitializedTeamSelection.current) {
+      hasInitializedTeamSelection.current = true
+      return
+    }
+
+    setSelectedSprintId(null)
+    setSprintIssues([])
+    setAnalytics(null)
+    setCapacityData(null)
+    setAnalyticsSprintId(null)
+    setCapacitySprintId(null)
+    analyticsLoadedRef.current = null
+    capacityLoadedRef.current = null
+    analyticsRequestRef.current = null
+    capacityRequestRef.current = null
+  }, [selectedTeamId])
+
+  useEffect(() => {
+    if (!currentProject) {
+      return
+    }
+
+    const savedSelection =
+      useAppStore.getState().sprintViewSelectionByProject[currentProject.id]
+    setSelectedTeamId(savedSelection?.selectedTeamId ?? ALL_TEAMS_VALUE)
+    setSelectedSprintId(savedSelection?.selectedSprintId ?? null)
+    setActiveTab(savedSelection?.activeTab ?? 'backlog')
+    setBoardGroupBy(savedSelection?.boardGroupBy ?? 'none')
+    setBacklogGroupBy(savedSelection?.backlogGroupBy ?? 'story')
+    hasInitializedTeamSelection.current = false
+  }, [currentProject?.id])
+
+  useEffect(() => {
+    if (!currentProject) {
+      return
+    }
+
+    setSprintViewSelection(currentProject.id, {
+      selectedTeamId,
+      selectedSprintId,
+      activeTab,
+      boardGroupBy,
+      backlogGroupBy,
+    })
+  }, [
+    activeTab,
+    backlogGroupBy,
+    boardGroupBy,
+    currentProject?.id,
+    selectedSprintId,
+    selectedTeamId,
+    setSprintViewSelection,
+  ])
 
   const daysRemaining = useMemo(() => {
     if (!selectedSprint?.endDate) return null
@@ -347,7 +470,15 @@ export function SprintView() {
   }, [currentProject])
 
   const fetchSprintAnalytics = useCallback(async (targetSprintId: string) => {
-    if (!targetSprintId || analyticsSprintId === targetSprintId) return
+    if (
+      !targetSprintId ||
+      analyticsLoadedRef.current === targetSprintId ||
+      analyticsRequestRef.current === targetSprintId
+    ) {
+      return
+    }
+
+    analyticsRequestRef.current = targetSprintId
 
     try {
       const analyticsRes = await fetch(`/api/sprints/${targetSprintId}/analytics`, {
@@ -362,15 +493,28 @@ export function SprintView() {
 
       setAnalytics(await analyticsRes.json())
       setAnalyticsSprintId(targetSprintId)
+      analyticsLoadedRef.current = targetSprintId
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to fetch sprint analytics:', error)
       toast.error('Failed to load sprint analytics')
+    } finally {
+      if (analyticsRequestRef.current === targetSprintId) {
+        analyticsRequestRef.current = null
+      }
     }
-  }, [analyticsSprintId])
+  }, [])
 
   const fetchSprintCapacity = useCallback(async (targetSprintId: string) => {
-    if (!targetSprintId || capacitySprintId === targetSprintId) return
+    if (
+      !targetSprintId ||
+      capacityLoadedRef.current === targetSprintId ||
+      capacityRequestRef.current === targetSprintId
+    ) {
+      return
+    }
+
+    capacityRequestRef.current = targetSprintId
 
     try {
       const capacityRes = await fetch(`/api/sprints/${targetSprintId}/capacity`, {
@@ -385,24 +529,58 @@ export function SprintView() {
 
       setCapacityData(await capacityRes.json())
       setCapacitySprintId(targetSprintId)
+      capacityLoadedRef.current = targetSprintId
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to fetch sprint capacity:', error)
       toast.error('Failed to load sprint capacity')
+    } finally {
+      if (capacityRequestRef.current === targetSprintId) {
+        capacityRequestRef.current = null
+      }
     }
-  }, [capacitySprintId])
+  }, [])
 
   useEffect(() => {
-    if (!currentProject || !resolvedSelectedSprintId) return
+    if (!currentProject || !resolvedSelectedSprintId) {
+      setSprintIssues([])
+      setAnalytics(null)
+      setCapacityData(null)
+      setAnalyticsSprintId(null)
+      setCapacitySprintId(null)
+      analyticsLoadedRef.current = null
+      capacityLoadedRef.current = null
+      analyticsRequestRef.current = null
+      capacityRequestRef.current = null
+      return
+    }
 
     setAnalytics(null)
     setCapacityData(null)
     setAnalyticsSprintId(null)
     setCapacitySprintId(null)
+    analyticsLoadedRef.current = null
+    capacityLoadedRef.current = null
+    analyticsRequestRef.current = null
+    capacityRequestRef.current = null
 
-    const timer = window.setTimeout(() => { void fetchSprintIssues(resolvedSelectedSprintId) }, 0)
-    return () => { window.clearTimeout(timer) }
-  }, [currentProject, fetchSprintIssues, resolvedSelectedSprintId])
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        fetchSprintIssues(resolvedSelectedSprintId),
+        fetchSprintCapacity(resolvedSelectedSprintId),
+      ])
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [
+    currentProject,
+    fetchSprintAnalytics,
+    fetchSprintCapacity,
+    fetchSprintIssues,
+    resolvedSelectedSprintId,
+  ])
 
   useEffect(() => {
     setLoadedTabs((previous) => {
@@ -490,6 +668,10 @@ export function SprintView() {
       const res = await fetch(`/api/sprints/${resolvedSelectedSprintId}/capacity`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacities: entries }) })
       if (res.ok) {
         toast.success('Capacity updated')
+        capacityLoadedRef.current = null
+        analyticsLoadedRef.current = null
+        capacityRequestRef.current = null
+        analyticsRequestRef.current = null
         setCapacitySprintId(null)
         setAnalyticsSprintId(null)
         void fetchSprintCapacity(resolvedSelectedSprintId)
@@ -535,41 +717,42 @@ export function SprintView() {
     return Object.entries(groups).map(([key, val]) => ({ key, ...val }))
   }
 
-  // Empty state
-  if (sprints.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-12">
-        <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6">
-          <Zap className="h-10 w-10 text-primary/60" />
-        </div>
-        <h2 className="text-2xl font-bold mb-2">No Sprints Yet</h2>
-        <p className="text-muted-foreground mb-8 max-w-md">Create your first sprint to start planning and tracking your team&apos;s work.</p>
-        <Button size="lg" onClick={() => setSprintModalOpen(true)} className="gap-2"><Plus className="h-4 w-4" />Create Sprint</Button>
-      </div>
-    )
-  }
-
-  // Loading
-  if (isLoading && sprintIssues.length === 0) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="px-6 py-5 border-b"><Skeleton className="h-9 w-56 mb-3" /><Skeleton className="h-4 w-80" /></div>
-        <div className="flex-1 p-6 flex gap-4">
-          {[1, 2, 3, 4].map((i) => (<div key={i} className="flex-1 min-w-[240px]"><Skeleton className="h-11 w-full mb-4 rounded-xl" /><Skeleton className="h-28 w-full mb-2 rounded-lg" /><Skeleton className="h-28 w-full rounded-lg" /></div>))}
-        </div>
-      </div>
-    )
-  }
+  const showNoSprintsEmpty = !isAllTeamsMode && sprints.length === 0
+  const showLoadingSkeleton =
+    !isAllTeamsMode &&
+    Boolean(resolvedSelectedSprintId) &&
+    isLoading &&
+    sprintIssues.length === 0
 
   const dragActiveIssue = dragActiveId ? sprintIssues.find((i) => i.id === dragActiveId) : null
 
   return (
     <div className="flex flex-col h-full">
       {/* ═══ Sprint Header ═══════════════════════════════════════════════ */}
-      <div className="px-6 py-5 border-b bg-gradient-to-r from-background via-background to-muted/10">
+      <div className="sticky top-0 z-20 px-6 py-5 border-b bg-gradient-to-r from-background via-background to-muted/10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Select value={resolvedSelectedSprintId || ''} onValueChange={setSelectedSprintId}>
+            {sprintTeams.length > 1 ? (
+              <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                <SelectTrigger className="w-[180px] h-10">
+                  <SelectValue placeholder="Team" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TEAMS_VALUE}>All Teams</SelectItem>
+                  {sprintTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+
+            <Select
+              value={resolvedSelectedSprintId || ''}
+              onValueChange={setSelectedSprintId}
+              disabled={isAllTeamsMode || sprints.length === 0}
+            >
               <SelectTrigger className="w-[240px] h-10 font-semibold text-base">
                 <SelectValue placeholder="Select Sprint" />
               </SelectTrigger>
@@ -594,6 +777,11 @@ export function SprintView() {
             <Flag className="h-3.5 w-3.5" />Manage Sprints
           </Button>
         </div>
+        {isAllTeamsMode ? (
+          <p className="text-xs text-muted-foreground mb-3">
+            All Teams view is aggregate only. Select a team to open team-specific sprint backlog, board, and planning.
+          </p>
+        ) : null}
         {selectedSprint && (
           <div className="flex items-start gap-8">
             <div className="flex-1 min-w-0 space-y-1.5">
@@ -634,7 +822,9 @@ export function SprintView() {
         )}
       </div>
 
-      {/* ═══ Tabs ════════════════════════════════════════════════════════ */}
+      {/* ═══ Workspace Body ════════════════════════════════════════════════ */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="min-w-0 flex-1">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col overflow-hidden">
         <div className="border-b px-6">
           <TabsList className="h-11 bg-transparent p-0 gap-6">
@@ -652,8 +842,42 @@ export function SprintView() {
           </TabsList>
         </div>
 
+        {isAllTeamsMode ? (
+          <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <div className="max-w-lg space-y-2">
+              <h3 className="text-lg font-semibold">All Teams Planning View</h3>
+              <p className="text-sm text-muted-foreground">
+                Sprint backlog, board, and capacity are team-scoped. Select a team from the top switcher to inspect and manage a specific sprint.
+              </p>
+            </div>
+          </div>
+        ) : showNoSprintsEmpty ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6">
+              <Zap className="h-10 w-10 text-primary/60" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">No Sprints For This Team</h2>
+            <p className="text-muted-foreground mb-8 max-w-md">
+              Create a sprint for the selected team to start planning backlog and capacity.
+            </p>
+            <Button size="lg" onClick={() => setSprintModalOpen(true)} className="gap-2">
+              <Plus className="h-4 w-4" />Create Sprint
+            </Button>
+          </div>
+        ) : showLoadingSkeleton ? (
+          <div className="flex-1 p-6 flex gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex-1 min-w-[240px]">
+                <Skeleton className="h-11 w-full mb-4 rounded-xl" />
+                <Skeleton className="h-28 w-full mb-2 rounded-lg" />
+                <Skeleton className="h-28 w-full rounded-lg" />
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {/* ─── OVERVIEW TAB ──────────────────────────────────────── */}
-        {loadedTabs.has('overview') && (
+        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('overview') && (
         <TabsContent value="overview" className="flex-1 overflow-auto p-6 mt-0">
           {analytics ? (
             <div className="space-y-6 max-w-5xl">
@@ -734,7 +958,7 @@ export function SprintView() {
         )}
 
         {/* ─── BOARD TAB ──────────────────────────────────────────── */}
-        {loadedTabs.has('board') && (
+        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('board') && (
         <TabsContent value="board" className="flex-1 overflow-auto mt-0">
           <div className="px-6 py-2.5 border-b bg-muted/20 flex items-center gap-3">
             <span className="text-xs font-medium text-muted-foreground">Group by:</span>
@@ -753,7 +977,7 @@ export function SprintView() {
                 <div className="flex gap-4 h-full">
                   {boardColumns.map((col) => (
                     <DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={col.issues.length}>
-                      {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => router.push(canonicalWorkItemRoute(issue.id))} />))}
+                      {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
                     </DroppableColumn>
                   ))}
                 </div>
@@ -773,7 +997,7 @@ export function SprintView() {
                           {BOARD_COLUMNS.map((col) => {
                             const colIssues = group.issues.filter((i) => i.status === col.id).sort((a, b) => a.columnOrder - b.columnOrder)
                             return (<DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={colIssues.length}>
-                              {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => router.push(canonicalWorkItemRoute(issue.id))} />))}
+                              {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
                             </DroppableColumn>)
                           })}
                         </div>
@@ -796,7 +1020,7 @@ export function SprintView() {
         )}
 
         {/* ─── BACKLOG TAB ────────────────────────────────────────── */}
-        {loadedTabs.has('backlog') && (
+        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('backlog') && (
         <TabsContent value="backlog" className="flex-1 overflow-auto mt-0">
           <div className="px-6 py-2.5 border-b bg-muted/20 flex items-center gap-3">
             <span className="text-xs font-medium text-muted-foreground">Group by:</span>
@@ -826,7 +1050,7 @@ export function SprintView() {
                       const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
                       const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
                       return (
-                        <div key={issue.id} className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => router.push(canonicalWorkItemRoute(issue.id))}>
+                        <div key={issue.id} className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
                           <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
                           <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
                           <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
@@ -861,7 +1085,7 @@ export function SprintView() {
         )}
 
         {/* ─── CAPACITY TAB ────────────────────────────────────────── */}
-        {loadedTabs.has('capacity') && (
+        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('capacity') && (
         <TabsContent value="capacity" className="flex-1 overflow-auto mt-0">
           <CapacityTab
             key={`capacity-${selectedSprint?.id ?? 'none'}-${capacityData?.capacities.map((entry) => `${entry.userId}:${entry.hoursPerDay}:${entry.daysOff}`).join('|') ?? 'empty'}`}
@@ -871,6 +1095,117 @@ export function SprintView() {
         </TabsContent>
         )}
       </Tabs>
+      </div>
+
+      <aside className="hidden xl:flex w-[360px] flex-col border-l bg-muted/10">
+        <div className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur px-4 py-3">
+          <h3 className="text-sm font-semibold">Sprint Planning Panel</h3>
+          <p className="text-xs text-muted-foreground">
+            Team capacity stays visible while you navigate sprint backlog and board.
+          </p>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-4">
+            {isAllTeamsMode ? (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">All Teams Snapshot</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {sprintTeams.map((team) => {
+                    const teamSprints = allSprints.filter((sprint) => sprint.teamId === team.id)
+                    const activeCount = teamSprints.filter((sprint) => isActiveStatus(sprint.status)).length
+                    return (
+                      <div key={team.id} className="rounded border bg-background p-2.5">
+                        <div className="text-sm font-medium">{team.name}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {teamSprints.length} sprint{teamSprints.length === 1 ? '' : 's'}
+                          {activeCount > 0 ? `, ${activeCount} active` : ''}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            ) : selectedSprint ? (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Capacity Overview</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Available capacity</span>
+                      <span className="font-medium tabular-nums">{Math.round(capacityData?.totals.totalCapacity ?? 0)}h</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Planned estimate</span>
+                      <span className="font-medium tabular-nums">{Math.round(capacityData?.totals.totalAssignedEstimatedHours ?? 0)}h</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Total available</span>
+                      <span className={`font-medium tabular-nums ${(capacityData?.totals.totalCapacity ?? 0) - (capacityData?.totals.totalAssignedEstimatedHours ?? 0) < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                        {Math.round((capacityData?.totals.totalCapacity ?? 0) - (capacityData?.totals.totalAssignedEstimatedHours ?? 0))}h
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Team Member Capacity</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="grid grid-cols-[minmax(0,1fr)_64px_64px_72px] gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>Member</span>
+                      <span className="text-right">Capacity</span>
+                      <span className="text-right">Estimated</span>
+                      <span className="text-right">Available</span>
+                    </div>
+                    {(capacityData?.capacities ?? []).map((entry) => {
+                      const freeHours = entry.totalCapacity - entry.assignedEstimatedHours
+                      const availableClass = freeHours < 0 ? 'text-red-500' : 'text-emerald-500'
+                      return (
+                        <div
+                          key={entry.userId}
+                          className="grid grid-cols-[minmax(0,1fr)_64px_64px_72px] items-center gap-2 rounded border bg-background p-2.5"
+                        >
+                          <span className="text-sm font-medium truncate" title={entry.user.name}>
+                            {entry.user.name}
+                          </span>
+                          <span className="text-xs text-right tabular-nums">
+                            {Math.round(entry.totalCapacity)}h
+                          </span>
+                          <span className="text-xs text-right tabular-nums">
+                            {Math.round(entry.assignedEstimatedHours)}h
+                          </span>
+                          <span className={`text-xs text-right font-medium tabular-nums ${availableClass}`}>
+                            {Math.round(freeHours)}h
+                          </span>
+                          <div className="col-span-4 text-[10px] text-muted-foreground">
+                            Remaining estimate {Math.round(entry.assignedRemainingHours)}h, completed logged {Math.round(entry.assignedCompletedHours)}h
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {(capacityData?.capacities?.length ?? 0) === 0 ? (
+                      <div className="text-xs text-muted-foreground">No capacity data yet.</div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="p-4 text-sm text-muted-foreground">
+                  Select a team and sprint to view planning insights.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </ScrollArea>
+      </aside>
+      </div>
     </div>
   )
 }
@@ -913,7 +1248,7 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
         <div className="grid grid-cols-4 gap-6">
           <div><div className="text-xs text-muted-foreground mb-0.5">Sprint Days</div><div className="text-lg font-bold tabular-nums">{data.totals.sprintDays}</div></div>
           <div><div className="text-xs text-muted-foreground mb-0.5">Total Capacity</div><div className="text-lg font-bold tabular-nums">{Math.round(data.totals.totalCapacity)}h</div></div>
-          <div><div className="text-xs text-muted-foreground mb-0.5">Assigned Points</div><div className="text-lg font-bold tabular-nums">{data.totals.totalAssignedPoints}</div></div>
+          <div><div className="text-xs text-muted-foreground mb-0.5">Planned Hours</div><div className="text-lg font-bold tabular-nums">{Math.round(data.totals.totalAssignedEstimatedHours)}h</div></div>
           <div><div className="text-xs text-muted-foreground mb-0.5">Assigned Items</div><div className="text-lg font-bold tabular-nums">{data.totals.totalAssignedItems}</div></div>
         </div>
       </div>
@@ -926,7 +1261,7 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
 
         <div className="grid grid-cols-12 gap-4 px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
           <div className="col-span-3">Team Member</div><div className="col-span-1 text-center">Role</div><div className="col-span-1 text-center">Hrs/Day</div>
-          <div className="col-span-1 text-center">Days Off</div><div className="col-span-2 text-center">Capacity</div><div className="col-span-2 text-center">Assigned</div>
+          <div className="col-span-1 text-center">Days Off</div><div className="col-span-2 text-center">Capacity</div><div className="col-span-2 text-center">Planned</div>
           <div className="col-span-2 text-center">Status</div>
         </div>
 
@@ -935,7 +1270,8 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
             const edited = editedCapacities[cap.userId] || { hoursPerDay: cap.hoursPerDay, daysOff: cap.daysOff }
             const availableDays = Math.max(0, data.totals.sprintDays - edited.daysOff)
             const totalCap = availableDays * edited.hoursPerDay
-            const isOverloaded = cap.assignedPoints > totalCap / 4
+            const isOverloaded = cap.assignedEstimatedHours > totalCap
+            const remainingCapacity = totalCap - cap.assignedEstimatedHours
             return (
               <div key={cap.userId} className={`grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors ${isOverloaded ? 'bg-red-500/5' : ''}`}>
                 <div className="col-span-3 flex items-center gap-2.5">
@@ -955,16 +1291,16 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
                 </div>
                 <div className="col-span-2 text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-sm font-medium tabular-nums">{cap.assignedPoints} pts</span>
+                    <span className="text-sm font-medium tabular-nums">{Math.round(cap.assignedEstimatedHours)}h</span>
                     <span className="text-[10px] text-muted-foreground">({cap.assignedItems})</span>
                   </div>
-                  <Progress value={totalCap > 0 ? Math.min(100, (cap.assignedPoints / (totalCap / 4)) * 100) : 0} className="h-1 mt-1" />
+                  <Progress value={totalCap > 0 ? Math.min(100, (cap.assignedEstimatedHours / totalCap) * 100) : 0} className="h-1 mt-1" />
                 </div>
                 <div className="col-span-2 text-center">
                   {isOverloaded ? (
                     <div className="flex items-center justify-center gap-1.5 text-red-400"><AlertTriangle className="h-3.5 w-3.5" /><span className="text-sm font-medium">Overloaded</span></div>
                   ) : (
-                    <span className="text-sm font-medium text-emerald-400 tabular-nums">{Math.round(totalCap - cap.assignedPoints * 4)}h remaining</span>
+                    <span className="text-sm font-medium text-emerald-400 tabular-nums">{Math.round(remainingCapacity)}h remaining</span>
                   )}
                 </div>
               </div>

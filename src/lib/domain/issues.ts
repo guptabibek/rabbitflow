@@ -15,6 +15,12 @@ type IssueReferenceValidationInput = {
   customFields?: Record<string, unknown>
 }
 
+type SprintAssignmentValidationInput = {
+  projectId: string
+  iterationId?: string | null
+  iterationTeamId?: string | null
+}
+
 const issueCoreRelations = {
   project: { select: { id: true, key: true, name: true, color: true } },
   assignee: { select: { id: true, name: true, avatar: true } },
@@ -355,4 +361,46 @@ export function serializeIssueRecord<
     ...issue,
     customFields: customFieldValuesToRecord(issue.fieldValues ?? []),
   }
+}
+
+export async function validateSprintAssignmentTeamContext(
+  input: SprintAssignmentValidationInput
+) {
+  const { projectId, iterationId, iterationTeamId } = input
+
+  if (!iterationId) {
+    return null
+  }
+
+  const iteration = await db.iteration.findUnique({
+    where: { id: iterationId },
+    select: {
+      id: true,
+      projectId: true,
+      iterationType: true,
+      teamId: true,
+    },
+  })
+
+  if (!iteration || iteration.projectId !== projectId) {
+    return 'Iteration path must belong to the same project'
+  }
+
+  if (iteration.iterationType !== 'sprint') {
+    return null
+  }
+
+  if (!iteration.teamId) {
+    return null
+  }
+
+  if (!iterationTeamId) {
+    return 'Sprint assignment requires team context. Select a sprint team and retry.'
+  }
+
+  if (iterationTeamId !== iteration.teamId) {
+    return 'Selected sprint does not belong to the provided sprint team context.'
+  }
+
+  return null
 }

@@ -46,7 +46,12 @@ export async function PUT(
     const newHash = await hashPassword(parsed.data.newPassword)
     await db.user.update({
       where: { id },
-      data: { passwordHash: newHash },
+      data: {
+        passwordHash: newHash,
+        mustResetPassword: false,
+        failedLoginAttempts: 0,
+        lockoutUntil: null,
+      },
     })
 
     return NextResponse.json({ success: true })

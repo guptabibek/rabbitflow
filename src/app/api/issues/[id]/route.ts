@@ -13,6 +13,7 @@ import {
 import {
   issueDetailInclude,
   serializeIssueRecord,
+  validateSprintAssignmentTeamContext,
   validateIssueReferences,
 } from '@/lib/domain/issues'
 import { listPermissions, normalizeProjectRole } from '@/lib/domain/rbac'
@@ -22,6 +23,7 @@ import {
   resolveStateForStatus,
   statusFromStateCategory,
 } from '@/lib/domain/state-machine'
+import { sendWorkItemAssignmentEmail } from '@/lib/domain/notifications'
 
 const nonEmptyStringSchema = z.string().trim().min(1)
 const nullableReferenceIdSchema = z.union([nonEmptyStringSchema, z.null()]).optional()
@@ -43,11 +45,15 @@ const updateIssueSchema = z.object({
   priority: z.enum(['lowest', 'low', 'medium', 'high', 'highest']).optional(),
   severity: z.enum(['critical', 'high', 'medium', 'low']).nullable().optional(),
   storyPoints: z.number().int().min(0).max(100).nullable().optional(),
+  estimatedHours: z.number().min(0).max(10000).nullable().optional(),
+  remainingHours: z.number().min(0).max(10000).nullable().optional(),
+  completedHours: z.number().min(0).max(10000).nullable().optional(),
   dueDate: nullableDateStringSchema,
   startDate: nullableDateStringSchema,
   completedDate: nullableDateStringSchema,
   assigneeId: nullableReferenceIdSchema,
   iterationId: nullableReferenceIdSchema,
+  iterationTeamId: nullableReferenceIdSchema,
   areaId: nullableReferenceIdSchema,
   stateId: nullableReferenceIdSchema,
   parentIssueId: nullableReferenceIdSchema,
@@ -372,8 +378,18 @@ export async function PUT(
     )
     if (!updatePermission.ok) return updatePermission.response
 
-    const nextWorkItemType = data.workItemType || currentIssue.workItemType
-    const typeChanged = nextWorkItemType !== currentIssue.workItemType
+    if (
+      data.workItemType !== undefined &&
+      data.workItemType !== currentIssue.workItemType
+    ) {
+      return NextResponse.json(
+        { error: 'Work item type cannot be changed after creation' },
+        { status: 400 }
+      )
+    }
+
+    const nextWorkItemType = currentIssue.workItemType
+    const typeChanged = false
 
     if (data.assigneeId !== undefined && data.assigneeId !== currentIssue.assigneeId) {
       const assignPermission = await requireProjectPermission(
@@ -398,6 +414,18 @@ export async function PUT(
     }
 
     await ensureProjectSystemRecords(currentIssue.projectId, updatePermission.actor.userId)
+
+    if (data.iterationId !== undefined && data.iterationId !== null) {
+      const sprintContextError = await validateSprintAssignmentTeamContext({
+        projectId: currentIssue.projectId,
+        iterationId: data.iterationId,
+        iterationTeamId: data.iterationTeamId,
+      })
+
+      if (sprintContextError) {
+        return NextResponse.json({ error: sprintContextError }, { status: 400 })
+      }
+    }
 
     const requestedState =
       data.stateId === undefined
@@ -510,8 +538,6 @@ export async function PUT(
     if (data.description !== undefined) {
       updateData.description = sanitizeRichText(data.description)
     }
-    if (data.workItemType !== undefined) updateData.workItemType = nextWorkItemType
-
     if (targetState) {
       updateData.stateId = targetState.id
       updateData.status =
@@ -528,6 +554,9 @@ export async function PUT(
     if (data.priority !== undefined) updateData.priority = data.priority
     if (data.severity !== undefined) updateData.severity = data.severity
     if (data.storyPoints !== undefined) updateData.storyPoints = data.storyPoints
+    if (data.estimatedHours !== undefined) updateData.estimatedHours = data.estimatedHours
+    if (data.remainingHours !== undefined) updateData.remainingHours = data.remainingHours
+    if (data.completedHours !== undefined) updateData.completedHours = data.completedHours
     if (data.dueDate !== undefined) {
       updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null
     }
@@ -625,8 +654,14 @@ export async function PUT(
     if (data.priority !== undefined && data.priority !== currentIssue.priority) {
       details.priority = { from: currentIssue.priority, to: data.priority }
     }
-    if (data.workItemType !== undefined && data.workItemType !== currentIssue.workItemType) {
-      details.workItemType = { from: currentIssue.workItemType, to: data.workItemType }
+    if (data.estimatedHours !== undefined && data.estimatedHours !== currentIssue.estimatedHours) {
+      details.estimatedHours = { from: currentIssue.estimatedHours, to: data.estimatedHours }
+    }
+    if (data.remainingHours !== undefined && data.remainingHours !== currentIssue.remainingHours) {
+      details.remainingHours = { from: currentIssue.remainingHours, to: data.remainingHours }
+    }
+    if (data.completedHours !== undefined && data.completedHours !== currentIssue.completedHours) {
+      details.completedHours = { from: currentIssue.completedHours, to: data.completedHours }
     }
     if (data.assigneeId !== undefined && data.assigneeId !== currentIssue.assigneeId) {
       details.assigneeId = { from: currentIssue.assigneeId, to: data.assigneeId }
@@ -651,6 +686,19 @@ export async function PUT(
         userId: updatePermission.actor.userId,
         action: 'work_item_updated',
         details: { key: currentIssue.key, ...details },
+      })
+    }
+
+    if (
+      data.assigneeId !== undefined &&
+      data.assigneeId !== currentIssue.assigneeId &&
+      issue.assignee?.id
+    ) {
+      void sendWorkItemAssignmentEmail({
+        issueId: issue.id,
+        assigneeUserId: issue.assignee.id,
+        actorUserId: updatePermission.actor.userId,
+        origin: request.nextUrl.origin,
       })
     }
 

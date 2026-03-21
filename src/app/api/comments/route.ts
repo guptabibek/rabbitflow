@@ -6,6 +6,7 @@ import { invalidateSprintCaches } from '@/lib/domain/cache'
 import { sanitizeRichText, toPlainTextPreview } from '@/lib/domain/content'
 import { parseCommentMentions } from '@/lib/domain/mentions'
 import { requireProjectPermission } from '@/lib/domain/auth'
+import { sendMentionNotificationEmails } from '@/lib/domain/notifications'
 
 const createCommentSchema = z.object({
   issueId: z.string(),
@@ -176,6 +177,14 @@ export async function POST(request: NextRequest) {
         details: {
           userIds: comment.mentions.map((mention) => mention.userId),
         },
+      })
+
+      void sendMentionNotificationEmails({
+        issueId: data.issueId,
+        mentionUserIds: comment.mentions.map((mention) => mention.userId),
+        actorUserId: auth.actor.userId,
+        commentContent: sanitizedContent,
+        origin: request.nextUrl.origin,
       })
     }
 

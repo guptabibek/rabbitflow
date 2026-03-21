@@ -55,7 +55,12 @@ export async function POST(request: NextRequest) {
 
     await db.user.update({
       where: { id: payload.userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        mustResetPassword: false,
+        failedLoginAttempts: 0,
+        lockoutUntil: null,
+      },
     })
 
     await deletePasswordResetOtp(normalizedEmail)

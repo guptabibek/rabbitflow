@@ -74,14 +74,25 @@ export async function GET(
       const assignedWork = await db.issue.groupBy({
         by: ['assigneeId'],
         where: { iterationId: id, assigneeId: { not: null } },
-        _sum: { storyPoints: true },
+        _sum: {
+          storyPoints: true,
+          estimatedHours: true,
+          remainingHours: true,
+          completedHours: true,
+        },
         _count: { id: true },
       })
 
       const assignedMap = new Map(
         assignedWork.map((assignment) => [
           assignment.assigneeId,
-          { points: assignment._sum.storyPoints || 0, count: assignment._count.id },
+          {
+            points: assignment._sum.storyPoints || 0,
+            estimatedHours: assignment._sum.estimatedHours || 0,
+            remainingHours: assignment._sum.remainingHours || 0,
+            completedHours: assignment._sum.completedHours || 0,
+            count: assignment._count.id,
+          },
         ])
       )
 
@@ -89,7 +100,13 @@ export async function GET(
 
       const result = members.map((member) => {
         const cap = capacityMap.get(member.userId)
-        const assigned = assignedMap.get(member.userId) || { points: 0, count: 0 }
+        const assigned = assignedMap.get(member.userId) || {
+          points: 0,
+          estimatedHours: 0,
+          remainingHours: 0,
+          completedHours: 0,
+          count: 0,
+        }
         const hoursPerDay = cap?.hoursPerDay ?? 8
         const daysOff = cap?.daysOff ?? 0
         const availableDays = Math.max(0, sprintDays - daysOff)
@@ -104,6 +121,9 @@ export async function GET(
           daysOff,
           totalCapacity,
           assignedPoints: assigned.points,
+          assignedEstimatedHours: assigned.estimatedHours,
+          assignedRemainingHours: assigned.remainingHours,
+          assignedCompletedHours: assigned.completedHours,
           assignedItems: assigned.count,
           notes: cap?.notes || null,
         }
@@ -114,6 +134,18 @@ export async function GET(
         totals: {
           totalCapacity: result.reduce((sum, entry) => sum + entry.totalCapacity, 0),
           totalAssignedPoints: result.reduce((sum, entry) => sum + entry.assignedPoints, 0),
+          totalAssignedEstimatedHours: result.reduce(
+            (sum, entry) => sum + entry.assignedEstimatedHours,
+            0
+          ),
+          totalAssignedRemainingHours: result.reduce(
+            (sum, entry) => sum + entry.assignedRemainingHours,
+            0
+          ),
+          totalAssignedCompletedHours: result.reduce(
+            (sum, entry) => sum + entry.assignedCompletedHours,
+            0
+          ),
           totalAssignedItems: result.reduce((sum, entry) => sum + entry.assignedItems, 0),
           sprintDays,
           memberCount: result.length,

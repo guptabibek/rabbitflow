@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
@@ -37,10 +37,10 @@ import type {
   User,
   WorkItemTypeDefinition,
 } from '@/store/app-store'
+import { useAppStore } from '@/store/app-store'
 import {
   UNASSIGNED_VALUE,
   buildWorkItemPatchPayload,
-  canonicalWorkItemRoute,
   getWorkItemTypeDefinition,
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
@@ -63,11 +63,19 @@ import {
   Upload,
 } from 'lucide-react'
 
-type LinkType = 'related' | 'blocked_by' | 'blocks' | 'duplicate_of' | 'tests' | 'tested_by'
+type RelationLinkType =
+  | 'related'
+  | 'blocked_by'
+  | 'blocks'
+  | 'duplicate_of'
+  | 'tests'
+  | 'tested_by'
+
+type LinkType = RelationLinkType | 'parent' | 'child'
 
 type FlatRelation = {
   id: string
-  relationType: LinkType
+  relationType: RelationLinkType
   direction: 'incoming' | 'outgoing'
   sourceIssueId: string
   targetIssueId: string
@@ -111,13 +119,23 @@ type WorkItemDetailContentProps = {
   onIssueUpdated: (issue: Issue) => void
 }
 
-const LINK_TYPES: Array<{ value: LinkType; label: string }> = [
+const RELATION_LINK_TYPES: Array<{ value: RelationLinkType; label: string }> = [
   { value: 'related', label: 'Related' },
   { value: 'blocked_by', label: 'Blocked By' },
   { value: 'blocks', label: 'Blocks' },
   { value: 'duplicate_of', label: 'Duplicate Of' },
   { value: 'tests', label: 'Tests' },
   { value: 'tested_by', label: 'Tested By' },
+]
+
+const HIERARCHY_LINK_TYPES: Array<{ value: Extract<LinkType, 'parent' | 'child'>; label: string }> = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+]
+
+const LINK_TYPES: Array<{ value: LinkType; label: string }> = [
+  ...RELATION_LINK_TYPES,
+  ...HIERARCHY_LINK_TYPES,
 ]
 
 function createDraft(issue: Issue): WorkItemDraft {
@@ -133,6 +151,9 @@ function createDraft(issue: Issue): WorkItemDraft {
     stateId: issue.stateRecord?.id ?? UNASSIGNED_VALUE,
     parentIssueId: issue.parentIssue?.id ?? issue.parentIssueId ?? UNASSIGNED_VALUE,
     storyPoints: issue.storyPoints?.toString() ?? '',
+    estimatedHours: issue.estimatedHours?.toString() ?? '',
+    remainingHours: issue.remainingHours?.toString() ?? '',
+    completedHours: issue.completedHours?.toString() ?? '',
     customFields: { ...(issue.customFields ?? {}) },
   }
 }
@@ -187,7 +208,7 @@ function renderCommentContent(comment: Comment) {
     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
       {nodes.map((node) =>
         node.mention ? (
-          <span key={node.key} className="font-medium text-primary">
+          <span key={node.key} className="font-semibold text-cyan-300 bg-cyan-500/10 rounded px-1">
             {node.value}
           </span>
         ) : (
@@ -205,13 +226,17 @@ function getRelativeTime(value: string | Date | null | undefined) {
 
 export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const router = useRouter()
+  const openWorkItem = useAppStore((s) => s.openWorkItem)
   const { payload, isRefreshing, onReload, onIssueUpdated } = props
   const { issue, context, access, viewer } = payload
 
   const [draft, setDraft] = useState<WorkItemDraft>(() => createDraft(issue))
+  const [selectedIterationTeamId, setSelectedIterationTeamId] = useState<string>(
+    issue.iteration?.teamId ?? UNASSIGNED_VALUE
+  )
   const [isSaving, setIsSaving] = useState(false)
 
-  const [rightTab, setRightTab] = useState<'related' | 'discussion' | 'history' | 'attachments'>('related')
+  const [rightTab, setRightTab] = useState<'general' | 'history' | 'attachments'>('general')
 
   const [relations, setRelations] = useState<FlatRelation[] | null>(null)
   const [relationsCursor, setRelationsCursor] = useState<string | null>(null)
@@ -256,6 +281,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   useEffect(() => {
     setDraft(createDraft(issue))
+    setSelectedIterationTeamId(issue.iteration?.teamId ?? UNASSIGNED_VALUE)
     setRelations(null)
     setRelationsCursor(null)
     setComments(null)
@@ -274,10 +300,117 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const canLink = access.permissions.includes('workitem:link')
   const canDelete = access.permissions.includes('workitem:delete')
 
+  const linkTypeOptions = useMemo(
+    () => (canUpdate ? LINK_TYPES : RELATION_LINK_TYPES),
+    [canUpdate]
+  )
+
+  useEffect(() => {
+    if (!linkTypeOptions.some((option) => option.value === linkType)) {
+      setLinkType('related')
+    }
+  }, [linkType, linkTypeOptions])
+
   const activeTypeDefinition = useMemo(
     () => getWorkItemTypeDefinition(context.workItemTypes, draft.workItemType),
     [context.workItemTypes, draft.workItemType]
   )
+
+  const isPlanningSection = useCallback(
+    (section: { key: string; title: string }) =>
+      section.key.toLowerCase() === 'planning' || section.title.toLowerCase() === 'planning',
+    []
+  )
+
+  const planningSections = useMemo(
+    () => (activeTypeDefinition?.sections ?? []).filter((section) => isPlanningSection(section)),
+    [activeTypeDefinition, isPlanningSection]
+  )
+
+  const nonPlanningSections = useMemo(
+    () =>
+      (activeTypeDefinition?.sections ?? []).filter((section) => !isPlanningSection(section)),
+    [activeTypeDefinition, isPlanningSection]
+  )
+
+  const sortedTeams = useMemo(
+    () => [...context.teams].sort((left, right) => left.name.localeCompare(right.name)),
+    [context.teams]
+  )
+
+  const filteredIterations = useMemo(() => {
+    if (selectedIterationTeamId === UNASSIGNED_VALUE) {
+      return context.iterations.filter((iteration) => iteration.iterationType !== 'sprint')
+    }
+
+    return context.iterations.filter(
+      (iteration) =>
+        iteration.iterationType !== 'sprint' || iteration.teamId === selectedIterationTeamId
+    )
+  }, [context.iterations, selectedIterationTeamId])
+
+  const formatIterationLabel = (iteration: Iteration) => {
+    const baseLabel = iteration.path || iteration.name
+    if (iteration.iterationType !== 'sprint') {
+      return baseLabel
+    }
+
+    const teamName =
+      iteration.team?.name ||
+      context.teams.find((team) => team.id === iteration.teamId)?.name ||
+      'No team'
+
+    return `${baseLabel} (${teamName})`
+  }
+
+  useEffect(() => {
+    if (draft.iterationId === UNASSIGNED_VALUE) {
+      return
+    }
+
+    const selectedIteration = context.iterations.find(
+      (iteration) => iteration.id === draft.iterationId
+    )
+    if (!selectedIteration) {
+      setDraft((previous) => ({ ...previous, iterationId: UNASSIGNED_VALUE }))
+      return
+    }
+
+    if (
+      selectedIterationTeamId === UNASSIGNED_VALUE &&
+      selectedIteration.iterationType === 'sprint'
+    ) {
+      setDraft((previous) => ({ ...previous, iterationId: UNASSIGNED_VALUE }))
+      return
+    }
+
+    if (
+      selectedIterationTeamId !== UNASSIGNED_VALUE &&
+      selectedIteration.teamId !== selectedIterationTeamId
+    ) {
+      setDraft((previous) => ({ ...previous, iterationId: UNASSIGNED_VALUE }))
+    }
+  }, [context.iterations, draft.iterationId, selectedIterationTeamId])
+
+  useEffect(() => {
+    if (draft.iterationId === UNASSIGNED_VALUE) {
+      return
+    }
+
+    const selectedIteration = context.iterations.find(
+      (iteration) => iteration.id === draft.iterationId
+    )
+    if (!selectedIteration) {
+      return
+    }
+
+    if (
+      selectedIteration.teamId &&
+      selectedIterationTeamId === UNASSIGNED_VALUE
+    ) {
+      setSelectedIterationTeamId(selectedIteration.teamId)
+    }
+  }, [context.iterations, draft.iterationId, selectedIterationTeamId])
 
   const patchPayload = useMemo(() => buildWorkItemPatchPayload(issue, draft), [issue, draft])
   const hasChanges = patchPayload !== null
@@ -373,12 +506,16 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   useEffect(() => {
-    if (rightTab === 'related' && relations === null) void loadRelations(null)
-    if (rightTab === 'discussion' && comments === null) void loadComments(null)
+    if (rightTab === 'general' && relations === null) void loadRelations(null)
     if (rightTab === 'history' && history === null) void loadHistory(null)
     if (rightTab === 'attachments' && attachments === null) void loadAttachments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rightTab])
+
+  useEffect(() => {
+    if (comments === null) void loadComments(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue.id, comments])
 
   useEffect(() => {
     const query = deferredLinkSearch.trim()
@@ -445,10 +582,23 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     if (!patchPayload || !canUpdate) return
     setIsSaving(true)
     try {
+      const requestPayload: Record<string, unknown> = {
+        ...patchPayload,
+        version: issue.version,
+      }
+
+      if (
+        patchPayload.iterationId !== undefined &&
+        patchPayload.iterationId !== null &&
+        selectedIterationTeamId !== UNASSIGNED_VALUE
+      ) {
+        requestPayload.iterationTeamId = selectedIterationTeamId
+      }
+
       const response = await fetch(`/api/issues/${issue.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...patchPayload, version: issue.version }),
+        body: JSON.stringify(requestPayload),
       })
 
       if (!response.ok) {
@@ -542,6 +692,38 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const handleAddLink = async (targetIssueId: string) => {
     try {
+      if (linkType === 'parent' || linkType === 'child') {
+        const issueIdToUpdate = linkType === 'parent' ? issue.id : targetIssueId
+        const parentIssueId = linkType === 'parent' ? targetIssueId : issue.id
+
+        const response = await fetch(`/api/issues/${issueIdToUpdate}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentIssueId }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          toast.error(error.error || 'Failed to update hierarchy link')
+          return
+        }
+
+        if (linkType === 'parent') {
+          const updated = (await response.json()) as Issue
+          onIssueUpdated(updated)
+        }
+
+        setLinkSearch('')
+        setLinkCandidates((previous) =>
+          previous.filter((candidate) => candidate.id !== targetIssueId)
+        )
+        onReload()
+        toast.success(
+          linkType === 'parent' ? 'Parent work item linked' : 'Child work item linked'
+        )
+        return
+      }
+
       const response = await fetch('/api/relations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -650,22 +832,9 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       <header className="border-b border-border bg-background px-4 py-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="font-mono">{issue.key}</Badge>
-          <Select
-            value={draft.workItemType}
-            onValueChange={(value) => setDraft((previous) => ({ ...previous, workItemType: value }))}
-            disabled={!canUpdate || isSaving}
-          >
-            <SelectTrigger className="w-[200px] h-8">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              {context.workItemTypes.map((type) => (
-                <SelectItem key={type.id} value={type.key}>
-                  {type.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Badge variant="secondary" className="h-8 px-3 text-xs font-medium">
+            {activeTypeDefinition?.name ?? issue.workItemType}
+          </Badge>
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" size="sm" className="h-8" onClick={onReload} disabled={isRefreshing}>
               {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Reload'}
@@ -701,7 +870,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           placeholder="Work item title"
         />
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-1">
             <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">State</Label>
             <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
@@ -736,14 +905,34 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           </div>
 
           <div className="space-y-1">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Sprint Team</Label>
+            <Select
+              value={selectedIterationTeamId}
+              onValueChange={setSelectedIterationTeamId}
+              disabled={!canUpdate || isSaving}
+            >
+              <SelectTrigger className="h-8"><SelectValue placeholder="All teams" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED_VALUE}>All teams</SelectItem>
+                {sortedTeams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
             <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Iteration Path</Label>
             <Select value={draft.iterationId} onValueChange={(value) => setDraft((previous) => ({ ...previous, iterationId: value }))} disabled={!canUpdate || isSaving}>
               <SelectTrigger className="h-8"><SelectValue placeholder="Iteration" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                {context.iterations.map((iteration) => <SelectItem key={iteration.id} value={iteration.id}>{iteration.path || iteration.name}</SelectItem>)}
+                {filteredIterations.map((iteration) => <SelectItem key={iteration.id} value={iteration.id}>{formatIterationLabel(iteration)}</SelectItem>)}
               </SelectContent>
             </Select>
+            {selectedIterationTeamId === UNASSIGNED_VALUE ? (
+              <p className="text-[11px] text-muted-foreground">
+                Select a sprint team to assign this work item to a sprint.
+              </p>
+            ) : null}
           </div>
         </div>
       </header>
@@ -762,10 +951,90 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             />
           </section>
 
-          {activeTypeDefinition?.sections?.length ? (
+          <section className="rounded-lg border border-border p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Discussion</Label>
+              {loadingComments && comments === null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            </div>
+            {comments && comments.length > 0 ? (
+              <div className="space-y-3">
+                {comments.map((comment) => {
+                  const isEditing = editingCommentId === comment.id
+                  const canManageComment = viewer?.id === comment.author.id || canModerateComments
+                  return (
+                    <div key={comment.id} className="rounded-lg border border-border p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={comment.author.avatar || undefined} />
+                          <AvatarFallback className="text-[10px]">{comment.author.name.split(' ').map((value) => value[0]).join('').toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{comment.author.name}</div>
+                          <div className="text-[11px] text-muted-foreground">{getRelativeTime(comment.createdAt)}</div>
+                        </div>
+                        {canManageComment ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); setEditingCommentSelectionStart(comment.content.length) }}>Edit</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => void handleDeleteComment(comment.id)}>Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                      </div>
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <Textarea ref={editingCommentRef} rows={3} value={editingCommentContent} onChange={(event) => { setEditingCommentContent(event.target.value); setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? editingCommentContent.length)} />
+                          {editingMentionContext && mentionCandidates.length > 0 ? (
+                            <div className="rounded border border-border">
+                              {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-cyan-300" onClick={() => insertMention(candidate.id, candidate.name, 'edit')}>{candidate.name}</button>)}
+                            </div>
+                          ) : null}
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" onClick={() => void handleUpdateComment(comment.id)}>Save</Button>
+                            <Button variant="ghost" size="sm" onClick={() => { setEditingCommentId(null); setEditingCommentContent('') }}>Cancel</Button>
+                          </div>
+                        </div>
+                      ) : renderCommentContent(comment)}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : loadingComments ? (
+              <div className="text-sm text-muted-foreground">Loading comments...</div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                No comments yet.
+              </div>
+            )}
+            {commentsCursor ? (
+              <Button variant="outline" size="sm" className="w-full" disabled={loadingComments} onClick={() => void loadComments(commentsCursor)}>
+                Load more comments
+              </Button>
+            ) : null}
+            <section className="rounded-lg border border-border p-3 space-y-2">
+              <Textarea ref={newCommentRef} value={newComment} rows={3} disabled={!canComment} onChange={(event) => { setNewComment(event.target.value); setNewCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setNewCommentSelectionStart(event.currentTarget.selectionStart ?? newComment.length)} placeholder={canComment ? 'Write a comment. Use @ to mention teammates.' : 'No comment permission'} />
+              {commentMentionContext && mentionCandidates.length > 0 ? (
+                <div className="rounded border border-border">
+                  {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-cyan-300" onClick={() => insertMention(candidate.id, candidate.name, 'new')}>{candidate.name}</button>)}
+                </div>
+              ) : null}
+              <div className="flex justify-end">
+                <Button size="sm" className="gap-1.5" onClick={() => void handleAddComment()} disabled={!canComment || !newComment.trim()}>
+                  <Send className="h-3.5 w-3.5" />
+                  Add comment
+                </Button>
+              </div>
+            </section>
+          </section>
+
+          {nonPlanningSections.length > 0 ? (
             <section className="rounded-lg border border-border p-4">
               <DynamicWorkItemFields
-                sections={activeTypeDefinition.sections}
+                sections={nonPlanningSections}
                 values={draft.customFields}
                 users={context.users}
                 iterations={context.iterations}
@@ -779,7 +1048,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 }
               />
             </section>
-          ) : (
+          ) : activeTypeDefinition?.sections?.length ? null : (
             <section className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
               This work item type has no configured schema sections.
             </section>
@@ -789,15 +1058,14 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <aside className="min-h-0 border-t xl:border-t-0 xl:border-l border-border overflow-y-auto">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="h-full flex flex-col">
             <div className="px-4 pt-4">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="related">Related</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="general">General</TabsTrigger>
                 <TabsTrigger value="attachments">Files</TabsTrigger>
-                <TabsTrigger value="discussion">Discussion</TabsTrigger>
                 <TabsTrigger value="history">History</TabsTrigger>
               </TabsList>
             </div>
 
-            <TabsContent value="related" className="m-0 p-4 space-y-4 overflow-y-auto">
+            <TabsContent value="general" className="m-0 p-4 space-y-4 overflow-y-auto">
               <section className="rounded-lg border border-border p-3 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <GitBranch className="h-3.5 w-3.5" />
@@ -810,7 +1078,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                       <button
                         type="button"
                         className="text-left hover:text-primary"
-                        onClick={() => router.push(canonicalWorkItemRoute(issue.parentIssue!.id))}
+                        onClick={() => openWorkItem(issue.parentIssue!.id)}
                       >
                         <span className="font-mono text-xs text-muted-foreground">{issue.parentIssue.key}</span>{' '}
                         <span>{issue.parentIssue.title}</span>
@@ -828,7 +1096,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                             key={child.id}
                             type="button"
                             className="w-full text-left rounded border border-border px-2 py-1.5 hover:bg-accent"
-                            onClick={() => router.push(canonicalWorkItemRoute(child.id))}
+                            onClick={() => openWorkItem(child.id)}
                           >
                             <span className="font-mono text-xs text-muted-foreground">{child.key}</span>{' '}
                             <span className="text-sm">{child.title}</span>
@@ -853,9 +1121,9 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                       <div key={relation.id} className="rounded border border-border px-2 py-1.5">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-[10px]">
-                            {LINK_TYPES.find((item) => item.value === relation.relationType)?.label ?? relation.relationType}
+                            {RELATION_LINK_TYPES.find((item) => item.value === relation.relationType)?.label ?? relation.relationType}
                           </Badge>
-                          <button type="button" className="min-w-0 flex-1 text-left hover:text-primary" onClick={() => router.push(canonicalWorkItemRoute(relation.linkedIssue.id))}>
+                          <button type="button" className="min-w-0 flex-1 text-left hover:text-primary" onClick={() => openWorkItem(relation.linkedIssue.id)}>
                             <span className="font-mono text-xs text-muted-foreground">{relation.linkedIssue.key}</span>{' '}
                             <span className="truncate text-sm">{relation.linkedIssue.title}</span>
                           </button>
@@ -882,11 +1150,14 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                       <Select value={linkType} onValueChange={(value) => setLinkType(value as LinkType)}>
                         <SelectTrigger className="w-[140px] h-8"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {LINK_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                          {linkTypeOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                       <Input className="h-8" value={linkSearch} onChange={(event) => setLinkSearch(event.target.value)} placeholder="Search work items" />
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Use Parent/Child to update hierarchy, or use relation types for dependency links.
+                    </p>
                     {isSearchingLinks ? (
                       <div className="text-xs text-muted-foreground">Searching...</div>
                     ) : linkCandidates.length > 0 ? (
@@ -904,6 +1175,26 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   </div>
                 ) : null}
               </section>
+
+              {planningSections.length > 0 ? (
+                <section className="rounded-lg border border-border p-3 space-y-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Planning</div>
+                  <DynamicWorkItemFields
+                    sections={planningSections}
+                    values={draft.customFields}
+                    users={context.users}
+                    iterations={context.iterations}
+                    areas={context.areas}
+                    teams={context.teams}
+                    onChange={(key, value) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        customFields: { ...previous.customFields, [key]: value },
+                      }))
+                    }
+                  />
+                </section>
+              ) : null}
 
               <section className="rounded-lg border border-border p-3 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">System</div>
@@ -924,6 +1215,18 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Story Points</span>
                     <Input className="h-7 w-24 text-right" value={draft.storyPoints} onChange={(event) => { const v = event.target.value.replace(/[^0-9]/g, ''); setDraft((previous) => ({ ...previous, storyPoints: v })) }} disabled={!canUpdate || isSaving} inputMode="numeric" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Estimated Hours</span>
+                    <Input className="h-7 w-24 text-right" value={draft.estimatedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, estimatedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Remaining Hours</span>
+                    <Input className="h-7 w-24 text-right" value={draft.remainingHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, remainingHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Completed Hours</span>
+                    <Input className="h-7 w-24 text-right" value={draft.completedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Created</span><span>{getRelativeTime(issue.createdAt)}</span></div>
@@ -995,82 +1298,6 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   No attachments yet.
                 </div>
               )}
-            </TabsContent>
-
-            <TabsContent value="discussion" className="m-0 p-4 space-y-3 overflow-y-auto">
-              {loadingComments && comments === null ? (
-                <div className="text-sm text-muted-foreground">Loading comments...</div>
-              ) : comments && comments.length > 0 ? (
-                <div className="space-y-3">
-                  {comments.map((comment) => {
-                    const isEditing = editingCommentId === comment.id
-                    const canManageComment = viewer?.id === comment.author.id || canModerateComments
-                    return (
-                      <div key={comment.id} className="rounded-lg border border-border p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Avatar className="h-6 w-6">
-                            <AvatarImage src={comment.author.avatar || undefined} />
-                            <AvatarFallback className="text-[10px]">{comment.author.name.split(' ').map((value) => value[0]).join('').toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium truncate">{comment.author.name}</div>
-                            <div className="text-[11px] text-muted-foreground">{getRelativeTime(comment.createdAt)}</div>
-                          </div>
-                          {canManageComment ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); setEditingCommentSelectionStart(comment.content.length) }}>Edit</DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => void handleDeleteComment(comment.id)}>Delete</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </div>
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <Textarea ref={editingCommentRef} rows={3} value={editingCommentContent} onChange={(event) => { setEditingCommentContent(event.target.value); setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? editingCommentContent.length)} />
-                            {editingMentionContext && mentionCandidates.length > 0 ? (
-                              <div className="rounded border border-border">
-                                {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs" onClick={() => insertMention(candidate.id, candidate.name, 'edit')}>{candidate.name}</button>)}
-                              </div>
-                            ) : null}
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" onClick={() => void handleUpdateComment(comment.id)}>Save</Button>
-                              <Button variant="ghost" size="sm" onClick={() => { setEditingCommentId(null); setEditingCommentContent('') }}>Cancel</Button>
-                            </div>
-                          </div>
-                        ) : renderCommentContent(comment)}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  No comments yet.
-                </div>
-              )}
-              {commentsCursor ? (
-                <Button variant="outline" size="sm" className="w-full" disabled={loadingComments} onClick={() => void loadComments(commentsCursor)}>
-                  Load more comments
-                </Button>
-              ) : null}
-              <section className="rounded-lg border border-border p-3 space-y-2">
-                <Textarea ref={newCommentRef} value={newComment} rows={3} disabled={!canComment} onChange={(event) => { setNewComment(event.target.value); setNewCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setNewCommentSelectionStart(event.currentTarget.selectionStart ?? newComment.length)} placeholder={canComment ? 'Write a comment. Use @ to mention teammates.' : 'No comment permission'} />
-                {commentMentionContext && mentionCandidates.length > 0 ? (
-                  <div className="rounded border border-border">
-                    {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs" onClick={() => insertMention(candidate.id, candidate.name, 'new')}>{candidate.name}</button>)}
-                  </div>
-                ) : null}
-                <div className="flex justify-end">
-                  <Button size="sm" className="gap-1.5" onClick={() => void handleAddComment()} disabled={!canComment || !newComment.trim()}>
-                    <Send className="h-3.5 w-3.5" />
-                    Add comment
-                  </Button>
-                </div>
-              </section>
             </TabsContent>
 
             <TabsContent value="history" className="m-0 p-4 space-y-3 overflow-y-auto">
