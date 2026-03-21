@@ -159,6 +159,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [linkedItems, setLinkedItems] = useState<LinkedItem[]>([])
   const [childIssueIds, setChildIssueIds] = useState<string[]>([])
   const [newLinkType, setNewLinkType] = useState('related')
+  const [isLinkTypeManual, setIsLinkTypeManual] = useState(false)
   const [searchLink, setSearchLink] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
@@ -382,8 +383,49 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setLinkedItems([])
     setChildIssueIds([])
     setNewLinkType('related')
+    setIsLinkTypeManual(false)
     setSearchLink('')
     setActiveTab('basic')
+  }
+
+  const resolveAutoLinkType = (issueId: string, linkType: string) => {
+    if (linkType === 'parent' || linkType === 'child' || isLinkTypeManual) {
+      return linkType
+    }
+
+    const targetIssue = issues.find((issue) => issue.id === issueId)
+    if (!targetIssue) {
+      return linkType
+    }
+
+    const currentLevel = getHierarchyLevel(workItemType)
+    const targetLevel = getHierarchyLevel(targetIssue.workItemType)
+
+    if (targetLevel < currentLevel) {
+      return 'parent'
+    }
+
+    if (targetLevel > currentLevel) {
+      return 'child'
+    }
+
+    return linkType
+  }
+
+  const handleParentSelection = (value: string) => {
+    const nextParentId = value === UNASSIGNED_VALUE ? null : value
+    setParentIssueId(nextParentId)
+
+    if (!nextParentId) {
+      return
+    }
+
+    setChildIssueIds((previous) => previous.filter((id) => id !== nextParentId))
+    setLinkedItems((previous) => previous.filter((link) => link.issueId !== nextParentId))
+
+    if (!isLinkTypeManual) {
+      setNewLinkType('parent')
+    }
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -400,14 +442,16 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   }
 
   const handleAddLink = (issueId: string, linkType: string) => {
-    if (linkType === 'parent') {
+    const resolvedLinkType = resolveAutoLinkType(issueId, linkType)
+
+    if (resolvedLinkType === 'parent') {
       setParentIssueId(issueId)
       setChildIssueIds((previous) => previous.filter((id) => id !== issueId))
       setSearchLink('')
       return
     }
 
-    if (linkType === 'child') {
+    if (resolvedLinkType === 'child') {
       setChildIssueIds((previous) => (previous.includes(issueId) ? previous : [...previous, issueId]))
       if (parentIssueId === issueId) {
         setParentIssueId(null)
@@ -417,9 +461,9 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     }
 
     setLinkedItems((previous) =>
-      previous.some((link) => link.issueId === issueId && link.linkType === linkType)
+      previous.some((link) => link.issueId === issueId && link.linkType === resolvedLinkType)
         ? previous
-        : [...previous, { issueId, linkType }]
+        : [...previous, { issueId, linkType: resolvedLinkType }]
     )
     setSearchLink('')
   }
@@ -823,9 +867,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   <Label className="text-xs">Parent</Label>
                   <Select
                     value={parentIssueId ?? UNASSIGNED_VALUE}
-                    onValueChange={(value) =>
-                      setParentIssueId(value === UNASSIGNED_VALUE ? null : value)
-                    }
+                    onValueChange={handleParentSelection}
                   >
                     <SelectTrigger className="h-8 text-xs mt-1">
                       <SelectValue placeholder="No parent" />
@@ -865,7 +907,13 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
               <div>
                 <Label className="text-xs">Add Link</Label>
                 <div className="flex gap-2 mt-1.5">
-                  <Select value={newLinkType} onValueChange={setNewLinkType}>
+                  <Select
+                    value={newLinkType}
+                    onValueChange={(value) => {
+                      setNewLinkType(value)
+                      setIsLinkTypeManual(true)
+                    }}
+                  >
                     <SelectTrigger className="w-[130px] h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>

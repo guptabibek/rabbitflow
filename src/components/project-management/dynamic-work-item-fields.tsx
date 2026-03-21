@@ -24,6 +24,7 @@ import type {
 } from '@/store/app-store'
 
 const EMPTY_SELECT = '__none__'
+const HIDDEN_SYSTEM_FIELD_KEYS = new Set(['story_points'])
 
 type DynamicWorkItemFieldsProps = {
   sections: WorkItemSectionDefinition[]
@@ -84,6 +85,10 @@ export function DynamicWorkItemFields({
             className={`grid gap-4 md:grid-cols-2 ${section.isCollapsible && collapsedSections[section.id] ? 'hidden' : ''}`}
           >
             {section.fields.map((field) => {
+              if (HIDDEN_SYSTEM_FIELD_KEYS.has(field.key)) {
+                return null
+              }
+
               const value = values[field.key]
 
               if (field.dataType === 'markdown') {

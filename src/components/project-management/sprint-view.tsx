@@ -444,6 +444,32 @@ export function SprintView() {
       issues: sprintIssues.filter((i) => i.status === col.id).sort((a, b) => a.columnOrder - b.columnOrder),
     })), [sprintIssues])
 
+  const storyBacklogData = useMemo(() => {
+    const ordered = [...sprintIssues].sort((a, b) => a.columnOrder - b.columnOrder)
+    const stories = ordered.filter((issue) => issue.workItemType === 'story')
+    const storyIds = new Set(stories.map((issue) => issue.id))
+
+    const childrenByParent = new Map<string, Issue[]>()
+    ordered.forEach((issue) => {
+      if (!issue.parentIssueId || !storyIds.has(issue.parentIssueId)) return
+      const existing = childrenByParent.get(issue.parentIssueId) ?? []
+      childrenByParent.set(issue.parentIssueId, [...existing, issue])
+    })
+
+    const storyGroups = stories.map((parent) => ({
+      parent,
+      children: childrenByParent.get(parent.id) ?? [],
+    }))
+
+    const standalone = ordered.filter((issue) => {
+      if (issue.workItemType === 'story') return false
+      if (!issue.parentIssueId) return true
+      return !storyIds.has(issue.parentIssueId)
+    })
+
+    return { storyGroups, standalone }
+  }, [sprintIssues])
+
   const fetchSprintIssues = useCallback(async (targetSprintId: string) => {
     if (!currentProject || !targetSprintId) return
 
@@ -661,6 +687,35 @@ export function SprintView() {
         toast.success(`${issue.key} removed from sprint`)
       }
     } catch { toast.error('Failed to remove from sprint') }
+  }
+
+  const handleRemoveParentLink = async (issueId: string) => {
+    const issue = sprintIssues.find((i) => i.id === issueId)
+    if (!issue || !issue.parentIssueId) return
+
+    try {
+      const res = await fetch(`/api/issues/${issueId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentIssueId: null, version: issue.version }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || 'Failed to remove parent link')
+        return
+      }
+
+      const updated = await res.json()
+      setSprintIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, ...updated } : i)))
+      updateIssue(issueId, updated)
+      if (resolvedSelectedSprintId) {
+        void fetchSprintIssues(resolvedSelectedSprintId)
+      }
+      toast.success('Parent link removed')
+    } catch {
+      toast.error('Failed to remove parent link')
+    }
   }
 
   const handleCapacitySave = useCallback(async (entries: Array<{ userId: string; hoursPerDay: number; daysOff: number }>) => {
@@ -1035,19 +1090,87 @@ export function SprintView() {
             <div className="ml-auto text-xs text-muted-foreground tabular-nums">{sprintIssues.length} items / {analytics?.stats.totalPoints ?? 0} pts</div>
           </div>
           <ScrollArea className="h-[calc(100vh-360px)]">
-            {groupIssues(sprintIssues, backlogGroupBy).map((group) => (
-              <div key={group.key}>
-                {backlogGroupBy !== 'none' && (
-                  <button className="w-full px-6 py-2 border-b bg-muted/30 flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={() => toggleGroup(`bl-${group.key}`)}>
-                    {collapsedGroups.has(`bl-${group.key}`) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                    {group.label}<Badge variant="secondary" className="text-[10px] h-4 ml-1">{group.issues.length}</Badge>
-                    <span className="ml-auto tabular-nums">{group.issues.reduce((s, i) => s + (i.storyPoints || 0), 0)} pts</span>
-                  </button>
-                )}
-                {!collapsedGroups.has(`bl-${group.key}`) && (
-                  <div className="divide-y">
-                    {group.issues.map((issue) => {
+            {backlogGroupBy === 'story' ? (
+              <div className="divide-y">
+                {storyBacklogData.storyGroups.map(({ parent, children }) => {
+                  const ParentIcon = TYPE_ICONS[parent.workItemType] || CheckCircle2
+                  const parentIconColor = TYPE_COLORS[parent.workItemType] || 'text-muted-foreground'
+                  const treeKey = `bl-story-${parent.id}`
+                  const isCollapsed = collapsedGroups.has(treeKey)
+                  const hasChildren = children.length > 0
+
+                  return (
+                    <div key={parent.id}>
+                      <div
+                        className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors"
+                        onClick={() => openWorkItem(parent.id)}
+                      >
+                        <button
+                          type="button"
+                          className="h-5 w-5 flex items-center justify-center text-muted-foreground"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            if (hasChildren) toggleGroup(treeKey)
+                          }}
+                          aria-label={hasChildren ? (isCollapsed ? 'Expand child tasks' : 'Collapse child tasks') : 'No child tasks'}
+                          aria-expanded={hasChildren ? !isCollapsed : undefined}
+                        >
+                          {hasChildren ? (
+                            isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <span className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <ParentIcon className={`h-4 w-4 shrink-0 ${parentIconColor}`} />
+                        <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{parent.key}</span>
+                        <span className="flex-1 text-sm truncate font-semibold">{parent.title}</span>
+                        <Badge className={`text-[10px] capitalize ${STATUS_BADGE[parent.status] || ''}`}>{parent.status.replace(/_/g, ' ')}</Badge>
+                        <Badge variant="secondary" className="text-[10px] h-5">{children.length} child{children.length === 1 ? '' : 'ren'}</Badge>
+                        <div className="w-10 text-right shrink-0">
+                          {parent.storyPoints != null && parent.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{parent.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(parent.id) }}><Minus className="h-3 w-3" /></Button>
+                      </div>
+
+                      {hasChildren && !isCollapsed ? (
+                        <div className="border-t bg-muted/10">
+                          {children.map((issue) => {
+                            const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
+                            const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
+                            return (
+                              <div key={issue.id} className="pl-14 pr-6 py-2.5 flex items-center gap-3 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
+                                <Icon className={`h-3.5 w-3.5 shrink-0 ${iconColor}`} />
+                                <span className="font-mono text-[11px] text-muted-foreground w-20 shrink-0">{issue.key}</span>
+                                <span className="flex-1 text-xs truncate font-medium">{issue.title}</span>
+                                <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px] opacity-0 group-hover:opacity-100"
+                                  aria-label="Remove parent link"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleRemoveParentLink(issue.id)
+                                  }}
+                                >
+                                  Unlink
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                                  onClick={(event) => { event.stopPropagation(); void handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+
+                {storyBacklogData.standalone.length > 0 ? (
+                  <div>
+                    <div className="px-6 py-2 border-y bg-muted/30 text-xs font-semibold text-muted-foreground">Standalone Work</div>
+                    {storyBacklogData.standalone.map((issue) => {
                       const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
                       const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
                       return (
@@ -1056,26 +1179,57 @@ export function SprintView() {
                           <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
                           <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
                           <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
-                          <div className="w-24 shrink-0">
-                            {issue.assignee ? (
-                              <div className="flex items-center gap-1.5">
-                                <Avatar className="h-5 w-5"><AvatarImage src={issue.assignee.avatar || undefined} /><AvatarFallback className="text-[8px]">{issue.assignee.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-                                <span className="text-xs truncate">{issue.assignee.name.split(' ')[0]}</span>
-                              </div>
-                            ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
-                          </div>
-                          <div className="w-10 text-right shrink-0">
-                            {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
-                          </div>
                           <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
                             onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
                         </div>
                       )
                     })}
                   </div>
-                )}
+                ) : null}
               </div>
-            ))}
+            ) : (
+              groupIssues(sprintIssues, backlogGroupBy).map((group) => (
+                <div key={group.key}>
+                  {backlogGroupBy !== 'none' && (
+                    <button className="w-full px-6 py-2 border-b bg-muted/30 flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => toggleGroup(`bl-${group.key}`)}>
+                      {collapsedGroups.has(`bl-${group.key}`) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      {group.label}<Badge variant="secondary" className="text-[10px] h-4 ml-1">{group.issues.length}</Badge>
+                      <span className="ml-auto tabular-nums">{group.issues.reduce((s, i) => s + (i.storyPoints || 0), 0)} pts</span>
+                    </button>
+                  )}
+                  {!collapsedGroups.has(`bl-${group.key}`) && (
+                    <div className="divide-y">
+                      {group.issues.map((issue) => {
+                        const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
+                        const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
+                        return (
+                          <div key={issue.id} className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
+                            <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
+                            <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
+                            <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
+                            <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
+                            <div className="w-24 shrink-0">
+                              {issue.assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Avatar className="h-5 w-5"><AvatarImage src={issue.assignee.avatar || undefined} /><AvatarFallback className="text-[8px]">{issue.assignee.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+                                  <span className="text-xs truncate">{issue.assignee.name.split(' ')[0]}</span>
+                                </div>
+                              ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
+                            </div>
+                            <div className="w-10 text-right shrink-0">
+                              {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                              onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
             {sprintIssues.length === 0 && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <List className="h-8 w-8 text-muted-foreground/30 mb-3" /><p className="text-muted-foreground font-medium mb-1">Sprint backlog is empty</p><p className="text-xs text-muted-foreground">Go to the Backlog view and assign items</p>
