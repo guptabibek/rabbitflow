@@ -7,8 +7,8 @@ import { invalidateProjectCaches } from '@/lib/domain/cache'
 import { createAuditLog } from '@/lib/domain/audit'
 
 const fieldSchema = z.object({
-  key: z.string().min(1).max(80),
-  label: z.string().min(1).max(120),
+  key: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(120),
   description: z.string().nullable().optional(),
   dataType: z.enum([
     'text',
@@ -31,8 +31,8 @@ const fieldSchema = z.object({
 })
 
 const sectionSchema = z.object({
-  key: z.string().min(1).max(80),
-  title: z.string().min(1).max(120),
+  key: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(120),
   description: z.string().nullable().optional(),
   sectionType: z.enum(['fields', 'markdown', 'system']).optional(),
   isCollapsible: z.boolean().optional(),
@@ -40,8 +40,8 @@ const sectionSchema = z.object({
 })
 
 const updateTypeSchema = z.object({
-  key: z.string().min(1).max(80),
-  name: z.string().min(1).max(120),
+  key: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(120),
   description: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
@@ -136,8 +136,14 @@ export async function PUT(
     return NextResponse.json(definition)
   } catch (error) {
     if (error instanceof z.ZodError) {
+      const firstIssue = error.issues[0]
+      const issuePath = firstIssue?.path?.join('.')
       return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
+        {
+          error: issuePath
+            ? `${issuePath}: ${firstIssue.message}`
+            : firstIssue?.message || 'Validation failed',
+        },
         { status: 400 }
       )
     }

@@ -476,6 +476,15 @@ export async function saveWorkItemTypeDefinition(
       throw new Error('Work item type does not belong to the selected project')
     }
 
+    const nextTypeOrder = existing
+      ? undefined
+      : ((
+          await tx.workItemTypeDefinition.aggregate({
+            where: { projectId },
+            _max: { order: true },
+          })
+        )._max.order ?? 0) + 10
+
     const typeDefinition = existing
       ? await tx.workItemTypeDefinition.update({
           where: { id: existing.id },
@@ -499,7 +508,7 @@ export async function saveWorkItemTypeDefinition(
             hierarchyLevel: input.hierarchyLevel ?? 4,
             isSystem: false,
             isEnabled: input.isEnabled ?? true,
-            order: Date.now(),
+            order: nextTypeOrder,
           },
         })
 

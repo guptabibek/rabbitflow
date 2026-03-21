@@ -256,6 +256,42 @@ function parseOptions(options: string) {
     .filter(Boolean)
 }
 
+function validateWorkItemTypeForm(form: WorkItemTypeForm) {
+  if (!form.name.trim()) {
+    return 'Type name is required'
+  }
+
+  if (!form.key.trim()) {
+    return 'Type key is required'
+  }
+
+  if (form.sections.length === 0) {
+    return 'Add at least one section'
+  }
+
+  for (const [sectionIndex, section] of form.sections.entries()) {
+    if (!section.key.trim()) {
+      return `Section ${sectionIndex + 1}: key is required`
+    }
+
+    if (!section.title.trim()) {
+      return `Section ${sectionIndex + 1}: title is required`
+    }
+
+    for (const [fieldIndex, field] of section.fields.entries()) {
+      if (!field.key.trim()) {
+        return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: key is required`
+      }
+
+      if (!field.label.trim()) {
+        return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: label is required`
+      }
+    }
+  }
+
+  return null
+}
+
 function getDataTypeLabel(value: string) {
   return DATA_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value
 }
@@ -1112,7 +1148,13 @@ export function WorkItemTypeManagement({
   }
 
   const handleSave = async () => {
-    if (!currentProject || !form.name.trim() || !form.key.trim()) return
+    if (!currentProject) return
+
+    const validationError = validateWorkItemTypeForm(form)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
 
     setIsSaving(true)
     try {
