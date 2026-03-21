@@ -45,11 +45,11 @@ const STATUS_OPTIONS = [
 ]
 
 const PRIORITY_OPTIONS = [
-  { value: 'lowest', label: 'Lowest', color: 'text-slate-400' },
-  { value: 'low', label: 'Low', color: 'text-slate-500' },
-  { value: 'medium', label: 'Medium', color: 'text-amber-500' },
-  { value: 'high', label: 'High', color: 'text-orange-500' },
-  { value: 'highest', label: 'Highest', color: 'text-red-500' },
+  { value: 'lowest', label: 'Lowest', color: 'text-priority-lowest' },
+  { value: 'low', label: 'Low', color: 'text-priority-low' },
+  { value: 'medium', label: 'Medium', color: 'text-priority-medium' },
+  { value: 'high', label: 'High', color: 'text-priority-high' },
+  { value: 'highest', label: 'Highest', color: 'text-priority-highest' },
 ]
 
 const SEVERITY_OPTIONS = [
@@ -88,23 +88,23 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  epic: 'text-indigo-500',
-  feature: 'text-cyan-500',
-  story: 'text-violet-500',
-  task: 'text-emerald-500',
-  bug: 'text-red-500',
-  design_doc: 'text-teal-500',
-  release_item: 'text-orange-500',
+  epic: 'text-type-epic',
+  feature: 'text-type-feature',
+  story: 'text-type-story',
+  task: 'text-type-task',
+  bug: 'text-type-bug',
+  design_doc: 'text-type-design-doc',
+  release_item: 'text-type-release-item',
 }
 
 const TYPE_BACKGROUNDS: Record<string, string> = {
-  epic: 'bg-indigo-500/10',
-  feature: 'bg-cyan-500/10',
-  story: 'bg-violet-500/10',
-  task: 'bg-emerald-500/10',
-  bug: 'bg-red-500/10',
-  design_doc: 'bg-teal-500/10',
-  release_item: 'bg-orange-500/10',
+  epic: 'bg-type-epic-bg',
+  feature: 'bg-type-feature-bg',
+  story: 'bg-type-story-bg',
+  task: 'bg-type-task-bg',
+  bug: 'bg-type-bug-bg',
+  design_doc: 'bg-type-design-doc-bg',
+  release_item: 'bg-type-release-item-bg',
 }
 
 type LinkedItem = {
@@ -927,6 +927,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                           type="button"
                           variant="ghost"
                           size="icon"
+                          aria-label="Remove parent issue"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100"
                           onClick={() => setParentIssueId(null)}
                         >
@@ -959,6 +960,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                           type="button"
                           variant="ghost"
                           size="icon"
+                          aria-label="Remove child link"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100"
                           onClick={() =>
                             setChildIssueIds((previous) =>
@@ -996,6 +998,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                           type="button"
                           variant="ghost"
                           size="icon"
+                          aria-label="Remove linked item"
                           className="h-5 w-5 opacity-0 group-hover:opacity-100"
                           onClick={() =>
                             setLinkedItems((previous) =>

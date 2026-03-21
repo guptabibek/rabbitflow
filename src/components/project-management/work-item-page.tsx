@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { WorkItemDetailContent, type WorkItemBootstrapPayload } from '@/components/project-management/issue-detail-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -105,15 +105,6 @@ export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; 
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             {embedded ? 'Close' : 'Back to Workspace'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 text-[13px]"
-            onClick={() => void loadWorkItem()}
-          >
-            <Loader2 className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
           </Button>
         </div>
       </header>

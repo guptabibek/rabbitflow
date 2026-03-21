@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { getTypeText } from '@/lib/ui-tokens'
 import {
   Bug,
   CheckCircle2,
@@ -18,12 +19,12 @@ import {
   Star,
 } from 'lucide-react'
 
-const priorityConfig = {
-  lowest: { color: 'text-slate-400', bg: 'bg-slate-400/10' },
-  low: { color: 'text-slate-500', bg: 'bg-slate-500/10' },
-  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  high: { color: 'text-orange-500', bg: 'bg-orange-500/10' },
-  highest: { color: 'text-red-500', bg: 'bg-red-500/10' },
+const priorityConfig: Record<string, { color: string; bg: string }> = {
+  lowest: { color: 'text-priority-lowest', bg: 'bg-priority-lowest-bg' },
+  low: { color: 'text-priority-low', bg: 'bg-priority-low-bg' },
+  medium: { color: 'text-priority-medium', bg: 'bg-priority-medium-bg' },
+  high: { color: 'text-priority-high', bg: 'bg-priority-high-bg' },
+  highest: { color: 'text-priority-highest', bg: 'bg-priority-highest-bg' },
 }
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -38,14 +39,14 @@ const typeIcons: Record<string, React.ElementType> = {
 }
 
 const typeColors: Record<string, string> = {
-  task: 'text-emerald-500',
-  bug: 'text-red-500',
-  story: 'text-violet-500',
-  epic: 'text-indigo-500',
-  feature: 'text-cyan-500',
-  issue: 'text-orange-500',
-  design_doc: 'text-teal-500',
-  release_item: 'text-orange-500',
+  task: 'text-type-task',
+  bug: 'text-type-bug',
+  story: 'text-type-story',
+  epic: 'text-type-epic',
+  feature: 'text-type-feature',
+  issue: 'text-type-issue',
+  design_doc: 'text-type-design-doc',
+  release_item: 'text-type-release-item',
 }
 
 interface IssueCardProps {
@@ -73,12 +74,15 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
   const TypeIcon = typeIcons[issue.workItemType] || CheckCircle2
 
   return (
-    <div
+    <article
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className={`group bg-card border border-border rounded-lg p-3 cursor-pointer transition-all duration-150 ${
+      aria-roledescription="Draggable card"
+      aria-label={`${issue.key}: ${issue.title}`}
+      tabIndex={0}
+      className={`group bg-card border border-border rounded-lg p-3 cursor-pointer transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         isSortableDragging || isDragging
           ? 'opacity-60 shadow-xl ring-2 ring-primary/30 scale-[1.02]'
           : 'hover:border-primary/30 hover:shadow-sm'
@@ -161,6 +165,6 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
           )}
         </div>
       </div>
-    </div>
+    </article>
   )
 })

@@ -37,7 +37,6 @@ import {
   Moon,
   PanelLeft,
   PanelLeftClose,
-  RefreshCw,
   Settings,
   Sun,
   User,
@@ -92,6 +91,15 @@ export default function HomePage() {
   const [isInitialized, setIsInitialized] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) setSidebarCollapsed(true)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const fetchProjectDataLegacy = useCallback(
     async (projectId: string) => {
@@ -309,10 +317,6 @@ export default function HomePage() {
     else if (currentView === 'list') setViewMode('list')
   }, [currentView, setViewMode])
 
-  const handleRefresh = () => {
-    if (currentProject) fetchProjectData(currentProject.id)
-  }
-
   const handleViewChange = (view: ViewType) => {
     setCreateIssueOpen(false)
     setSprintModalOpen(false)
@@ -405,12 +409,22 @@ export default function HomePage() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside
+        role="complementary"
+        aria-label="Project navigation"
         className={`${
           sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-52'
-        } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out`}
+        } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40`}
       >
         <AppSidebar currentView={currentView} onViewChange={handleViewChange} />
       </aside>
+
+      {!sidebarCollapsed && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarCollapsed(true)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-11 flex-shrink-0 items-center justify-between border-b border-border bg-background px-3">
@@ -419,6 +433,7 @@ export default function HomePage() {
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               onClick={() => setSidebarCollapsed((value) => !value)}
             >
               {sidebarCollapsed ? (
@@ -476,11 +491,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefresh}>
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
-
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleTheme}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
               {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </Button>
 
@@ -528,7 +539,7 @@ export default function HomePage() {
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main id="main-content" className="flex flex-1 flex-col overflow-hidden">
           {openWorkItemId ? (
             <WorkItemPage
               issueId={openWorkItemId}

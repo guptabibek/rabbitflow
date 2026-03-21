@@ -23,12 +23,7 @@ import {
   Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-const PRESET_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7',
-  '#d946ef', '#ec4899', '#f43f5e', '#64748b', '#78716c',
-]
+import { PRESET_COLORS } from '@/lib/ui-tokens'
 
 export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
   const { currentProject, labels, setLabels } = useAppStore()
@@ -181,10 +176,10 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         />
                       ))}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleUpdate(label.id)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)}>
                       <Check className="h-3 w-3 text-green-500" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingId(null)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Cancel editing" onClick={() => setEditingId(null)}>
                       <X className="h-3 w-3" />
                     </Button>
                   </>
@@ -198,6 +193,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Edit label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => {
                         setEditingId(label.id)
@@ -210,6 +206,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Delete label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
                       onClick={() => handleDelete(label.id)}
                     >

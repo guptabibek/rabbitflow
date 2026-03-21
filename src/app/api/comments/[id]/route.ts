@@ -137,7 +137,6 @@ export async function PUT(
         mentionUserIds: newlyMentionedUserIds,
         actorUserId: auth.actor.userId,
         commentContent: sanitizedContent,
-        origin: request.nextUrl.origin,
       })
     }
 

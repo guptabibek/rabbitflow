@@ -180,6 +180,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
                   type="button"
                   size="icon"
                   variant="secondary"
+                  aria-label="Change avatar"
                   className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingAvatar}

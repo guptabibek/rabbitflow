@@ -33,13 +33,13 @@ const ALL_VALUE = '__all__'
 
 const WORK_ITEM_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
   all: { icon: CircleDot, color: 'text-muted-foreground' },
-  epic: { icon: Rocket, color: 'text-indigo-500' },
-  feature: { icon: Flag, color: 'text-cyan-500' },
-  story: { icon: Star, color: 'text-violet-500' },
-  task: { icon: CheckCircle2, color: 'text-emerald-500' },
-  bug: { icon: Bug, color: 'text-red-500' },
-  design_doc: { icon: Rocket, color: 'text-teal-500' },
-  release_item: { icon: PackageCheck, color: 'text-orange-500' },
+  epic: { icon: Rocket, color: 'text-type-epic' },
+  feature: { icon: Flag, color: 'text-type-feature' },
+  story: { icon: Star, color: 'text-type-story' },
+  task: { icon: CheckCircle2, color: 'text-type-task' },
+  bug: { icon: Bug, color: 'text-type-bug' },
+  design_doc: { icon: Rocket, color: 'text-type-design-doc' },
+  release_item: { icon: PackageCheck, color: 'text-type-release-item' },
 }
 
 interface FilterBarProps {
@@ -129,13 +129,14 @@ export function FilterBar({
   return (
     <div className="flex-shrink-0 border-b border-border bg-background px-4 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-56">
+        <div className="relative w-full sm:w-56">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={filters.search}
             onChange={(event) => setFilters({ search: event.target.value })}
             placeholder="Search issues..."
             className="h-8 pl-8 text-sm"
+            aria-label="Search work items"
           />
         </div>
 

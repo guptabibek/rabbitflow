@@ -23,6 +23,7 @@ import {
   PackageCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getTypeText, getStatusClasses, getPriorityText } from '@/lib/ui-tokens'
 
 type BacklogNode = {
   id: string
@@ -51,33 +52,9 @@ const typeIconMap: Record<string, React.ElementType> = {
   release_item: PackageCheck,
 }
 
-const typeColorMap: Record<string, string> = {
-  epic: 'text-indigo-500',
-  feature: 'text-cyan-500',
-  story: 'text-violet-500',
-  task: 'text-emerald-500',
-  bug: 'text-red-500',
-  issue: 'text-orange-500',
-  design_doc: 'text-teal-500',
-  release_item: 'text-orange-500',
-}
-
-const statusBgMap: Record<string, string> = {
-  backlog: 'bg-slate-500/10 text-slate-400',
-  todo: 'bg-slate-500/10 text-slate-500',
-  in_progress: 'bg-blue-500/10 text-blue-500',
-  in_review: 'bg-amber-500/10 text-amber-500',
-  done: 'bg-emerald-500/10 text-emerald-500',
-  cancelled: 'bg-red-500/10 text-red-500',
-}
-
-const priorityMap: Record<string, string> = {
-  highest: 'text-red-500',
-  high: 'text-orange-500',
-  medium: 'text-amber-500',
-  low: 'text-slate-500',
-  lowest: 'text-slate-400',
-}
+const typeColorMap = (t: string) => getTypeText(t)
+const statusBgMap = (s: string) => getStatusClasses(s)
+const priorityMap = (p: string) => getPriorityText(p)
 
 export function BacklogView() {
   const openWorkItem = useAppStore((s) => s.openWorkItem)
@@ -209,7 +186,9 @@ export function BacklogView() {
       return (
         <div key={node.id}>
           <div
-            className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/50 transition-colors rounded-md cursor-pointer"
+            className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/50 transition-colors rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            tabIndex={0}
+            role="button"
             style={{ paddingLeft: `${12 + depth * 24}px` }}
             onClick={() => {
               openWorkItem(node.id)
@@ -218,7 +197,9 @@ export function BacklogView() {
             {/* Expand toggle */}
             <button
               type="button"
-              className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground flex-shrink-0"
+              className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={hasChildren ? (isExpanded ? 'Collapse children' : 'Expand children') : undefined}
+              aria-expanded={hasChildren ? isExpanded : undefined}
               onClick={(e) => {
                 e.stopPropagation()
                 if (hasChildren) toggleExpanded(node.id)
@@ -232,7 +213,7 @@ export function BacklogView() {
             </button>
 
             {/* Type icon */}
-            <TypeIcon className={`h-4 w-4 flex-shrink-0 ${typeColorMap[node.workItemType] || 'text-muted-foreground'}`} />
+            <TypeIcon className={`h-4 w-4 flex-shrink-0 ${typeColorMap(node.workItemType)}`} />
 
             {/* Key */}
             <span className="font-mono text-xs text-muted-foreground flex-shrink-0 w-16">{node.key}</span>
@@ -241,7 +222,7 @@ export function BacklogView() {
             <span className="flex-1 truncate text-sm font-medium text-foreground">{node.title}</span>
 
             {/* Status */}
-            <Badge variant="outline" className={`text-[10px] capitalize border-0 font-medium flex-shrink-0 ${statusBgMap[node.status] || ''}`}>
+            <Badge variant="outline" className={`text-[10px] capitalize border-0 font-medium flex-shrink-0 ${statusBgMap(node.status)}`}>
               {node.status.replace('_', ' ')}
             </Badge>
 
@@ -271,6 +252,7 @@ export function BacklogView() {
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
+                aria-label="Move up"
                 onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'up') }}
               >
                 <ArrowUp className="h-3 w-3" />
@@ -280,6 +262,7 @@ export function BacklogView() {
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
+                aria-label="Move down"
                 onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'down') }}
               >
                 <ArrowDown className="h-3 w-3" />

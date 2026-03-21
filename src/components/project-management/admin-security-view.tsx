@@ -337,8 +337,8 @@ export function AdminSecurityView() {
                         <div className="text-[11px] text-muted-foreground">{user.email}</div>
                       </td>
                       <td className="px-3 py-1.5 align-top">
-                        {user.mfaEnabled ? <Badge className="bg-emerald-500/10 text-emerald-600 border-0 text-[10px]">On</Badge> : <Badge variant="outline" className="text-[10px]">Off</Badge>}
-                        {user.mfaReenrollRequired ? <div className="mt-0.5"><Badge className="bg-amber-500/10 text-amber-600 border-0 text-[10px]">Re-enroll</Badge></div> : null}
+                        {user.mfaEnabled ? <Badge className="bg-category-done-bg text-category-done border-0 text-[10px]">On</Badge> : <Badge variant="outline" className="text-[10px]">Off</Badge>}
+                        {user.mfaReenrollRequired ? <div className="mt-0.5"><Badge className="bg-status-in-review-bg text-status-in-review border-0 text-[10px]">Re-enroll</Badge></div> : null}
                       </td>
                       <td className="px-3 py-1.5 align-top text-xs">{user.activeSessions}</td>
                     </tr>
@@ -397,8 +397,8 @@ export function AdminSecurityView() {
                             <div className="text-[11px] text-muted-foreground">IP: {session.ipAddress || 'N/A'}</div>
                           </td>
                           <td className="px-3 py-1.5 space-y-0.5">
-                            {session.revokedAt ? <Badge variant="outline" className="text-destructive border-destructive/40 text-[10px]">Revoked</Badge> : <Badge className="bg-emerald-500/10 text-emerald-600 border-0 text-[10px]">Active</Badge>}
-                            {session.mfaBypassed ? <div><Badge className="bg-amber-500/10 text-amber-600 border-0 text-[10px]">MFA bypassed</Badge></div> : null}
+                            {session.revokedAt ? <Badge variant="outline" className="text-destructive border-destructive/40 text-[10px]">Revoked</Badge> : <Badge className="bg-category-done-bg text-category-done border-0 text-[10px]">Active</Badge>}
+                            {session.mfaBypassed ? <div><Badge className="bg-status-in-review-bg text-status-in-review border-0 text-[10px]">MFA bypassed</Badge></div> : null}
                           </td>
                           <td className="px-3 py-1.5 text-[11px] text-muted-foreground space-y-0.5">
                             <div>Created: {formatDateTime(session.createdAt)}</div>

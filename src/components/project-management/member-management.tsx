@@ -62,11 +62,11 @@ type GlobalUser = {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'Admin', label: 'Admin', icon: Shield, tone: 'bg-amber-500/10 text-amber-500' },
-  { value: 'PM', label: 'PM', icon: Briefcase, tone: 'bg-blue-500/10 text-blue-500' },
-  { value: 'Dev', label: 'Developer', icon: Wrench, tone: 'bg-emerald-500/10 text-emerald-500' },
-  { value: 'QA', label: 'QA', icon: Bug, tone: 'bg-violet-500/10 text-violet-500' },
-  { value: 'Viewer', label: 'Viewer', icon: Eye, tone: 'bg-slate-500/10 text-slate-500' },
+  { value: 'Admin', label: 'Admin', icon: Shield, tone: 'bg-role-admin-bg text-role-admin' },
+  { value: 'PM', label: 'PM', icon: Briefcase, tone: 'bg-role-pm-bg text-role-pm' },
+  { value: 'Dev', label: 'Developer', icon: Wrench, tone: 'bg-role-dev-bg text-role-dev' },
+  { value: 'QA', label: 'QA', icon: Bug, tone: 'bg-role-qa-bg text-role-qa' },
+  { value: 'Viewer', label: 'Viewer', icon: Eye, tone: 'bg-role-viewer-bg text-role-viewer' },
 ] as const
 
 export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
@@ -659,6 +659,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  aria-label="Member options"
                                   className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
                                 >
                                   <MoreHorizontal className="h-3.5 w-3.5" />

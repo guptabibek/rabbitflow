@@ -35,24 +35,7 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-const PROJECT_COLORS = [
-  '#6366f1',
-  '#8b5cf6',
-  '#a855f7',
-  '#d946ef',
-  '#ec4899',
-  '#f43f5e',
-  '#ef4444',
-  '#f97316',
-  '#eab308',
-  '#22c55e',
-  '#14b8a6',
-  '#06b6d4',
-  '#3b82f6',
-  '#1d4ed8',
-  '#64748b',
-]
+import { PROJECT_COLORS } from '@/lib/ui-tokens'
 
 const PROJECT_ROLE_OPTIONS = ['Admin', 'PM', 'Dev', 'QA', 'Viewer'] as const
 
@@ -477,7 +460,7 @@ export function WorkspaceDashboardPage() {
                   <button
                     key={color}
                     type="button"
-                    className={`h-7 w-7 rounded-lg transition-all ${
+                    className={`h-7 w-7 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       createForm.color === color
                         ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-background'
                         : 'hover:scale-105'

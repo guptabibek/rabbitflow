@@ -293,6 +293,7 @@ Required updates:
 - `POSTGRES_PASSWORD`
 - `JWT_SECRET`
 - `SEED_ADMIN_PASSWORD`
+- `APP_URL` (for email links, e.g. `http://localhost:3999`)
 
 Bootstrap seed variables:
 

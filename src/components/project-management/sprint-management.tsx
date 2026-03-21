@@ -496,6 +496,7 @@ export function SprintManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Sprint options"
                             className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />

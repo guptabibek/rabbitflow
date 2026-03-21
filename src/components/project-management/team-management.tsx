@@ -30,9 +30,9 @@ import {
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { DEFAULT_TEAM_COLOR } from '@/lib/ui-tokens'
 
 const NONE_VALUE = '__none__'
-const DEFAULT_TEAM_COLOR = '#0f766e'
 
 const MEMBER_ROLE_OPTIONS = [
   { value: 'lead', label: 'Lead' },
@@ -331,7 +331,7 @@ export function TeamManagement({
               <button
                 key={team.id}
                 type="button"
-                className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                className={`w-full rounded-lg border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   selectedTeamId === team.id
                     ? 'border-primary bg-primary/5'
                     : 'border-border/60 bg-background hover:bg-accent/40'

@@ -11,11 +11,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { IssueCard } from './issue-card'
 
 const COLUMNS = [
-  { id: 'backlog', name: 'Backlog', dotColor: 'bg-slate-400' },
-  { id: 'todo', name: 'To Do', dotColor: 'bg-slate-500' },
-  { id: 'in_progress', name: 'In Progress', dotColor: 'bg-blue-500' },
-  { id: 'in_review', name: 'In Review', dotColor: 'bg-amber-500' },
-  { id: 'done', name: 'Done', dotColor: 'bg-emerald-500' },
+  { id: 'backlog', name: 'Backlog', dotColor: 'bg-status-backlog-bar' },
+  { id: 'todo', name: 'To Do', dotColor: 'bg-status-todo-bar' },
+  { id: 'in_progress', name: 'In Progress', dotColor: 'bg-status-in-progress-bar' },
+  { id: 'in_review', name: 'In Review', dotColor: 'bg-status-in-review-bar' },
+  { id: 'done', name: 'Done', dotColor: 'bg-status-done-bar' },
 ] as const
 
 function BoardColumn({
@@ -36,7 +36,9 @@ function BoardColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-[280px] flex-shrink-0 flex-col rounded-lg border border-border/50 bg-surface/50 ${
+      role="region"
+      aria-label={name}
+      className={`flex w-64 min-w-[240px] max-w-xs flex-shrink-0 flex-col rounded-lg border border-border/50 bg-surface/50 ${
         isOver ? 'ring-2 ring-primary/20' : ''
       }`}
     >
@@ -53,6 +55,7 @@ function BoardColumn({
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={() => useAppStore.getState().setCreateIssueOpen(true)}
+          aria-label="Add item"
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
@@ -202,7 +205,7 @@ export function KanbanBoard() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full gap-4 overflow-x-auto p-4">
+      <div className="flex h-full gap-4 overflow-x-auto p-4" role="region" aria-label="Kanban board">
         {issuesByStatus.map((column) => (
           <BoardColumn
             key={column.id}

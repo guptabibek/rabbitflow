@@ -34,6 +34,7 @@ import {
   Star,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { getTypeText, getStatusClasses, PRIORITY_STYLES } from '@/lib/ui-tokens'
 
 const typeIcons: Record<string, React.ElementType> = {
   task: CheckCircle2,
@@ -47,31 +48,31 @@ const typeIcons: Record<string, React.ElementType> = {
 }
 
 const typeColors: Record<string, string> = {
-  task: 'text-emerald-500',
-  bug: 'text-red-500',
-  story: 'text-violet-500',
-  epic: 'text-indigo-500',
-  feature: 'text-cyan-500',
-  issue: 'text-orange-500',
-  design_doc: 'text-teal-500',
-  release_item: 'text-orange-500',
+  task: 'text-type-task',
+  bug: 'text-type-bug',
+  story: 'text-type-story',
+  epic: 'text-type-epic',
+  feature: 'text-type-feature',
+  issue: 'text-type-issue',
+  design_doc: 'text-type-design-doc',
+  release_item: 'text-type-release-item',
 }
 
 const statusStyles: Record<string, string> = {
-  backlog: 'bg-slate-500/10 text-slate-400',
-  todo: 'bg-slate-500/10 text-slate-500',
-  in_progress: 'bg-blue-500/10 text-blue-500',
-  in_review: 'bg-amber-500/10 text-amber-500',
-  done: 'bg-emerald-500/10 text-emerald-500',
-  cancelled: 'bg-red-500/10 text-red-500',
+  backlog: 'bg-status-backlog-bg text-status-backlog',
+  todo: 'bg-status-todo-bg text-status-todo',
+  in_progress: 'bg-status-in-progress-bg text-status-in-progress',
+  in_review: 'bg-status-in-review-bg text-status-in-review',
+  done: 'bg-status-done-bg text-status-done',
+  cancelled: 'bg-status-cancelled-bg text-status-cancelled',
 }
 
 const priorityConfig: Record<string, { label: string; color: string }> = {
-  lowest: { label: 'Lowest', color: 'text-slate-400' },
-  low: { label: 'Low', color: 'text-slate-500' },
-  medium: { label: 'Medium', color: 'text-amber-500' },
-  high: { label: 'High', color: 'text-orange-500' },
-  highest: { label: 'Highest', color: 'text-red-500' },
+  lowest: { label: 'Lowest', color: 'text-priority-lowest' },
+  low: { label: 'Low', color: 'text-priority-low' },
+  medium: { label: 'Medium', color: 'text-priority-medium' },
+  high: { label: 'High', color: 'text-priority-high' },
+  highest: { label: 'Highest', color: 'text-priority-highest' },
 }
 
 type SortField =
@@ -332,12 +333,12 @@ export function ListView() {
                   Priority
                 </SortHeaderButton>
               </TableHead>
-              <TableHead className="w-36">
+              <TableHead className="w-36 hidden lg:table-cell">
                 <SortHeaderButton field="assignee" activeField={sortField} onSort={toggleSort}>
                   Assignee
                 </SortHeaderButton>
               </TableHead>
-              <TableHead className="w-28">
+              <TableHead className="w-28 hidden xl:table-cell">
                 <SortHeaderButton field="createdAt" activeField={sortField} onSort={toggleSort}>
                   Created
                 </SortHeaderButton>
@@ -377,7 +378,7 @@ export function ListView() {
                     >
                       <button
                         type="button"
-                        className="h-5 w-5 flex items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="h-5 w-5 flex items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={(event) => {
                           event.stopPropagation()
                           if (hasChildren) {
@@ -422,7 +423,7 @@ export function ListView() {
                       {priority?.label || issue.priority}
                     </span>
                   </TableCell>
-                  <TableCell className="py-2">
+                  <TableCell className="py-2 hidden lg:table-cell">
                     {issue.assignee ? (
                       <div className="flex items-center gap-2">
                         <Avatar className="h-5 w-5">
@@ -443,7 +444,7 @@ export function ListView() {
                       <span className="text-xs text-muted-foreground/50">Unassigned</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground tabular-nums py-2">
+                  <TableCell className="text-[11px] text-muted-foreground tabular-nums py-2 hidden xl:table-cell">
                     {issue.createdAt ? format(new Date(issue.createdAt), 'MMM d, yyyy') : '-'}
                   </TableCell>
                 </TableRow>

@@ -698,7 +698,6 @@ export async function PUT(
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: updatePermission.actor.userId,
-        origin: request.nextUrl.origin,
       })
     }
 

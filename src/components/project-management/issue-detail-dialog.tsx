@@ -208,7 +208,7 @@ function renderCommentContent(comment: Comment) {
     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
       {nodes.map((node) =>
         node.mention ? (
-          <span key={node.key} className="font-semibold text-cyan-300 bg-cyan-500/10 rounded px-1">
+          <span key={node.key} className="font-semibold text-mention bg-mention-bg rounded px-1">
             {node.value}
           </span>
         ) : (
@@ -830,30 +830,54 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   return (
     <div className="h-full flex flex-col">
       <header className="border-b border-border bg-background px-4 py-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="font-mono">{issue.key}</Badge>
-          <Badge variant="secondary" className="h-8 px-3 text-xs font-medium">
+        <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:overflow-x-auto">
+          <Badge variant="outline" className="shrink-0 font-mono">{issue.key}</Badge>
+          <Badge variant="secondary" className="h-8 shrink-0 px-3 text-xs font-medium">
             {activeTypeDefinition?.name ?? issue.workItemType}
           </Badge>
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8" onClick={onReload} disabled={isRefreshing}>
-              {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Reload'}
-            </Button>
-            <Button size="sm" className="h-8" disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()} onClick={() => void handleSave()}>
+          <div className="min-w-[180px] flex-1 md:min-w-0">
+            <Input
+              value={draft.title}
+              onChange={(event) =>
+                setDraft((previous) => ({ ...previous, title: event.target.value }))
+              }
+              disabled={!canUpdate || isSaving}
+              className="h-8"
+              placeholder="Work item title"
+            />
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()}
+              onClick={() => void handleSave()}
+            >
               {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-8 w-8">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="More options"
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => navigator.clipboard.writeText(window.location.href)}>
+                <DropdownMenuItem
+                  onClick={() => navigator.clipboard.writeText(window.location.href)}
+                >
                   <Copy className="mr-2 h-4 w-4" />
                   Copy link
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={!canDelete} className="text-destructive focus:text-destructive" onClick={() => void handleDelete()}>
+                <DropdownMenuItem
+                  disabled={!canDelete}
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => void handleDelete()}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete work item
                 </DropdownMenuItem>
@@ -862,15 +886,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           </div>
         </div>
 
-        <Input
-          value={draft.title}
-          onChange={(event) => setDraft((previous) => ({ ...previous, title: event.target.value }))}
-          disabled={!canUpdate || isSaving}
-          className="h-10 text-lg font-semibold"
-          placeholder="Work item title"
-        />
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
           <div className="space-y-1">
             <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">State</Label>
             <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
@@ -937,7 +953,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_420px]">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_320px] xl:grid-cols-[minmax(0,2fr)_360px] 2xl:grid-cols-[minmax(0,2fr)_420px]">
         <main className="min-h-0 overflow-y-auto p-4 space-y-4">
           <section className="rounded-lg border border-border p-4 space-y-2">
             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Description</Label>
@@ -975,7 +991,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                         {canManageComment ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Comment actions"><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); setEditingCommentSelectionStart(comment.content.length) }}>Edit</DropdownMenuItem>
@@ -989,7 +1005,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                           <Textarea ref={editingCommentRef} rows={3} value={editingCommentContent} onChange={(event) => { setEditingCommentContent(event.target.value); setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? editingCommentContent.length)} />
                           {editingMentionContext && mentionCandidates.length > 0 ? (
                             <div className="rounded border border-border">
-                              {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-cyan-300" onClick={() => insertMention(candidate.id, candidate.name, 'edit')}>{candidate.name}</button>)}
+                              {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-mention focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => insertMention(candidate.id, candidate.name, 'edit')}>{candidate.name}</button>)}
                             </div>
                           ) : null}
                           <div className="flex items-center gap-2">
@@ -1019,7 +1035,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               <Textarea ref={newCommentRef} value={newComment} rows={3} disabled={!canComment} onChange={(event) => { setNewComment(event.target.value); setNewCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setNewCommentSelectionStart(event.currentTarget.selectionStart ?? newComment.length)} placeholder={canComment ? 'Write a comment. Use @ to mention teammates.' : 'No comment permission'} />
               {commentMentionContext && mentionCandidates.length > 0 ? (
                 <div className="rounded border border-border">
-                  {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-cyan-300" onClick={() => insertMention(candidate.id, candidate.name, 'new')}>{candidate.name}</button>)}
+                  {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-mention focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => insertMention(candidate.id, candidate.name, 'new')}>{candidate.name}</button>)}
                 </div>
               ) : null}
               <div className="flex justify-end">
@@ -1055,7 +1071,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           )}
         </main>
 
-        <aside className="min-h-0 border-t xl:border-t-0 xl:border-l border-border overflow-y-auto">
+        <aside className="min-h-0 border-t lg:border-t-0 lg:border-l border-border overflow-y-auto">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="h-full flex flex-col">
             <div className="px-4 pt-4">
               <TabsList className="grid w-full grid-cols-3">
@@ -1128,7 +1144,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                             <span className="truncate text-sm">{relation.linkedIssue.title}</span>
                           </button>
                           {canLink ? (
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => void handleRemoveLink(relation.id)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove relation" onClick={() => void handleRemoveLink(relation.id)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           ) : null}
@@ -1163,7 +1179,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     ) : linkCandidates.length > 0 ? (
                       <div className="space-y-1 max-h-48 overflow-y-auto rounded border border-border p-1">
                         {linkCandidates.map((candidate) => (
-                          <button key={candidate.id} type="button" className="w-full text-left rounded px-2 py-1.5 hover:bg-accent" onClick={() => void handleAddLink(candidate.id)}>
+                          <button key={candidate.id} type="button" className="w-full text-left rounded px-2 py-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => void handleAddLink(candidate.id)}>
                             <span className="font-mono text-xs text-muted-foreground">{candidate.key}</span>{' '}
                             <span className="text-sm">{candidate.title}</span>
                           </button>
@@ -1284,7 +1300,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                           <Download className="h-3.5 w-3.5" />
                         </a>
                         {canUpdate && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void handleDeleteAttachment(att.id)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete attachment" onClick={() => void handleDeleteAttachment(att.id)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}

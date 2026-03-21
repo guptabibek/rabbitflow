@@ -75,14 +75,15 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="px-1.5 py-1.5 space-y-px flex-1 overflow-y-auto">
+      <nav aria-label="Main navigation" className="px-1.5 py-1.5 space-y-px flex-1 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = currentView === item.id
           return (
             <button
               key={item.id}
               onClick={() => onViewChange(item.id)}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+              aria-current={isActive ? 'page' : undefined}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                   : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'

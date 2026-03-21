@@ -109,7 +109,8 @@ function SortableRow({
       <div className="flex items-center gap-2 p-3">
         <button
           type="button"
-          className="cursor-grab rounded p-1 text-muted-foreground hover:bg-muted"
+          className="cursor-grab rounded p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Drag to reorder"
           {...attributes}
           {...listeners}
         >
@@ -122,9 +123,9 @@ function SortableRow({
 }
 
 function stateCategoryBadgeClass(category: string) {
-  if (category === 'Done') return 'bg-emerald-500/10 text-emerald-500 border-0'
-  if (category === 'In Progress') return 'bg-blue-500/10 text-blue-500 border-0'
-  return 'bg-slate-500/10 text-slate-500 border-0'
+  if (category === 'Done') return 'bg-category-done-bg text-category-done border-0'
+  if (category === 'In Progress') return 'bg-category-active-bg text-category-active border-0'
+  return 'bg-category-default-bg text-category-default border-0'
 }
 
 function humanizeDataType(value: string) {

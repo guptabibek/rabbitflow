@@ -354,7 +354,6 @@ export async function POST(request: NextRequest) {
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: auth.actor.userId,
-        origin: request.nextUrl.origin,
       })
     }
 

@@ -62,11 +62,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
       <div className="w-full max-w-md space-y-6">
         {/* Branding */}
         <div className="flex flex-col items-center gap-3">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-brand-primary to-brand-secondary flex items-center justify-center shadow-lg shadow-brand-glow">
             <FolderKanban className="h-8 w-8 text-white" />
           </div>
           <div className="text-center">
@@ -142,6 +142,6 @@ export default function RegisterPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </main>
   )
 }

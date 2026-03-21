@@ -15,6 +15,8 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      APP_URL: ${APP_URL:-http://localhost:3999}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3999}
       DATABASE_URL: ${DATABASE_URL:-postgresql://rabbitflow:rabbitflow@postgres:5432/rabbitflow?schema=public}
       DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-20}
       REDIS_URL: redis://redis:6379

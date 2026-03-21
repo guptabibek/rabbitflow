@@ -17,6 +17,7 @@ import {
   Inbox,
   BarChart3,
 } from 'lucide-react'
+import { STATUS_STYLES } from '@/lib/ui-tokens'
 
 interface DashboardStats {
   totalProjects?: number
@@ -58,12 +59,12 @@ interface ActiveSprint {
 }
 
 const statusColorMap: Record<string, { bg: string; text: string; bar: string }> = {
-  backlog: { bg: 'bg-slate-500/10', text: 'text-slate-400', bar: 'bg-slate-500' },
-  todo: { bg: 'bg-slate-500/10', text: 'text-slate-500', bar: 'bg-slate-500' },
-  in_progress: { bg: 'bg-blue-500/10', text: 'text-blue-500', bar: 'bg-blue-500' },
-  in_review: { bg: 'bg-amber-500/10', text: 'text-amber-500', bar: 'bg-amber-500' },
-  done: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', bar: 'bg-emerald-500' },
-  cancelled: { bg: 'bg-red-500/10', text: 'text-red-500', bar: 'bg-red-500' },
+  backlog: { bg: 'bg-status-backlog-bg', text: 'text-status-backlog', bar: 'bg-status-backlog-bar' },
+  todo: { bg: 'bg-status-todo-bg', text: 'text-status-todo', bar: 'bg-status-todo-bar' },
+  in_progress: { bg: 'bg-status-in-progress-bg', text: 'text-status-in-progress', bar: 'bg-status-in-progress-bar' },
+  in_review: { bg: 'bg-status-in-review-bg', text: 'text-status-in-review', bar: 'bg-status-in-review-bar' },
+  done: { bg: 'bg-status-done-bg', text: 'text-status-done', bar: 'bg-status-done-bar' },
+  cancelled: { bg: 'bg-status-cancelled-bg', text: 'text-status-cancelled', bar: 'bg-status-cancelled-bar' },
 }
 
 export function DashboardView() {
@@ -128,29 +129,29 @@ export function DashboardView() {
       label: 'Projects',
       value: stats.totalProjects || projects.length,
       icon: FolderKanban,
-      iconBg: 'bg-emerald-500/10',
-      iconColor: 'text-emerald-500',
+      iconBg: 'bg-category-done-bg',
+      iconColor: 'text-category-done',
     },
     {
       label: 'Total Issues',
       value: stats.totalIssues || totalIssues,
       icon: CheckCircle2,
-      iconBg: 'bg-blue-500/10',
-      iconColor: 'text-blue-500',
+      iconBg: 'bg-category-active-bg',
+      iconColor: 'text-category-active',
     },
     {
       label: 'Team Members',
       value: stats.totalUsers || users.length,
       icon: Users,
-      iconBg: 'bg-violet-500/10',
-      iconColor: 'text-violet-500',
+      iconBg: 'bg-type-story-bg',
+      iconColor: 'text-type-story',
     },
     {
       label: 'Progress',
       value: `${progress}%`,
       icon: TrendingUp,
-      iconBg: 'bg-amber-500/10',
-      iconColor: 'text-amber-500',
+      iconBg: 'bg-status-in-review-bg',
+      iconColor: 'text-status-in-review',
     },
   ]
 

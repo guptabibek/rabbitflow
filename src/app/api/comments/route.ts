@@ -184,7 +184,6 @@ export async function POST(request: NextRequest) {
         mentionUserIds: comment.mentions.map((mention) => mention.userId),
         actorUserId: auth.actor.userId,
         commentContent: sanitizedContent,
-        origin: request.nextUrl.origin,
       })
     }
 

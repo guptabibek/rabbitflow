@@ -70,16 +70,17 @@ import {
 } from 'lucide-react'
 import { format, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
+import { PIE_COLORS as PIE_COLORS_TOKENS } from '@/lib/ui-tokens'
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const BOARD_COLUMNS = [
-  { id: 'todo', label: 'To Do', color: 'bg-slate-500' },
-  { id: 'in_progress', label: 'In Progress', color: 'bg-blue-500' },
-  { id: 'in_review', label: 'In Review', color: 'bg-amber-500' },
-  { id: 'done', label: 'Done', color: 'bg-emerald-500' },
+  { id: 'todo', label: 'To Do', color: 'bg-status-todo-bar' },
+  { id: 'in_progress', label: 'In Progress', color: 'bg-status-in-progress-bar' },
+  { id: 'in_review', label: 'In Review', color: 'bg-status-in-review-bar' },
+  { id: 'done', label: 'Done', color: 'bg-status-done-bar' },
 ] as const
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
@@ -93,31 +94,31 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   release_item: PackageCheck,
 }
 const TYPE_COLORS: Record<string, string> = {
-  epic: 'text-indigo-400',
-  feature: 'text-cyan-400',
-  story: 'text-purple-400',
-  task: 'text-emerald-400',
-  bug: 'text-red-400',
-  issue: 'text-orange-400',
-  design_doc: 'text-teal-400',
-  release_item: 'text-orange-400',
+  epic: 'text-type-epic',
+  feature: 'text-type-feature',
+  story: 'text-type-story',
+  task: 'text-type-task',
+  bug: 'text-type-bug',
+  issue: 'text-type-issue',
+  design_doc: 'text-type-design-doc',
+  release_item: 'text-type-release-item',
 }
 const TYPE_BG: Record<string, string> = {
-  epic: 'bg-indigo-500/10',
-  feature: 'bg-cyan-500/10',
-  story: 'bg-purple-500/10',
-  task: 'bg-emerald-500/10',
-  bug: 'bg-red-500/10',
-  issue: 'bg-orange-500/10',
-  design_doc: 'bg-teal-500/10',
-  release_item: 'bg-orange-500/10',
+  epic: 'bg-type-epic-bg',
+  feature: 'bg-type-feature-bg',
+  story: 'bg-type-story-bg',
+  task: 'bg-type-task-bg',
+  bug: 'bg-type-bug-bg',
+  issue: 'bg-type-issue-bg',
+  design_doc: 'bg-type-design-doc-bg',
+  release_item: 'bg-type-release-item-bg',
 }
 const STATUS_BADGE: Record<string, string> = {
-  backlog: 'bg-slate-800 text-slate-300', todo: 'bg-slate-700 text-slate-200',
-  in_progress: 'bg-blue-900/60 text-blue-300', in_review: 'bg-amber-900/60 text-amber-300',
-  done: 'bg-emerald-900/60 text-emerald-300', cancelled: 'bg-red-900/60 text-red-300',
+  backlog: 'bg-status-backlog-bg text-status-backlog', todo: 'bg-status-todo-bg text-status-todo',
+  in_progress: 'bg-status-in-progress-bg text-status-in-progress', in_review: 'bg-status-in-review-bg text-status-in-review',
+  done: 'bg-status-done-bg text-status-done', cancelled: 'bg-status-cancelled-bg text-status-cancelled',
 }
-const PIE_COLORS = ['#6366f1', '#06b6d4', '#a855f7', '#10b981', '#ef4444', '#f59e0b']
+const PIE_COLORS = PIE_COLORS_TOKENS
 const ALL_TEAMS_VALUE = '__all_teams__'
 
 type GroupBy = 'none' | 'status' | 'assignee' | 'priority' | 'story'
@@ -1066,7 +1067,7 @@ export function SprintView() {
                           <div className="w-10 text-right shrink-0">
                             {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
                           </div>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
                             onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
                         </div>
                       )

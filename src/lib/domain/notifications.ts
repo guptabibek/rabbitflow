@@ -9,18 +9,37 @@ type MentionNotificationArgs = {
   mentionUserIds: string[]
   actorUserId: string
   commentContent: string
-  origin: string
 }
 
 type AssignmentNotificationArgs = {
   issueId: string
   assigneeUserId: string
   actorUserId: string
-  origin: string
 }
 
-function workItemUrl(origin: string, issueId: string) {
-  return `${origin}/work-items/${encodeURIComponent(issueId)}`
+function resolveAppBaseUrl() {
+  const configuredUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
+  if (!configuredUrl) {
+    throw new Error('APP_URL (or NEXT_PUBLIC_APP_URL) is not configured')
+  }
+
+  try {
+    const normalizedUrl = /^https?:\/\//i.test(configuredUrl)
+      ? configuredUrl
+      : `http://${configuredUrl}`
+    const base = new URL(normalizedUrl)
+    if (!base.pathname.endsWith('/')) {
+      base.pathname = `${base.pathname}/`
+    }
+    return base
+  } catch {
+    throw new Error('APP_URL (or NEXT_PUBLIC_APP_URL) must be a valid absolute URL')
+  }
+}
+
+function workItemUrl(issueId: string) {
+  const base = resolveAppBaseUrl()
+  return new URL(`work-items/${encodeURIComponent(issueId)}`, base).toString()
 }
 
 export async function sendMentionNotificationEmails(args: MentionNotificationArgs) {
@@ -59,7 +78,7 @@ export async function sendMentionNotificationEmails(args: MentionNotificationArg
     if (!issue || !actor) return
 
     const preview = toPlainTextPreview(stripMentionMarkup(args.commentContent), 240)
-    const url = workItemUrl(args.origin, issue.id)
+    const url = workItemUrl(issue.id)
 
     await Promise.allSettled(
       recipients
@@ -113,7 +132,7 @@ export async function sendWorkItemAssignmentEmail(args: AssignmentNotificationAr
 
     if (!issue || !actor || !assignee?.email) return
 
-    const url = workItemUrl(args.origin, issue.id)
+    const url = workItemUrl(issue.id)
     const email = buildAssignmentEmail({
       assigneeName: assignee.name,
       actorName: actor.name,

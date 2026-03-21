@@ -50,6 +50,79 @@
   --color-status-cancelled: var(--status-cancelled);
   --color-surface: var(--surface);
   --color-surface-hover: var(--surface-hover);
+
+  /* Status background tokens */
+  --color-status-backlog-bg: var(--status-backlog-bg);
+  --color-status-todo-bg: var(--status-todo-bg);
+  --color-status-in-progress-bg: var(--status-in-progress-bg);
+  --color-status-in-review-bg: var(--status-in-review-bg);
+  --color-status-done-bg: var(--status-done-bg);
+  --color-status-cancelled-bg: var(--status-cancelled-bg);
+  --color-status-backlog-bar: var(--status-backlog-bar);
+  --color-status-todo-bar: var(--status-todo-bar);
+  --color-status-in-progress-bar: var(--status-in-progress-bar);
+  --color-status-in-review-bar: var(--status-in-review-bar);
+  --color-status-done-bar: var(--status-done-bar);
+  --color-status-cancelled-bar: var(--status-cancelled-bar);
+
+  /* Work-item type tokens */
+  --color-type-epic: var(--type-epic);
+  --color-type-feature: var(--type-feature);
+  --color-type-story: var(--type-story);
+  --color-type-task: var(--type-task);
+  --color-type-bug: var(--type-bug);
+  --color-type-issue: var(--type-issue);
+  --color-type-design-doc: var(--type-design-doc);
+  --color-type-release-item: var(--type-release-item);
+  --color-type-epic-bg: var(--type-epic-bg);
+  --color-type-feature-bg: var(--type-feature-bg);
+  --color-type-story-bg: var(--type-story-bg);
+  --color-type-task-bg: var(--type-task-bg);
+  --color-type-bug-bg: var(--type-bug-bg);
+  --color-type-issue-bg: var(--type-issue-bg);
+  --color-type-design-doc-bg: var(--type-design-doc-bg);
+  --color-type-release-item-bg: var(--type-release-item-bg);
+
+  /* Priority tokens */
+  --color-priority-highest: var(--priority-highest);
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+  --color-priority-lowest: var(--priority-lowest);
+  --color-priority-highest-bg: var(--priority-highest-bg);
+  --color-priority-high-bg: var(--priority-high-bg);
+  --color-priority-medium-bg: var(--priority-medium-bg);
+  --color-priority-low-bg: var(--priority-low-bg);
+  --color-priority-lowest-bg: var(--priority-lowest-bg);
+
+  /* Role tokens */
+  --color-role-admin: var(--role-admin);
+  --color-role-admin-bg: var(--role-admin-bg);
+  --color-role-pm: var(--role-pm);
+  --color-role-pm-bg: var(--role-pm-bg);
+  --color-role-dev: var(--role-dev);
+  --color-role-dev-bg: var(--role-dev-bg);
+  --color-role-qa: var(--role-qa);
+  --color-role-qa-bg: var(--role-qa-bg);
+  --color-role-viewer: var(--role-viewer);
+  --color-role-viewer-bg: var(--role-viewer-bg);
+
+  /* Brand tokens */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-glow: var(--brand-glow);
+
+  /* Mention tokens */
+  --color-mention: var(--mention);
+  --color-mention-bg: var(--mention-bg);
+
+  /* Category badge tokens */
+  --color-category-done: var(--category-done);
+  --color-category-done-bg: var(--category-done-bg);
+  --color-category-active: var(--category-active);
+  --color-category-active-bg: var(--category-active-bg);
+  --color-category-default: var(--category-default);
+  --color-category-default-bg: var(--category-default-bg);
 }
 
 :root {
@@ -97,6 +170,79 @@
   /* Surface */
   --surface: #f8fafc;
   --surface-hover: #f1f5f9;
+
+  /* Status background */
+  --status-backlog-bg: rgba(148,163,184,0.1);
+  --status-todo-bg: rgba(100,116,139,0.1);
+  --status-in-progress-bg: rgba(59,130,246,0.1);
+  --status-in-review-bg: rgba(245,158,11,0.1);
+  --status-done-bg: rgba(34,197,94,0.1);
+  --status-cancelled-bg: rgba(239,68,68,0.1);
+  --status-backlog-bar: #94a3b8;
+  --status-todo-bar: #64748b;
+  --status-in-progress-bar: #3b82f6;
+  --status-in-review-bar: #f59e0b;
+  --status-done-bar: #22c55e;
+  --status-cancelled-bar: #ef4444;
+
+  /* Work-item types */
+  --type-epic: #6366f1;
+  --type-feature: #06b6d4;
+  --type-story: #8b5cf6;
+  --type-task: #10b981;
+  --type-bug: #ef4444;
+  --type-issue: #f97316;
+  --type-design-doc: #14b8a6;
+  --type-release-item: #f97316;
+  --type-epic-bg: rgba(99,102,241,0.1);
+  --type-feature-bg: rgba(6,182,212,0.1);
+  --type-story-bg: rgba(139,92,246,0.1);
+  --type-task-bg: rgba(16,185,129,0.1);
+  --type-bug-bg: rgba(239,68,68,0.1);
+  --type-issue-bg: rgba(249,115,22,0.1);
+  --type-design-doc-bg: rgba(20,184,166,0.1);
+  --type-release-item-bg: rgba(249,115,22,0.1);
+
+  /* Priority */
+  --priority-highest: #ef4444;
+  --priority-high: #f97316;
+  --priority-medium: #f59e0b;
+  --priority-low: #64748b;
+  --priority-lowest: #94a3b8;
+  --priority-highest-bg: rgba(239,68,68,0.1);
+  --priority-high-bg: rgba(249,115,22,0.1);
+  --priority-medium-bg: rgba(245,158,11,0.1);
+  --priority-low-bg: rgba(100,116,139,0.1);
+  --priority-lowest-bg: rgba(148,163,184,0.1);
+
+  /* Role */
+  --role-admin: #f59e0b;
+  --role-admin-bg: rgba(245,158,11,0.1);
+  --role-pm: #3b82f6;
+  --role-pm-bg: rgba(59,130,246,0.1);
+  --role-dev: #10b981;
+  --role-dev-bg: rgba(16,185,129,0.1);
+  --role-qa: #8b5cf6;
+  --role-qa-bg: rgba(139,92,246,0.1);
+  --role-viewer: #64748b;
+  --role-viewer-bg: rgba(100,116,139,0.1);
+
+  /* Brand */
+  --brand-primary: #10b981;
+  --brand-secondary: #0d9488;
+  --brand-glow: rgba(16,185,129,0.2);
+
+  /* Mention */
+  --mention: #06b6d4;
+  --mention-bg: rgba(6,182,212,0.1);
+
+  /* Category badge */
+  --category-done: #10b981;
+  --category-done-bg: rgba(16,185,129,0.1);
+  --category-active: #3b82f6;
+  --category-active-bg: rgba(59,130,246,0.1);
+  --category-default: #64748b;
+  --category-default-bg: rgba(100,116,139,0.1);
 }
 
 .dark {
@@ -141,6 +287,79 @@
   /* Surface */
   --surface: #131928;
   --surface-hover: #1e293b;
+
+  /* Status background (dark) */
+  --status-backlog-bg: rgba(100,116,139,0.15);
+  --status-todo-bg: rgba(148,163,184,0.15);
+  --status-in-progress-bg: rgba(96,165,250,0.15);
+  --status-in-review-bg: rgba(251,191,36,0.15);
+  --status-done-bg: rgba(74,222,128,0.15);
+  --status-cancelled-bg: rgba(248,113,113,0.15);
+  --status-backlog-bar: #64748b;
+  --status-todo-bar: #94a3b8;
+  --status-in-progress-bar: #60a5fa;
+  --status-in-review-bar: #fbbf24;
+  --status-done-bar: #4ade80;
+  --status-cancelled-bar: #f87171;
+
+  /* Work-item types (dark) */
+  --type-epic: #818cf8;
+  --type-feature: #22d3ee;
+  --type-story: #a78bfa;
+  --type-task: #34d399;
+  --type-bug: #f87171;
+  --type-issue: #fb923c;
+  --type-design-doc: #2dd4bf;
+  --type-release-item: #fb923c;
+  --type-epic-bg: rgba(129,140,248,0.12);
+  --type-feature-bg: rgba(34,211,238,0.12);
+  --type-story-bg: rgba(167,139,250,0.12);
+  --type-task-bg: rgba(52,211,153,0.12);
+  --type-bug-bg: rgba(248,113,113,0.12);
+  --type-issue-bg: rgba(251,146,60,0.12);
+  --type-design-doc-bg: rgba(45,212,191,0.12);
+  --type-release-item-bg: rgba(251,146,60,0.12);
+
+  /* Priority (dark) */
+  --priority-highest: #f87171;
+  --priority-high: #fb923c;
+  --priority-medium: #fbbf24;
+  --priority-low: #94a3b8;
+  --priority-lowest: #64748b;
+  --priority-highest-bg: rgba(248,113,113,0.15);
+  --priority-high-bg: rgba(251,146,60,0.15);
+  --priority-medium-bg: rgba(251,191,36,0.15);
+  --priority-low-bg: rgba(148,163,184,0.15);
+  --priority-lowest-bg: rgba(100,116,139,0.15);
+
+  /* Role (dark) */
+  --role-admin: #fbbf24;
+  --role-admin-bg: rgba(251,191,36,0.15);
+  --role-pm: #60a5fa;
+  --role-pm-bg: rgba(96,165,250,0.15);
+  --role-dev: #34d399;
+  --role-dev-bg: rgba(52,211,153,0.15);
+  --role-qa: #a78bfa;
+  --role-qa-bg: rgba(167,139,250,0.15);
+  --role-viewer: #94a3b8;
+  --role-viewer-bg: rgba(148,163,184,0.15);
+
+  /* Brand (dark) */
+  --brand-primary: #34d399;
+  --brand-secondary: #2dd4bf;
+  --brand-glow: rgba(52,211,153,0.25);
+
+  /* Mention (dark) */
+  --mention: #67e8f9;
+  --mention-bg: rgba(103,232,249,0.1);
+
+  /* Category badge (dark) */
+  --category-done: #34d399;
+  --category-done-bg: rgba(52,211,153,0.15);
+  --category-active: #60a5fa;
+  --category-active-bg: rgba(96,165,250,0.15);
+  --category-default: #94a3b8;
+  --category-default-bg: rgba(148,163,184,0.15);
 }
 
 @layer base {

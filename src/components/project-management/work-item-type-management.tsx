@@ -604,7 +604,7 @@ function FieldRow({
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Edit field" onClick={onEdit}>
                 <Settings2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
@@ -614,7 +614,7 @@ function FieldRow({
           {!field.isSystem && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
+                <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Field options">
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -727,7 +727,7 @@ function SectionCard({
               <div className="flex items-center gap-0.5 pr-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Section options">
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
