@@ -12,6 +12,7 @@ import {
   FilterBar,
   KanbanBoard,
   ListView,
+  ReportsView,
   SprintManagement,
   SprintView,
   TeamManagement,
@@ -47,6 +48,7 @@ type ViewType =
   | 'board'
   | 'sprints'
   | 'list'
+  | 'reports'
   | 'teams'
   | 'settings'
 
@@ -581,6 +583,7 @@ export default function HomePage() {
                     {currentView === 'board' && <KanbanBoard />}
                     {currentView === 'sprints' && <SprintView />}
                     {currentView === 'list' && <ListView />}
+                    {currentView === 'reports' && <ReportsView />}
                     {currentView === 'teams' && <TeamManagement mode="screen" />}
                   </>
                 )}

@@ -20,7 +20,8 @@ export async function invalidateWorkItemCaches(projectId: string) {
     `board:${projectId}:*`,
     `backlog:${projectId}:*`,
     `dashboard:${projectId}:*`,
-    `work-item-detail:${projectId}:*`
+    `work-item-detail:${projectId}:*`,
+    `reports:*:${projectId}:*`
   )
 }
 
@@ -31,7 +32,8 @@ export async function invalidateSprintCaches(projectId: string, sprintId?: strin
     await cacheInvalidate(
       `sprint:${sprintId}:*`,
       `sprint-analytics:${sprintId}`,
-      `sprint-capacity:${sprintId}`
+      `sprint-capacity:${sprintId}`,
+      `reports:sprint:*:${sprintId}`
     )
   }
 }

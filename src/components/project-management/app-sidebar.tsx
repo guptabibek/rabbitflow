@@ -11,6 +11,7 @@ import {
   FolderKanban,
   ChevronDown,
   Zap,
+  BarChart3,
   Settings,
   Tags,
   Users,
@@ -28,6 +29,7 @@ type ViewType =
   | 'board'
   | 'sprints'
   | 'list'
+  | 'reports'
   | 'teams'
   | 'settings'
 
@@ -42,6 +44,7 @@ const NAV_ITEMS = [
   { id: 'board' as ViewType, label: 'Board', icon: KanbanSquare },
   { id: 'sprints' as ViewType, label: 'Sprints', icon: Zap },
   { id: 'list' as ViewType, label: 'List View', icon: List },
+  { id: 'reports' as ViewType, label: 'Reports', icon: BarChart3 },
 ]
 
 export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
