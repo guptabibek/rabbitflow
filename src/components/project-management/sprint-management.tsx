@@ -54,6 +54,38 @@ const STATUS_OPTIONS = [
 
 const NONE_VALUE = '__none__'
 
+function normalizeIterationStatus(value: string | null | undefined): 'planning' | 'active' | 'completed' {
+  const normalized = value?.trim().toLowerCase()
+
+  if (!normalized || normalized === 'planned' || normalized === 'planning') {
+    return 'planning'
+  }
+
+  if (normalized === 'active') {
+    return 'active'
+  }
+
+  if (normalized === 'closed' || normalized === 'completed') {
+    return 'completed'
+  }
+
+  return 'planning'
+}
+
+function getIterationStatusLabel(value: string | null | undefined) {
+  const normalized = normalizeIterationStatus(value)
+
+  if (normalized === 'active') {
+    return 'Active'
+  }
+
+  if (normalized === 'completed') {
+    return 'Completed'
+  }
+
+  return 'Planning'
+}
+
 type IterationForm = {
   id: string | null
   name: string
@@ -93,8 +125,8 @@ export function SprintManagement() {
 
   const sortedIterations = useMemo(() => {
     return [...iterations].sort((left, right) => {
-      const leftActive = left.status === 'active' || left.status === 'Active'
-      const rightActive = right.status === 'active' || right.status === 'Active'
+      const leftActive = normalizeIterationStatus(left.status) === 'active'
+      const rightActive = normalizeIterationStatus(right.status) === 'active'
       if (leftActive && !rightActive) return -1
       if (rightActive && !leftActive) return 1
       return (right.startDate || '').localeCompare(left.startDate || '')
@@ -206,7 +238,7 @@ export function SprintManagement() {
       startDate: iteration.startDate?.slice(0, 10) || '',
       endDate: iteration.endDate?.slice(0, 10) || '',
       iterationType: iteration.iterationType,
-      status: iteration.status || 'planning',
+      status: normalizeIterationStatus(iteration.status),
       teamId: iteration.teamId || NONE_VALUE,
     })
   }
@@ -461,6 +493,7 @@ export function SprintManagement() {
                     ITERATION_TYPES.find((item) => item.value === iteration.iterationType)?.icon ||
                     Flag
                   const issueCount = getIssueCountForIteration(iteration.id)
+                  const normalizedStatus = normalizeIterationStatus(iteration.status)
 
                   return (
                     <div
@@ -478,8 +511,8 @@ export function SprintManagement() {
                           <Badge variant="outline" className="text-[10px] capitalize h-5">
                             {iteration.iterationType}
                           </Badge>
-                          <Badge variant="secondary" className="text-[10px] capitalize h-5">
-                            {iteration.status}
+                          <Badge variant="secondary" className="text-[10px] h-5">
+                            {getIterationStatusLabel(iteration.status)}
                           </Badge>
                           {iteration.team ? (
                             <Badge variant="secondary" className="text-[10px] h-5">
@@ -524,7 +557,7 @@ export function SprintManagement() {
                             <Pencil className="h-3.5 w-3.5 mr-2" />
                             Edit
                           </DropdownMenuItem>
-                          {iteration.status !== 'active' ? (
+                          {normalizedStatus === 'planning' ? (
                             <DropdownMenuItem
                               onClick={() => handleQuickStatusChange(iteration.id, 'active')}
                             >
@@ -532,7 +565,7 @@ export function SprintManagement() {
                               Mark Active
                             </DropdownMenuItem>
                           ) : null}
-                          {iteration.status !== 'completed' ? (
+                          {normalizedStatus !== 'completed' ? (
                             <DropdownMenuItem
                               onClick={() => handleQuickStatusChange(iteration.id, 'completed')}
                             >

@@ -71,6 +71,7 @@ import {
 import { format, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
 import { PIE_COLORS as PIE_COLORS_TOKENS } from '@/lib/ui-tokens'
+import type { Iteration } from '@/store/app-store'
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    CONSTANTS
@@ -120,6 +121,102 @@ const STATUS_BADGE: Record<string, string> = {
 }
 const PIE_COLORS = PIE_COLORS_TOKENS
 const ALL_TEAMS_VALUE = '__all_teams__'
+
+function normalizeIterationStatus(value: string | null | undefined): 'planning' | 'active' | 'completed' {
+  const normalized = value?.trim().toLowerCase()
+
+  if (!normalized || normalized === 'planned' || normalized === 'planning') {
+    return 'planning'
+  }
+
+  if (normalized === 'active') {
+    return 'active'
+  }
+
+  if (normalized === 'closed' || normalized === 'completed') {
+    return 'completed'
+  }
+
+  return 'planning'
+}
+
+function getComparableDate(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function isSprintCurrentByDate(sprint: Iteration, today: Date) {
+  const startDate = getComparableDate(sprint.startDate)
+  const endDate = getComparableDate(sprint.endDate)
+
+  if (startDate && endDate) {
+    return startDate <= today && endDate >= today
+  }
+
+  if (startDate) {
+    return startDate <= today
+  }
+
+  if (endDate) {
+    return endDate >= today
+  }
+
+  return false
+}
+
+function getDefaultSprintId(sprints: Iteration[]) {
+  if (sprints.length === 0) {
+    return null
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const explicitActiveSprint = sprints.find((sprint) => normalizeIterationStatus(sprint.status) === 'active')
+  if (explicitActiveSprint) {
+    return explicitActiveSprint.id
+  }
+
+  const currentSprint = sprints.find(
+    (sprint) =>
+      normalizeIterationStatus(sprint.status) !== 'completed' &&
+      isSprintCurrentByDate(sprint, today)
+  )
+  if (currentSprint) {
+    return currentSprint.id
+  }
+
+  const upcomingSprint = [...sprints]
+    .filter((sprint) => normalizeIterationStatus(sprint.status) !== 'completed')
+    .map((sprint) => ({ sprint, startDate: getComparableDate(sprint.startDate) }))
+    .filter((entry) => entry.startDate && entry.startDate >= today)
+    .sort((left, right) => left.startDate!.getTime() - right.startDate!.getTime())[0]?.sprint
+  if (upcomingSprint) {
+    return upcomingSprint.id
+  }
+
+  const latestPastSprint = [...sprints]
+    .map((sprint) => ({
+      sprint,
+      anchorDate: getComparableDate(sprint.endDate) ?? getComparableDate(sprint.startDate),
+    }))
+    .filter((entry) => entry.anchorDate)
+    .sort((left, right) => right.anchorDate!.getTime() - left.anchorDate!.getTime())[0]?.sprint
+  if (latestPastSprint) {
+    return latestPastSprint.id
+  }
+
+  return sprints[0]?.id ?? null
+}
 
 type GroupBy = 'none' | 'status' | 'assignee' | 'priority' | 'story'
 
@@ -312,9 +409,9 @@ export function SprintView() {
   } = useAppStore()
 
   const isActiveStatus = (value: string | null | undefined) =>
-    value === 'active' || value === 'Active'
+    normalizeIterationStatus(value) === 'active'
   const isClosedStatus = (value: string | null | undefined) =>
-    value === 'completed' || value === 'Closed'
+    normalizeIterationStatus(value) === 'completed'
 
   const projectSelection = currentProject
     ? sprintViewSelectionByProject[currentProject.id]
@@ -384,8 +481,7 @@ export function SprintView() {
       return selectedSprintId
     }
 
-    const activeSprint = sprints.find((sprint) => isActiveStatus(sprint.status))
-    return activeSprint?.id || sprints[0]?.id || null
+    return getDefaultSprintId(sprints)
   }, [isAllTeamsMode, selectedSprintId, sprints])
 
   const selectedSprint = useMemo(
