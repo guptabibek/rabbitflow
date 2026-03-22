@@ -7,8 +7,6 @@ import { useAppStore } from '@/store/app-store'
 import {
   AppSidebar,
   BacklogView,
-  AdminConfigPanel,
-  AdminSecurityView,
   CreateIssueDialog,
   DashboardView,
   FilterBar,
@@ -32,12 +30,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Building2,
   ChevronDown,
   LogOut,
   Moon,
   PanelLeft,
   PanelLeftClose,
-  Settings,
+  Shield,
   Sun,
   User,
 } from 'lucide-react'
@@ -48,10 +47,7 @@ type ViewType =
   | 'board'
   | 'sprints'
   | 'list'
-  | 'admin-panel'
-  | 'work-item-types'
   | 'teams'
-  | 'admin-security'
   | 'settings'
 
 export default function HomePage() {
@@ -522,14 +518,26 @@ export default function HomePage() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/profile')}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                  <User className="mr-2 h-4 w-4" />
+                  Profile Settings
                 </DropdownMenuItem>
+                {currentUser?.globalRole === 'admin' ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      Organization Admin
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => router.push('/admin/panel')}>
+                      <Building2 className="mr-2 h-4 w-4" />
+                      Admin Panel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push('/admin/security')}>
+                      <Shield className="mr-2 h-4 w-4" />
+                      Admin Security
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-red-500">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -573,11 +581,7 @@ export default function HomePage() {
                     {currentView === 'board' && <KanbanBoard />}
                     {currentView === 'sprints' && <SprintView />}
                     {currentView === 'list' && <ListView />}
-                    {(currentView === 'work-item-types' || currentView === 'admin-panel') && (
-                      <AdminConfigPanel />
-                    )}
                     {currentView === 'teams' && <TeamManagement mode="screen" />}
-                    {currentView === 'admin-security' && <AdminSecurityView />}
                   </>
                 )}
               </div>

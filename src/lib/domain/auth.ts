@@ -90,6 +90,57 @@ async function validateActiveSession(identity: RequestIdentity): Promise<boolean
   return true
 }
 
+async function getAuthenticatedUserFromIdentity(
+  identity: RequestIdentity
+): Promise<AuthenticatedUser | null> {
+  const sessionOk = await validateActiveSession(identity)
+  if (!sessionOk) {
+    return null
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: identity.userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatar: true,
+      globalRole: true,
+      isActive: true,
+    },
+  })
+
+  if (!user || !user.isActive) {
+    return null
+  }
+
+  return {
+    ...user,
+    sessionId: identity.sessionId,
+  }
+}
+
+export async function getAuthenticatedUserFromToken(
+  token: string | null | undefined
+): Promise<AuthenticatedUser | null> {
+  if (!token) return null
+
+  try {
+    const payload = await verifyToken(token)
+    const userId = typeof payload.sub === 'string' ? payload.sub : null
+    if (!userId) return null
+
+    const sessionId =
+      typeof (payload as { sid?: unknown }).sid === 'string'
+        ? ((payload as { sid?: string }).sid ?? null)
+        : null
+
+    return getAuthenticatedUserFromIdentity({ userId, sessionId })
+  } catch {
+    return null
+  }
+}
+
 export async function resolveActorContext(
   request: NextRequest,
   projectId: string
@@ -99,6 +150,15 @@ export async function resolveActorContext(
 
   const sessionOk = await validateActiveSession(identity)
   if (!sessionOk) return null
+
+  const user = await db.user.findUnique({
+    where: { id: identity.userId },
+    select: { id: true, globalRole: true, isActive: true },
+  })
+
+  if (!user || !user.isActive) {
+    return null
+  }
 
   const membership = await db.projectMember.findUnique({
     where: {
@@ -115,11 +175,6 @@ export async function resolveActorContext(
 
   if (!membership) {
     // Fall back to system-wide admin role
-    const user = await db.user.findUnique({
-      where: { id: identity.userId },
-      select: { id: true, globalRole: true },
-    })
-
     if (user?.globalRole === 'admin') {
       return { userId: user.id, projectRole: 'Admin', sessionId: identity.sessionId }
     }
@@ -185,38 +240,18 @@ export async function requireAuthenticatedUser(
     }
   }
 
-  const sessionOk = await validateActiveSession(identity)
-  if (!sessionOk) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Session expired or revoked' }, { status: 401 }),
-    }
-  }
-
-  const user = await db.user.findUnique({
-    where: { id: identity.userId },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      avatar: true,
-      globalRole: true,
-    },
-  })
+  const user = await getAuthenticatedUserFromIdentity(identity)
 
   if (!user) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'User not found' }, { status: 404 }),
+      response: NextResponse.json({ error: 'Session expired, revoked, or user unavailable' }, { status: 401 }),
     }
   }
 
   return {
     ok: true,
-    user: {
-      ...user,
-      sessionId: identity.sessionId,
-    },
+    user,
   }
 }
 

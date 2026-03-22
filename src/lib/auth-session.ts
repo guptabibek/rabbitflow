@@ -1,10 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-
-const SESSION_TTL_SECONDS = Number.parseInt(
-  process.env.AUTH_SESSION_TTL_SECONDS || String(7 * 24 * 60 * 60),
-  10
-)
+import { AUTH_SESSION_TTL_SECONDS } from '@/lib/auth'
 
 function parseClientIp(request: NextRequest): string | null {
   const forwarded = request.headers.get('x-forwarded-for')
@@ -51,23 +47,39 @@ export async function createAuthSession(args: {
   mfaBypassed?: boolean
 }) {
   const now = new Date()
-  const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000)
+  const expiresAt = new Date(now.getTime() + AUTH_SESSION_TTL_SECONDS * 1000)
   const userAgent = args.request.headers.get('user-agent')
 
-  return db.authSession.create({
-    data: {
-      userId: args.userId,
-      userAgent,
-      ipAddress: parseClientIp(args.request),
-      deviceLabel: inferDeviceLabel(userAgent),
-      mfaVerifiedAt: args.mfaVerified ? now : null,
-      mfaBypassed: args.mfaBypassed === true,
-      expiresAt,
-    },
-    select: {
-      id: true,
-      expiresAt: true,
-    },
+  return db.$transaction(async (tx) => {
+    await tx.authSession.updateMany({
+      where: {
+        userId: args.userId,
+        revokedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        revokedAt: now,
+        revokedReason: 'REPLACED_BY_NEW_LOGIN',
+      },
+    })
+
+    return tx.authSession.create({
+      data: {
+        userId: args.userId,
+        userAgent,
+        ipAddress: parseClientIp(args.request),
+        deviceLabel: inferDeviceLabel(userAgent),
+        mfaVerifiedAt: args.mfaVerified ? now : null,
+        mfaBypassed: args.mfaBypassed === true,
+        expiresAt,
+      },
+      select: {
+        id: true,
+        expiresAt: true,
+      },
+    })
   })
 }
 

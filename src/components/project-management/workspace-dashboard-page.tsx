@@ -31,6 +31,8 @@ import {
   LogOut,
   Plus,
   Search,
+  Settings,
+  Shield,
   UserPlus,
   Users,
 } from 'lucide-react'
@@ -71,6 +73,35 @@ export function WorkspaceDashboardPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
   const canCreateProject = currentUser?.globalRole === 'admin'
+
+  const openAdminPanel = async () => {
+    const targetProject = projects.find((project) => !project.isArchived) ?? null
+    if (!targetProject) {
+      toast.error('Create a project before opening the admin panel')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/projects/active', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: targetProject.id }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        toast.error(error.error || 'Failed to open admin panel')
+        return
+      }
+
+      setCurrentProject(targetProject)
+      setActiveProjectId(targetProject.id)
+      router.push('/admin/panel')
+      router.refresh()
+    } catch {
+      toast.error('Failed to open admin panel')
+    }
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -204,6 +235,8 @@ export function WorkspaceDashboardPage() {
         return
       }
 
+      const payload = await response.json().catch(() => ({}))
+
       setShowCreateUser(false)
       setCreateUserForm({
         name: '',
@@ -213,11 +246,19 @@ export function WorkspaceDashboardPage() {
         projectId: '',
         projectRole: 'Dev',
       })
-      toast.success(
-        createUserForm.assignToProject
-          ? 'User created and assigned to project. They must reset password on first login.'
-          : 'User created successfully. They must reset password on first login.'
-      )
+      const baseMessage = createUserForm.assignToProject
+        ? 'User created, assigned to project, and must reset password on first login.'
+        : 'User created and must reset password on first login.'
+
+      if (payload?.emailDelivery?.status === 'queued') {
+        toast.success(`${baseMessage} Onboarding email queued.`)
+      } else if (payload?.emailDelivery?.status === 'failed') {
+        toast.warning(`${baseMessage} ${payload.emailDelivery.message}`)
+      } else if (payload?.emailDelivery?.status === 'skipped') {
+        toast.warning(`${baseMessage} ${payload.emailDelivery.message}`)
+      } else {
+        toast.success(baseMessage)
+      }
     } catch {
       toast.error('Network error')
     } finally {
@@ -314,6 +355,22 @@ export function WorkspaceDashboardPage() {
           </div>
           {canCreateProject ? (
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => router.push('/admin/security')}
+                className="h-11 gap-2 px-5"
+              >
+                <Shield className="h-4 w-4" />
+                Admin Security
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void openAdminPanel()}
+                className="h-11 gap-2 px-5"
+              >
+                <Settings className="h-4 w-4" />
+                Admin Panel
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setShowCreateUser(true)}

@@ -5,16 +5,39 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET
 )
 
-export async function signToken(userId: string, sessionId?: string): Promise<string> {
+function parseSessionTtlSeconds() {
+  const ttlSeconds = Number.parseInt(process.env.AUTH_SESSION_TTL_SECONDS || '', 10)
+  if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) {
+    return ttlSeconds
+  }
+
+  const ttlDays = Number.parseInt(process.env.AUTH_SESSION_TTL_DAYS || '30', 10)
+  if (Number.isFinite(ttlDays) && ttlDays > 0) {
+    return ttlDays * 24 * 60 * 60
+  }
+
+  return 30 * 24 * 60 * 60
+}
+
+export const AUTH_SESSION_TTL_SECONDS = parseSessionTtlSeconds()
+
+export async function signToken(
+  userId: string,
+  sessionId?: string,
+  globalRole?: string
+): Promise<string> {
   const claims: Record<string, string> = { sub: userId }
   if (sessionId) {
     claims.sid = sessionId
+  }
+  if (globalRole) {
+    claims.role = globalRole
   }
 
   return new SignJWT(claims)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime(`${AUTH_SESSION_TTL_SECONDS}s`)
     .sign(JWT_SECRET)
 }
 
@@ -41,5 +64,5 @@ export const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 7 * 24 * 60 * 60, // 7 days
+  maxAge: AUTH_SESSION_TTL_SECONDS,
 }

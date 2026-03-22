@@ -26,7 +26,7 @@ import { toast } from 'sonner'
 import { PRESET_COLORS } from '@/lib/ui-tokens'
 
 export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
-  const { currentProject, labels, setLabels } = useAppStore()
+  const { currentProject, currentProjectPermissions, labels, setLabels } = useAppStore()
   const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState('#6366f1')
@@ -34,8 +34,14 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const canManageLabels = currentProjectPermissions.includes('masterdata:manage')
 
   const handleCreate = async () => {
+    if (!canManageLabels) {
+      toast.error('You do not have permission to manage labels')
+      return
+    }
+
     if (!currentProject || !name.trim()) return
     setIsCreating(true)
     try {
@@ -61,6 +67,11 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
   }
 
   const handleUpdate = async (id: string) => {
+    if (!canManageLabels) {
+      toast.error('You do not have permission to manage labels')
+      return
+    }
+
     try {
       const res = await fetch(`/api/labels/${id}`, {
         method: 'PUT',
@@ -78,6 +89,11 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
   }
 
   const handleDelete = async (id: string) => {
+    if (!canManageLabels) {
+      toast.error('You do not have permission to manage labels')
+      return
+    }
+
     try {
       const res = await fetch(`/api/labels/${id}`, { method: 'DELETE' })
       if (res.ok) {
@@ -122,6 +138,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-9 w-full"
+                disabled={!canManageLabels}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
               <div className="flex flex-wrap gap-1.5">
@@ -133,6 +150,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     }`}
                     style={{ backgroundColor: c }}
                     onClick={() => setColor(c)}
+                    disabled={!canManageLabels}
                     aria-label={`Select ${c} as label color`}
                   />
                 ))}
@@ -142,7 +160,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
               size="sm"
               className="h-9 px-4 sm:self-start"
               onClick={handleCreate}
-              disabled={isCreating || !name.trim()}
+              disabled={isCreating || !name.trim() || !canManageLabels}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Add
@@ -175,6 +193,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       className="h-8 flex-1 text-sm"
+                      disabled={!canManageLabels}
                       autoFocus
                       onKeyDown={(e) => e.key === 'Enter' && handleUpdate(label.id)}
                     />
@@ -184,11 +203,12 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           key={c}
                           className={`h-4 w-4 rounded-full ${editColor === c ? 'ring-1 ring-primary' : ''}`}
                           style={{ backgroundColor: c }}
+                          disabled={!canManageLabels}
                           onClick={() => setEditColor(c)}
                         />
                       ))}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)} disabled={!canManageLabels}>
                       <Check className="h-3 w-3 text-green-500" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Cancel editing" onClick={() => setEditingId(null)}>
@@ -207,6 +227,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       size="icon"
                       aria-label="Edit label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={!canManageLabels}
                       onClick={() => {
                         setEditingId(label.id)
                         setEditName(label.name)
@@ -220,6 +241,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       size="icon"
                       aria-label="Delete label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                      disabled={!canManageLabels}
                       onClick={() => handleDelete(label.id)}
                     >
                       <Trash2 className="h-3 w-3" />

@@ -75,6 +75,10 @@ export async function deleteMfaChallenge(challengeToken: string) {
   await cacheInvalidate(mfaChallengeKey(challengeToken))
 }
 
+export async function invalidateAllMfaChallenges() {
+  await cacheInvalidate('auth:mfa:challenge:*')
+}
+
 export async function createPasswordResetOtp(email: string, userId: string) {
   const code = generateNumericOtp()
   const payload: PasswordResetOtpPayload = {

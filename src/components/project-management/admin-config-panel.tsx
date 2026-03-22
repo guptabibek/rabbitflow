@@ -189,7 +189,7 @@ function renderPreviewControl(field: PreviewField) {
 }
 
 export function AdminConfigPanel() {
-  const { currentProject, workItemTypes, states, setStates } = useAppStore()
+  const { currentProject, currentProjectPermissions, workItemTypes, states, setStates } = useAppStore()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -213,6 +213,7 @@ export function AdminConfigPanel() {
   const [planningLoading, setPlanningLoading] = useState(false)
   const [planningSaving, setPlanningSaving] = useState(false)
   const [planningFields, setPlanningFields] = useState<PlanningFieldDraft[]>([])
+  const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
   const selectedType = useMemo(
     () => workItemTypes.find((type) => type.id === selectedTypeId) ?? null,
@@ -460,6 +461,11 @@ export function AdminConfigPanel() {
   }
 
   const saveStateOrdering = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     if (!currentProject) return
 
     setStateConfigSaving(true)
@@ -496,6 +502,11 @@ export function AdminConfigPanel() {
   }
 
   const createState = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     if (!currentProject || !newStateName.trim()) {
       return
     }
@@ -538,6 +549,11 @@ export function AdminConfigPanel() {
   }
 
   const updateStateRow = async (state: State) => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     setStateConfigSaving(true)
     try {
       const response = await fetch(`/api/states/${state.id}`, {
@@ -568,6 +584,11 @@ export function AdminConfigPanel() {
   }
 
   const deleteState = async (stateId: string) => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     setStateConfigSaving(true)
     try {
       const response = await fetch(`/api/states/${stateId}`, { method: 'DELETE' })
@@ -653,6 +674,11 @@ export function AdminConfigPanel() {
   }
 
   const saveTypeStateMachine = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     if (!selectedType) return
 
     if (mappedStates.length === 0) {
@@ -702,6 +728,11 @@ export function AdminConfigPanel() {
   }
 
   const saveFieldMappings = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     if (!selectedType) return
 
     setFieldConfigSaving(true)
@@ -738,6 +769,11 @@ export function AdminConfigPanel() {
   }
 
   const savePlanningConfiguration = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage project configuration')
+      return
+    }
+
     if (!selectedType || !currentProject) return
 
     setPlanningSaving(true)
@@ -974,7 +1010,7 @@ export function AdminConfigPanel() {
                   </label>
                 </div>
 
-                <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim()}>
+                <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
                   {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Add State
                 </Button>
@@ -1041,7 +1077,7 @@ export function AdminConfigPanel() {
                             <Button
                               variant="outline"
                               onClick={() => void updateStateRow({ ...state, order: index * 10 })}
-                              disabled={stateConfigSaving}
+                              disabled={stateConfigSaving || !canManageMasterData}
                             >
                               Save
                             </Button>
@@ -1049,7 +1085,7 @@ export function AdminConfigPanel() {
                               variant="ghost"
                               className="text-destructive"
                               onClick={() => void deleteState(state.id)}
-                              disabled={stateConfigSaving}
+                              disabled={stateConfigSaving || !canManageMasterData}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -1060,7 +1096,7 @@ export function AdminConfigPanel() {
                   </SortableContext>
                 </DndContext>
 
-                  <Button variant="secondary" onClick={saveStateOrdering} disabled={stateConfigSaving}>
+                  <Button variant="secondary" onClick={saveStateOrdering} disabled={stateConfigSaving || !canManageMasterData}>
                     {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Save State Ordering
                   </Button>
@@ -1177,7 +1213,7 @@ export function AdminConfigPanel() {
                       </div>
                     ) : null}
 
-                    <Button onClick={saveTypeStateMachine} disabled={stateConfigSaving}>
+                    <Button onClick={saveTypeStateMachine} disabled={stateConfigSaving || !canManageMasterData}>
                       {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Type State Machine
                     </Button>
@@ -1319,7 +1355,7 @@ export function AdminConfigPanel() {
                       </SortableContext>
                     </DndContext>
 
-                    <Button onClick={saveFieldMappings} disabled={fieldConfigSaving}>
+                    <Button onClick={saveFieldMappings} disabled={fieldConfigSaving || !canManageMasterData}>
                       {fieldConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Field Mappings
                     </Button>
@@ -1428,7 +1464,7 @@ export function AdminConfigPanel() {
                       </SortableContext>
                     </DndContext>
 
-                    <Button onClick={savePlanningConfiguration} disabled={planningSaving}>
+                    <Button onClick={savePlanningConfiguration} disabled={planningSaving || !canManageMasterData}>
                       {planningSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Planning Configuration
                     </Button>

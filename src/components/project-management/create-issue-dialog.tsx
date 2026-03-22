@@ -124,6 +124,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     addIssue,
     areas,
     currentProject,
+    currentProjectPermissions,
     isCreateIssueOpen,
     issues,
     iterations,
@@ -165,6 +166,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [activeTab, setActiveTab] = useState('basic')
   const [typeScopedStates, setTypeScopedStates] = useState<typeof states>([])
   const isScreenMode = mode === 'screen'
+  const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
 
   const activeTypeDefinition = useMemo(
     () => typeOptions.find((type) => type.key === workItemType) ?? typeOptions[0] ?? null,
@@ -471,6 +473,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!currentProject || !selectedType) return
+
+    if (!canCreateWorkItems) {
+      toast.error('You do not have permission to create work items')
+      return
+    }
 
     setIsLoading(true)
     try {
@@ -1119,7 +1126,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           type="submit"
           size="sm"
           className="h-8 text-xs"
-          disabled={isLoading || !title.trim() || !selectedType}
+          disabled={isLoading || !title.trim() || !selectedType || !canCreateWorkItems}
         >
           {isLoading ? 'Creating...' : `Create ${selectedType?.name || 'Work Item'}`}
         </Button>

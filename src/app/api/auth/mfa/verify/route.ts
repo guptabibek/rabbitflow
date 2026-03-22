@@ -38,8 +38,11 @@ export async function POST(request: NextRequest) {
       name: string
       avatar: string | null
       globalRole: string
+      isActive: boolean
       mfaSecret: string | null
       mfaEnabled: boolean
+      mfaExemptFromPolicy: boolean
+      mfaReenrollRequired: boolean
     }>>`
       SELECT
         "id",
@@ -47,8 +50,11 @@ export async function POST(request: NextRequest) {
         "name",
         "avatar",
         "globalRole",
+        "isActive",
         "mfaSecret",
-        "mfaEnabled"
+        "mfaEnabled",
+        "mfaExemptFromPolicy",
+        "mfaReenrollRequired"
       FROM "User"
       WHERE "id" = ${challenge.userId}
       LIMIT 1
@@ -59,6 +65,27 @@ export async function POST(request: NextRequest) {
     if (!user) {
       await deleteMfaChallenge(challengeToken)
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    if (!user.isActive) {
+      await deleteMfaChallenge(challengeToken)
+      return NextResponse.json({ error: 'Account deactivated' }, { status: 403 })
+    }
+
+    if (challenge.mode === 'verify' && (!user.mfaEnabled || !user.mfaSecret)) {
+      await deleteMfaChallenge(challengeToken)
+      return NextResponse.json(
+        { error: 'MFA session expired. Please sign in again.' },
+        { status: 401 }
+      )
+    }
+
+    if (challenge.mode === 'setup' && user.mfaExemptFromPolicy) {
+      await deleteMfaChallenge(challengeToken)
+      return NextResponse.json(
+        { error: 'MFA session expired. Please sign in again.' },
+        { status: 401 }
+      )
     }
 
     const secret = challenge.mode === 'setup' ? challenge.secret : user.mfaSecret
@@ -88,6 +115,7 @@ export async function POST(request: NextRequest) {
           "mfaSecret" = ${secret},
           "mfaEnabled" = true,
           "mfaEnabledAt" = ${new Date()},
+          "mfaExemptFromPolicy" = false,
           "mfaReenrollRequired" = false
         WHERE "id" = ${user.id}
       `
@@ -101,7 +129,7 @@ export async function POST(request: NextRequest) {
       mfaVerified: true,
       mfaBypassed: false,
     })
-    const token = await signToken(user.id, session.id)
+    const token = await signToken(user.id, session.id, user.globalRole)
 
     const response = NextResponse.json({
       user: {

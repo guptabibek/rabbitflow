@@ -5,7 +5,8 @@ import { invalidateAllMfaChallenges } from '@/lib/auth-otp'
 import { requireSystemAdmin } from '@/lib/domain/auth'
 import { createSecurityAuditEvent } from '@/lib/security-audit'
 
-const resetMfaSchema = z.object({
+const updateMfaSchema = z.object({
+  action: z.enum(['enable', 'disable']),
   revokeSessions: z.boolean().optional().default(true),
 })
 
@@ -19,18 +20,21 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json().catch(() => ({}))
-    const { revokeSessions } = resetMfaSchema.parse(body)
+    const { action, revokeSessions } = updateMfaSchema.parse(body)
 
-    const existing = await db.user.findUnique({
+    const targetUser = await db.user.findUnique({
       where: { id },
-      select: { id: true, isActive: true },
+      select: {
+        id: true,
+        isActive: true,
+      },
     })
 
-    if (!existing) {
+    if (!targetUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    if (!existing.isActive) {
+    if (!targetUser.isActive) {
       return NextResponse.json({ error: 'Cannot manage MFA for a deactivated user' }, { status: 409 })
     }
 
@@ -39,17 +43,25 @@ export async function POST(
     const result = await db.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },
-        data: {
-          mfaSecret: null,
-          mfaEnabled: false,
-          mfaEnabledAt: null,
-          mfaExemptFromPolicy: false,
-          mfaReenrollRequired: true,
-        },
+        data:
+          action === 'enable'
+            ? {
+                mfaSecret: null,
+                mfaEnabled: false,
+                mfaEnabledAt: null,
+                mfaExemptFromPolicy: false,
+                mfaReenrollRequired: true,
+              }
+            : {
+                mfaSecret: null,
+                mfaEnabled: false,
+                mfaEnabledAt: null,
+                mfaExemptFromPolicy: true,
+                mfaReenrollRequired: false,
+              },
       })
 
       let revokedSessions = 0
-
       if (revokeSessions) {
         const revoked = await tx.authSession.updateMany({
           where: {
@@ -58,10 +70,9 @@ export async function POST(
           },
           data: {
             revokedAt: now,
-            revokedReason: `ADMIN_MFA_RESET_BY:${admin.user.id}`,
+            revokedReason: `ADMIN_MFA_${action.toUpperCase()}_BY:${admin.user.id}`,
           },
         })
-
         revokedSessions = revoked.count
       }
 
@@ -71,7 +82,7 @@ export async function POST(
     await createSecurityAuditEvent({
       actorUserId: admin.user.id,
       targetUserId: id,
-      action: revokeSessions ? 'MFA_RESET_WITH_SESSION_REVOKE' : 'MFA_RESET_ONLY',
+      action: action === 'enable' ? 'MFA_ENFORCED' : 'MFA_DISABLED',
       details: {
         revokeSessions,
         revokedSessions: result.revokedSessions,
@@ -82,9 +93,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: revokeSessions
-        ? 'MFA reset completed. Sessions revoked and re-enrollment is required on next login.'
-        : 'MFA reset completed. Re-enrollment is required on next login.',
+      message:
+        action === 'enable'
+          ? 'MFA will be required at the user\'s next sign-in.'
+          : 'MFA has been disabled for this user.',
       revokedSessions: result.revokedSessions,
     })
   } catch (error) {
@@ -95,7 +107,7 @@ export async function POST(
       )
     }
 
-    console.error('Admin MFA reset error:', error)
-    return NextResponse.json({ error: 'Failed to reset MFA' }, { status: 500 })
+    console.error('Admin MFA policy update error:', error)
+    return NextResponse.json({ error: 'Failed to update MFA policy' }, { status: 500 })
   }
 }

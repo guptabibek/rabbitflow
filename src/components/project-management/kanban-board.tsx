@@ -19,12 +19,14 @@ const COLUMNS = [
 ] as const
 
 function BoardColumn({
+  canCreateItem,
   children,
   count,
   dotColor,
   id,
   name,
 }: {
+  canCreateItem: boolean
   children: ReactNode
   count: number
   dotColor: string
@@ -54,7 +56,12 @@ function BoardColumn({
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => useAppStore.getState().setCreateIssueOpen(true)}
+          onClick={() => {
+            if (canCreateItem) {
+              useAppStore.getState().setCreateIssueOpen(true)
+            }
+          }}
+          disabled={!canCreateItem}
           aria-label="Add item"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -69,6 +76,7 @@ function BoardColumn({
 export function KanbanBoard() {
   const {
     currentProject,
+    currentProjectPermissions,
     filters,
     isLoading,
     issues,
@@ -76,6 +84,8 @@ export function KanbanBoard() {
     workItemTypeFilter,
   } = useAppStore()
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
+  const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
+  const canUpdateBoard = currentProjectPermissions.includes('board:update')
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -137,6 +147,11 @@ export function KanbanBoard() {
     setActiveIssue(null)
 
     if (!currentProject || !draggedIssue || !over) {
+      return
+    }
+
+    if (!canUpdateBoard) {
+      toast.error('You do not have permission to update the board')
       return
     }
 
@@ -209,6 +224,7 @@ export function KanbanBoard() {
         {issuesByStatus.map((column) => (
           <BoardColumn
             key={column.id}
+            canCreateItem={canCreateWorkItems}
             id={column.id}
             name={column.name}
             dotColor={column.dotColor}

@@ -69,11 +69,13 @@ export function BacklogView() {
 
   const {
     currentProject,
+    currentProjectPermissions,
     hierarchyExpandedByProject,
     setHierarchyExpandedIds,
     toggleHierarchyExpanded,
     workItemTypeFilter,
   } = useAppStore()
+  const canReorderBacklog = currentProjectPermissions.includes('backlog:reorder')
   const [tree, setTree] = useState<BacklogNode[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const hasPersistedExpansion =
@@ -132,6 +134,11 @@ export function BacklogView() {
     direction: 'up' | 'down'
   ) => {
     if (!currentProject) return
+
+    if (!canReorderBacklog) {
+      toast.error('You do not have permission to reorder backlog items')
+      return
+    }
 
     const index = siblings.findIndex((s) => s.id === item.id)
     if (index < 0) return
@@ -246,28 +253,30 @@ export function BacklogView() {
             )}
 
             {/* Reorder */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                aria-label="Move up"
-                onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'up') }}
-              >
-                <ArrowUp className="h-3 w-3" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                aria-label="Move down"
-                onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'down') }}
-              >
-                <ArrowDown className="h-3 w-3" />
-              </Button>
-            </div>
+            {canReorderBacklog ? (
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  aria-label="Move up"
+                  onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'up') }}
+                >
+                  <ArrowUp className="h-3 w-3" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  aria-label="Move down"
+                  onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'down') }}
+                >
+                  <ArrowDown className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           {hasChildren && isExpanded && renderNodes(node.children, depth + 1, node.children)}

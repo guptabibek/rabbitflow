@@ -987,7 +987,7 @@ export function WorkItemTypeManagement({
   mode = 'dialog',
   onClose,
 }: WorkItemTypeManagementProps = {}) {
-  const { currentProject, setWorkItemTypes, workItemTypes } = useAppStore()
+  const { currentProject, currentProjectPermissions, setWorkItemTypes, workItemTypes } = useAppStore()
   const [open, setOpen] = useState(false)
   const isScreenMode = mode === 'screen'
   const isVisible = isScreenMode || open
@@ -1001,6 +1001,7 @@ export function WorkItemTypeManagement({
   const [isDirty, setIsDirty] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
   const formSnapshotRef = useRef<string>('')
+  const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
   const sortedTypes = useMemo(
     () =>
@@ -1122,6 +1123,11 @@ export function WorkItemTypeManagement({
   }
 
   const resetForCreate = () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage work item types')
+      return
+    }
+
     setSelectedTypeId(null)
     const f = createEmptyTypeForm()
     setForm(f)
@@ -1148,6 +1154,11 @@ export function WorkItemTypeManagement({
   }
 
   const handleSave = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage work item types')
+      return
+    }
+
     if (!currentProject) return
 
     const validationError = validateWorkItemTypeForm(form)
@@ -1224,6 +1235,11 @@ export function WorkItemTypeManagement({
   }
 
   const handleDelete = async () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage work item types')
+      return
+    }
+
     if (!form.id) return
 
     try {
@@ -1256,6 +1272,11 @@ export function WorkItemTypeManagement({
   }
 
   const handleDuplicate = () => {
+    if (!canManageMasterData) {
+      toast.error('You do not have permission to manage work item types')
+      return
+    }
+
     setSelectedTypeId(null)
     const duplicated: WorkItemTypeForm = {
       ...form,
@@ -1462,7 +1483,7 @@ export function WorkItemTypeManagement({
               size="sm"
               className="h-8 gap-1.5 text-xs px-4"
               onClick={handleSave}
-              disabled={isSaving || !form.name.trim() || !form.key.trim()}
+              disabled={isSaving || !form.name.trim() || !form.key.trim() || !canManageMasterData}
             >
               {isSaving ? (
                 <>

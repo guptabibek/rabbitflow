@@ -113,7 +113,7 @@ export function TeamManagement({
   mode = 'dialog',
   onClose,
 }: TeamManagementProps = {}) {
-  const { currentProject, teams, setTeams, users } = useAppStore()
+  const { currentProject, currentProjectPermissions, teams, setTeams, users } = useAppStore()
   const [open, setOpen] = useState(false)
   const isScreenMode = mode === 'screen'
   const isVisible = isScreenMode || open
@@ -121,6 +121,7 @@ export function TeamManagement({
   const [form, setForm] = useState<TeamForm>(EMPTY_FORM)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const canManageTeams = currentProjectPermissions.includes('project:members:manage')
 
   const sortedUsers = useMemo(
     () => [...users].sort((left, right) => left.name.localeCompare(right.name)),
@@ -181,6 +182,11 @@ export function TeamManagement({
   }, [selectedTeamId, sortedTeams])
 
   const resetForCreate = () => {
+    if (!canManageTeams) {
+      toast.error('You do not have permission to manage teams')
+      return
+    }
+
     setSelectedTeamId(null)
     setForm(EMPTY_FORM)
   }
@@ -207,6 +213,11 @@ export function TeamManagement({
 
   const handleSave = async () => {
     if (!currentProject || !form.name.trim()) {
+      return
+    }
+
+    if (!canManageTeams) {
+      toast.error('You do not have permission to manage teams')
       return
     }
 
@@ -255,6 +266,11 @@ export function TeamManagement({
   }
 
   const handleDelete = async () => {
+    if (!canManageTeams) {
+      toast.error('You do not have permission to manage teams')
+      return
+    }
+
     if (!form.id || !confirm('Delete this team? Existing sprint ownership must be reassigned first.')) {
       return
     }
@@ -324,7 +340,7 @@ export function TeamManagement({
               Iteration ownership and team membership
             </p>
           </div>
-          <Button size="sm" className="h-7 gap-1 text-xs" onClick={resetForCreate}>
+          <Button size="sm" className="h-7 gap-1 text-xs" onClick={resetForCreate} disabled={!canManageTeams}>
             <Plus className="h-3.5 w-3.5" />
             New
           </Button>
@@ -397,6 +413,7 @@ export function TeamManagement({
                   size="sm"
                   className="h-8 gap-1.5 text-xs text-destructive"
                   onClick={handleDelete}
+                  disabled={!canManageTeams}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Delete
@@ -406,7 +423,7 @@ export function TeamManagement({
                 size="sm"
                 className="h-8 gap-1.5 text-xs"
                 onClick={handleSave}
-                disabled={isSaving || !form.name.trim()}
+                disabled={isSaving || !form.name.trim() || !canManageTeams}
               >
                 <Save className="h-3.5 w-3.5" />
                 {isSaving ? 'Saving...' : form.id ? 'Save Team' : 'Create Team'}
@@ -423,6 +440,7 @@ export function TeamManagement({
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, name: event.target.value }))
                 }
+                disabled={!canManageTeams}
                 className="h-10 w-full"
               />
             </div>
@@ -437,6 +455,7 @@ export function TeamManagement({
                     key: event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''),
                   }))
                 }
+                disabled={!canManageTeams}
                 className="h-10 w-full font-mono"
                 maxLength={20}
               />
@@ -449,6 +468,7 @@ export function TeamManagement({
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, color: event.target.value }))
                 }
+                disabled={!canManageTeams}
                 className="h-10 w-full"
               />
             </div>
@@ -459,6 +479,7 @@ export function TeamManagement({
                 onValueChange={(value) =>
                   setForm((previous) => ({ ...previous, leadId: value }))
                 }
+                disabled={!canManageTeams}
               >
                 <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="No lead assigned" />
@@ -486,6 +507,7 @@ export function TeamManagement({
                   description: event.target.value,
                 }))
               }
+              disabled={!canManageTeams}
               rows={3}
               className="min-h-[96px] w-full resize-y"
             />
@@ -522,6 +544,7 @@ export function TeamManagement({
                           onCheckedChange={(checked) =>
                             handleMemberToggle(user.id, checked === true)
                           }
+                          disabled={!canManageTeams}
                         />
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{user.name}</p>
@@ -544,7 +567,7 @@ export function TeamManagement({
                                 },
                               }))
                             }
-                            disabled={!selected}
+                            disabled={!selected || !canManageTeams}
                           >
                             <SelectTrigger className="h-9 w-full">
                               <SelectValue />
@@ -567,6 +590,7 @@ export function TeamManagement({
                             variant={form.leadId === user.id ? 'default' : 'outline'}
                             size="sm"
                             className="h-9 w-full"
+                            disabled={!canManageTeams}
                             onClick={() =>
                               setForm((previous) => ({
                                 ...previous,

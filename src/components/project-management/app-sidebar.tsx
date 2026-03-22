@@ -13,10 +13,8 @@ import {
   Zap,
   Settings,
   Tags,
-  Layers,
   Users,
   UserPlus,
-  Shield,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -30,10 +28,7 @@ type ViewType =
   | 'board'
   | 'sprints'
   | 'list'
-  | 'admin-panel'
-  | 'work-item-types'
   | 'teams'
-  | 'admin-security'
   | 'settings'
 
 interface AppSidebarProps {
@@ -53,17 +48,12 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   const {
     currentProject,
     currentProjectPermissions,
-    currentUser,
     setCreateIssueOpen,
   } = useAppStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const can = (permission: string) => currentProjectPermissions.includes(permission)
-  const isSettingsView =
-    currentView === 'admin-panel' ||
-    currentView === 'work-item-types' ||
-    currentView === 'teams' ||
-    currentView === 'admin-security'
+  const isSettingsView = currentView === 'teams'
 
   useEffect(() => {
     if (currentProject && isSettingsView) {
@@ -144,15 +134,6 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                     }
                   />
                 )}
-                {can('masterdata:manage') && (
-                  <button
-                    onClick={() => onViewChange('admin-panel')}
-                    className={settingsItemClass(currentView === 'work-item-types' || currentView === 'admin-panel')}
-                  >
-                    <Layers className="h-3.5 w-3.5 flex-shrink-0" />
-                    Admin Panel
-                  </button>
-                )}
                 {can('project:members:manage') && (
                   <button
                     onClick={() => onViewChange('teams')}
@@ -171,15 +152,6 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                       </button>
                     }
                   />
-                )}
-                {currentUser?.globalRole === 'admin' && (
-                  <button
-                    onClick={() => onViewChange('admin-security')}
-                    className={settingsItemClass(currentView === 'admin-security')}
-                  >
-                    <Shield className="h-3.5 w-3.5 flex-shrink-0" />
-                    Admin Security
-                  </button>
                 )}
               </div>
             )}

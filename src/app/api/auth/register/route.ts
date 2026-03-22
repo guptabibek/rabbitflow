@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       mfaVerified: false,
       mfaBypassed: false,
     })
-    const token = await signToken(user.id, session.id)
+    const token = await signToken(user.id, session.id, user.globalRole)
 
     const response = NextResponse.json({ user }, { status: 201 })
     response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)

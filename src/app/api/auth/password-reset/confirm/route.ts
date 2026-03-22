@@ -53,8 +53,11 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await hashPassword(newPassword)
 
-    await db.user.update({
-      where: { id: payload.userId },
+    const updated = await db.user.updateMany({
+      where: {
+        id: payload.userId,
+        isActive: true,
+      },
       data: {
         passwordHash,
         mustResetPassword: false,
@@ -62,6 +65,11 @@ export async function POST(request: NextRequest) {
         lockoutUntil: null,
       },
     })
+
+    if (updated.count === 0) {
+      await deletePasswordResetOtp(normalizedEmail)
+      return NextResponse.json({ error: 'Account unavailable' }, { status: 403 })
+    }
 
     await deletePasswordResetOtp(normalizedEmail)
 

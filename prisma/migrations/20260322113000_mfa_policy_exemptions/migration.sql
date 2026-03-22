@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "mfaExemptFromPolicy" BOOLEAN NOT NULL DEFAULT false;

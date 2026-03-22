@@ -211,11 +211,20 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
         toast.error(error.error || 'Failed to create user')
         return
       }
-      toast.success(
-        assignNewUserToProject
-          ? 'User created and added to project'
-          : 'User created. Add them to a project when ready.'
-      )
+      const payload = await res.json().catch(() => ({}))
+      const baseMessage = assignNewUserToProject
+        ? 'User created and added to project.'
+        : 'User created. Add them to a project when ready.'
+
+      if (payload?.emailDelivery?.status === 'queued') {
+        toast.success(`${baseMessage} Onboarding email queued.`)
+      } else if (payload?.emailDelivery?.status === 'failed') {
+        toast.warning(`${baseMessage} ${payload.emailDelivery.message}`)
+      } else if (payload?.emailDelivery?.status === 'skipped') {
+        toast.warning(`${baseMessage} ${payload.emailDelivery.message}`)
+      } else {
+        toast.success(baseMessage)
+      }
       resetAddForm()
       setAddMemberOpen(false)
       refreshMembers()

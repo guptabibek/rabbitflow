@@ -45,8 +45,17 @@ export default function LoginPage() {
   const [resetPassword, setResetPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
+  const resetMfaState = () => {
+    setMfaCode('')
+    setMfaChallengeToken('')
+    setMfaSetupRequired(false)
+    setMfaQrCodeDataUrl('')
+    setMfaManualEntryKey('')
+  }
+
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
+    resetMfaState()
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/login', {
@@ -91,6 +100,7 @@ export default function LoginPage() {
         return
       }
 
+      resetMfaState()
       router.push('/dashboard')
       router.refresh()
     } catch {
@@ -112,6 +122,13 @@ export default function LoginPage() {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
+        if (
+          typeof payload?.error === 'string' &&
+          payload.error.toLowerCase().includes('please sign in again')
+        ) {
+          resetMfaState()
+          setMode('login')
+        }
         toast.error(toErrorMessage(payload?.error, 'MFA verification failed'))
         return
       }
@@ -174,6 +191,7 @@ export default function LoginPage() {
       setPassword('')
       setResetOtp('')
       setResetPassword('')
+      resetMfaState()
       setMode('login')
     } catch {
       toast.error('Network error. Please try again.')
@@ -247,6 +265,7 @@ export default function LoginPage() {
                   variant="link"
                   className="w-full"
                   onClick={() => {
+                    resetMfaState()
                     setResetEmail(email)
                     setMode('reset-request')
                   }}
@@ -294,9 +313,8 @@ export default function LoginPage() {
                   variant="outline"
                   className="w-full"
                   onClick={() => {
+                    resetMfaState()
                     setMode('login')
-                    setMfaChallengeToken('')
-                    setMfaCode('')
                   }}
                 >
                   Back to sign in
@@ -323,7 +341,15 @@ export default function LoginPage() {
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Send OTP
                 </Button>
-                <Button type="button" variant="outline" className="w-full" onClick={() => setMode('login')}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    resetMfaState()
+                    setMode('login')
+                  }}
+                >
                   Back to sign in
                 </Button>
               </form>

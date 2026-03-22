@@ -33,9 +33,11 @@ export async function POST(request: NextRequest) {
         name: true,
         avatar: true,
         globalRole: true,
+        isActive: true,
         passwordHash: true,
         mfaSecret: true,
         mfaEnabled: true,
+        mfaExemptFromPolicy: true,
         mfaReenrollRequired: true,
         mustResetPassword: true,
         failedLoginAttempts: true,
@@ -47,6 +49,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
+      )
+    }
+
+    if (!user.isActive) {
+      return NextResponse.json(
+        {
+          error: 'This account has been deactivated. Contact your administrator.',
+          code: 'ACCOUNT_DEACTIVATED',
+        },
+        { status: 403 }
       )
     }
 
@@ -123,7 +135,7 @@ export async function POST(request: NextRequest) {
         mfaVerified: false,
         mfaBypassed: true,
       })
-      const token = await signToken(user.id, session.id)
+      const token = await signToken(user.id, session.id, user.globalRole)
 
       const response = NextResponse.json({
         user: {
@@ -156,7 +168,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    if (MFA_REQUIRE_ENROLLMENT || user.mfaReenrollRequired) {
+    if (!user.mfaExemptFromPolicy && (MFA_REQUIRE_ENROLLMENT || user.mfaReenrollRequired)) {
       const secret = createTotpSecret()
       const otpAuthUrl = createTotpOtpAuthUrl(user.email, secret)
       const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl)
@@ -182,7 +194,7 @@ export async function POST(request: NextRequest) {
       mfaVerified: false,
       mfaBypassed: false,
     })
-    const token = await signToken(user.id, session.id)
+    const token = await signToken(user.id, session.id, user.globalRole)
 
     const response = NextResponse.json({
       user: {

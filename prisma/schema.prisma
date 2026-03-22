@@ -13,12 +13,15 @@ model User {
   name         String
   avatar       String?
   passwordHash String?
+  isActive     Boolean  @default(true)
+  deactivatedAt DateTime?
   mustResetPassword Boolean @default(false)
   failedLoginAttempts Int @default(0)
   lockoutUntil DateTime?
   mfaSecret    String?
   mfaEnabled   Boolean  @default(false)
   mfaEnabledAt DateTime?
+  mfaExemptFromPolicy Boolean @default(false)
   mfaReenrollRequired Boolean @default(false)
   globalRole   String   @default("member")
   createdAt    DateTime @default(now())

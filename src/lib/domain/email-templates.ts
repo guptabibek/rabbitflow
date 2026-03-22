@@ -150,3 +150,45 @@ export function buildPasswordResetEmail(args: {
 
   return { subject, html, text }
 }
+
+export function buildUserOnboardingEmail(args: {
+  userName: string
+  temporaryPassword: string
+  loginUrl: string
+  projectName?: string | null
+}) {
+  const subject = 'RabbitFlow — Your account is ready'
+  const assignmentLine = args.projectName
+    ? `<p>You have been added to <span class="badge">${escape(args.projectName)}</span>.</p>`
+    : ''
+
+  const html = baseLayout(`
+    <h2>Your RabbitFlow account is ready</h2>
+    <p>Hi ${escape(args.userName)}, your administrator created an account for you.</p>
+    ${assignmentLine}
+    <p>Use the temporary password below to sign in. You will be required to change it on first login.</p>
+    <div style="margin:24px 0;text-align:center">
+      <span style="display:inline-block;padding:14px 20px;background:#1e293b;border:1px solid ${BRAND_COLOR}33;border-radius:10px;font-size:20px;font-weight:700;letter-spacing:1px;color:${TEXT_COLOR}">${escape(args.temporaryPassword)}</span>
+    </div>
+    <a href="${escape(args.loginUrl)}" class="cta">Open RabbitFlow</a>
+    <div class="meta">
+      <div class="meta-row"><span>Password policy</span><span>Reset required on first login</span></div>
+      <div class="meta-row"><span>Sign-in URL</span><span>RabbitFlow login</span></div>
+    </div>
+  `)
+
+  const text = [
+    `Hi ${args.userName},`,
+    '',
+    'Your RabbitFlow account is ready.',
+    args.projectName ? `Assigned project: ${args.projectName}` : null,
+    `Temporary password: ${args.temporaryPassword}`,
+    'You will be required to change this password on first login.',
+    '',
+    `Login: ${args.loginUrl}`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return { subject, html, text }
+}

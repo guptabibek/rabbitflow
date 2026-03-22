@@ -7,6 +7,8 @@ const secret = new TextEncoder().encode(
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isAdminApiRoute = pathname.startsWith('/api/admin')
 
   // Public paths, no auth required.
   if (
@@ -33,6 +35,16 @@ export default async function proxy(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secret)
+    const role = (payload as { role?: unknown }).role
+
+    if ((isAdminPageRoute || isAdminApiRoute) && role === 'member') {
+      if (isAdminApiRoute) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
     const headers = new Headers(request.headers)
     headers.set('x-user-id', payload.sub as string)
     const sessionId = (payload as { sid?: unknown }).sid

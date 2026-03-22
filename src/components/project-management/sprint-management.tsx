@@ -79,6 +79,7 @@ const INITIAL_FORM: IterationForm = {
 export function SprintManagement() {
   const {
     currentProject,
+    currentProjectPermissions,
     issues,
     iterations,
     setIterations,
@@ -88,6 +89,7 @@ export function SprintManagement() {
 
   const [form, setForm] = useState<IterationForm>(INITIAL_FORM)
   const [isLoading, setIsLoading] = useState(false)
+  const canManageSprints = currentProjectPermissions.includes('sprint:manage')
 
   const sortedIterations = useMemo(() => {
     return [...iterations].sort((left, right) => {
@@ -130,6 +132,11 @@ export function SprintManagement() {
 
   const handleSave = async () => {
     if (!currentProject || !form.name.trim()) {
+      return
+    }
+
+    if (!canManageSprints) {
+      toast.error('You do not have permission to manage iterations')
       return
     }
 
@@ -205,6 +212,11 @@ export function SprintManagement() {
   }
 
   const handleQuickStatusChange = async (iterationId: string, status: string) => {
+    if (!canManageSprints) {
+      toast.error('You do not have permission to manage iterations')
+      return
+    }
+
     try {
       const response = await fetch(`/api/iterations/${iterationId}`, {
         method: 'PUT',
@@ -232,6 +244,11 @@ export function SprintManagement() {
   }
 
   const handleDelete = async (iterationId: string) => {
+    if (!canManageSprints) {
+      toast.error('You do not have permission to manage iterations')
+      return
+    }
+
     if (
       !confirm('Are you sure you want to delete this iteration? Assigned work items will lose their iteration.')
     ) {
@@ -414,7 +431,7 @@ export function SprintManagement() {
               <Button
                 className="w-full h-8 text-xs"
                 onClick={handleSave}
-                disabled={isLoading || !form.name.trim()}
+                disabled={isLoading || !form.name.trim() || !canManageSprints}
               >
                 {form.id ? (
                   <>

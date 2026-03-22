@@ -837,147 +837,185 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <header className="border-b border-border bg-background px-4 py-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:overflow-x-auto">
-          <Badge variant="outline" className="shrink-0 font-mono">{issue.key}</Badge>
-          <Badge variant="secondary" className="h-8 shrink-0 px-3 text-xs font-medium">
-            {activeTypeDefinition?.name ?? issue.workItemType}
-          </Badge>
-          <div className="min-w-[180px] flex-1 md:min-w-0">
-            <Input
-              value={draft.title}
-              onChange={(event) =>
-                setDraft((previous) => ({ ...previous, title: event.target.value }))
-              }
-              disabled={!canUpdate || isSaving}
-              className="h-8"
-              placeholder="Work item title"
-            />
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <Button
-              size="sm"
-              className="h-8"
-              disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()}
-              onClick={() => void handleSave()}
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => void handleCopyLink()}
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy link
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!canDelete}
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => void handleDelete()}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete work item
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-          <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">State</Label>
-            <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="State" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                {context.states.map((state) => <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+    <div className="flex h-full flex-col bg-[linear-gradient(to_bottom,_hsl(var(--card)),_hsl(var(--background)))]">
+      <header className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:overflow-x-auto">
+            <Badge variant="default" className="h-8 shrink-0 rounded-lg px-3 text-xs font-medium">
+              {activeTypeDefinition?.name ?? issue.workItemType}
+            </Badge>
+            <div className="min-w-[220px] flex-1 md:min-w-0">
+              <Input
+                value={draft.title}
+                onChange={(event) =>
+                  setDraft((previous) => ({ ...previous, title: event.target.value }))
+                }
+                disabled={!canUpdate || isSaving}
+                className="h-10 border-border/70 bg-background text-[15px] font-medium tracking-tight"
+                placeholder="Work item title"
+              />
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                className="h-9 px-4"
+                disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()}
+                onClick={() => void handleSave()}
+              >
+                {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    aria-label="More options"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => void handleCopyLink()}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!canDelete}
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => void handleDelete()}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete work item
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Assigned To</Label>
-            <Select value={draft.assigneeId} onValueChange={(value) => setDraft((previous) => ({ ...previous, assigneeId: value }))} disabled={!canAssign || isSaving}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="Assignee" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                {context.users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          <div className="w-full overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
+            <div className="grid grid-cols-1 divide-y divide-border/50 sm:grid-cols-2 sm:divide-x xl:grid-cols-5 xl:divide-y-0">
 
-          <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Area Path</Label>
-            <Select value={draft.areaId} onValueChange={(value) => setDraft((previous) => ({ ...previous, areaId: value }))} disabled={!canUpdate || isSaving}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="Area" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                {context.areas.map((area) => <SelectItem key={area.id} value={area.id}>{area.path || area.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+              {/* State */}
+              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
+                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+                  State
+                </Label>
+                <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
+                    {context.states.map((state) => (
+                      <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Sprint Team</Label>
-            <Select
-              value={selectedIterationTeamId}
-              onValueChange={setSelectedIterationTeamId}
-              disabled={!canUpdate || isSaving}
-            >
-              <SelectTrigger className="h-8"><SelectValue placeholder="All teams" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNASSIGNED_VALUE}>All teams</SelectItem>
-                {sortedTeams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+              {/* Assigned To */}
+              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
+                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+                  Assigned To
+                </Label>
+                <Select value={draft.assigneeId} onValueChange={(value) => setDraft((previous) => ({ ...previous, assigneeId: value }))} disabled={!canAssign || isSaving}>
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                    <SelectValue placeholder="Assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                    {context.users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-1">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Iteration Path</Label>
-            <Select value={draft.iterationId} onValueChange={(value) => setDraft((previous) => ({ ...previous, iterationId: value }))} disabled={!canUpdate || isSaving}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="Iteration" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                {filteredIterations.map((iteration) => <SelectItem key={iteration.id} value={iteration.id}>{formatIterationLabel(iteration)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {selectedIterationTeamId === UNASSIGNED_VALUE ? (
-              <p className="text-[11px] text-muted-foreground">
-                Select a sprint team to assign this work item to a sprint.
-              </p>
-            ) : null}
+              {/* Area Path */}
+              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
+                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+                  Area Path
+                </Label>
+                <Select value={draft.areaId} onValueChange={(value) => setDraft((previous) => ({ ...previous, areaId: value }))} disabled={!canUpdate || isSaving}>
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                    <SelectValue placeholder="Area" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
+                    {context.areas.map((area) => (
+                      <SelectItem key={area.id} value={area.id}>{area.path || area.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sprint Team */}
+              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
+                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+                  Sprint Team
+                </Label>
+                <Select value={selectedIterationTeamId} onValueChange={setSelectedIterationTeamId} disabled={!canUpdate || isSaving}>
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                    <SelectValue placeholder="All teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_VALUE}>All teams</SelectItem>
+                    {sortedTeams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Iteration Path */}
+              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
+                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+                  Iteration Path
+                </Label>
+                <Select value={draft.iterationId} onValueChange={(value) => setDraft((previous) => ({ ...previous, iterationId: value }))} disabled={!canUpdate || isSaving}>
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                    <SelectValue placeholder="Iteration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
+                    {filteredIterations.map((iteration) => (
+                      <SelectItem key={iteration.id} value={iteration.id}>{formatIterationLabel(iteration)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedIterationTeamId === UNASSIGNED_VALUE ? (
+                  <p className="mt-2 pl-1 text-[11px] leading-tight text-muted-foreground/80">
+                    Select a sprint team to assign this work item to a sprint.
+                  </p>
+                ) : null}
+              </div>
+
+            </div>
           </div>
         </div>
       </header>
 
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_320px] xl:grid-cols-[minmax(0,2fr)_360px] 2xl:grid-cols-[minmax(0,2fr)_420px]">
-        <main className="min-h-0 overflow-y-auto p-4 space-y-4">
-          <section className="rounded-lg border border-border p-4 space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Description</Label>
+        <main className="min-h-0 space-y-3 overflow-y-auto bg-muted/10 p-3 md:p-4">
+          <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Description</Label>
+            </div>
             <Textarea
               value={draft.description}
               onChange={(event) => setDraft((previous) => ({ ...previous, description: event.target.value }))}
               rows={6}
-              className="resize-y"
+              className="resize-y border-border/70 bg-background"
               disabled={!canUpdate || isSaving}
               placeholder="Describe the work item"
             />
           </section>
 
           {nonPlanningSections.length > 0 && (
-            <section className="rounded-lg border border-border p-4">
+            <section className="rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
               <DynamicWorkItemFields
                 sections={nonPlanningSections}
                 values={draft.customFields}
@@ -994,9 +1032,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               />
             </section>
           )}
-          <section className="rounded-lg border border-border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Discussion</Label>
+          <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Discussion</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Comments, mentions, and delivery clarifications stay attached to this work item.</p>
+              </div>
               {loadingComments && comments === null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             </div>
             {comments && comments.length > 0 ? (
@@ -1005,14 +1046,14 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   const isEditing = editingCommentId === comment.id
                   const canManageComment = viewer?.id === comment.author.id || canModerateComments
                   return (
-                    <div key={comment.id} className="rounded-lg border border-border p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Avatar className="h-6 w-6">
+                    <div key={comment.id} className="rounded-xl border border-border/70 bg-background p-3.5">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Avatar className="h-7 w-7">
                           <AvatarImage src={comment.author.avatar || undefined} />
                           <AvatarFallback className="text-[10px]">{comment.author.name.split(' ').map((value) => value[0]).join('').toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{comment.author.name}</div>
+                          <div className="truncate text-sm font-medium">{comment.author.name}</div>
                           <div className="text-[11px] text-muted-foreground">{getRelativeTime(comment.createdAt)}</div>
                         </div>
                         {canManageComment ? (
@@ -1029,9 +1070,9 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                       </div>
                       {isEditing ? (
                         <div className="space-y-2">
-                          <Textarea ref={editingCommentRef} rows={3} value={editingCommentContent} onChange={(event) => { setEditingCommentContent(event.target.value); setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? editingCommentContent.length)} />
+                          <Textarea ref={editingCommentRef} rows={3} className="border-border/70 bg-background" value={editingCommentContent} onChange={(event) => { setEditingCommentContent(event.target.value); setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setEditingCommentSelectionStart(event.currentTarget.selectionStart ?? editingCommentContent.length)} />
                           {editingMentionContext && mentionCandidates.length > 0 ? (
-                            <div className="rounded border border-border">
+                            <div className="rounded-lg border border-border/70 bg-card">
                               {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-mention focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => insertMention(candidate.id, candidate.name, 'edit')}>{candidate.name}</button>)}
                             </div>
                           ) : null}
@@ -1048,25 +1089,25 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             ) : loadingComments ? (
               <div className="text-sm text-muted-foreground">Loading comments...</div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground flex items-center gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/80 bg-background/70 p-6 text-sm text-muted-foreground">
                 <MessageSquare className="h-4 w-4" />
                 No comments yet.
               </div>
             )}
             {commentsCursor ? (
-              <Button variant="outline" size="sm" className="w-full" disabled={loadingComments} onClick={() => void loadComments(commentsCursor)}>
+              <Button variant="outline" size="sm" className="h-9 w-full" disabled={loadingComments} onClick={() => void loadComments(commentsCursor)}>
                 Load more comments
               </Button>
             ) : null}
-            <section className="rounded-lg border border-border p-3 space-y-2">
-              <Textarea ref={newCommentRef} value={newComment} rows={3} disabled={!canComment} onChange={(event) => { setNewComment(event.target.value); setNewCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setNewCommentSelectionStart(event.currentTarget.selectionStart ?? newComment.length)} placeholder={canComment ? 'Write a comment. Use @ to mention teammates.' : 'No comment permission'} />
+            <section className="space-y-2 rounded-xl border border-border/70 bg-background p-3">
+              <Textarea ref={newCommentRef} value={newComment} rows={3} className="border-border/70 bg-background" disabled={!canComment} onChange={(event) => { setNewComment(event.target.value); setNewCommentSelectionStart(event.currentTarget.selectionStart ?? event.target.value.length) }} onSelect={(event) => setNewCommentSelectionStart(event.currentTarget.selectionStart ?? newComment.length)} placeholder={canComment ? 'Write a comment. Use @ to mention teammates.' : 'No comment permission'} />
               {commentMentionContext && mentionCandidates.length > 0 ? (
-                <div className="rounded border border-border">
+                <div className="rounded-lg border border-border/70 bg-card">
                   {mentionCandidates.map((candidate) => <button key={candidate.id} type="button" className="w-full text-left px-2 py-1.5 hover:bg-accent text-xs text-mention focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => insertMention(candidate.id, candidate.name, 'new')}>{candidate.name}</button>)}
                 </div>
               ) : null}
               <div className="flex justify-end">
-                <Button size="sm" className="gap-1.5" onClick={() => void handleAddComment()} disabled={!canComment || !newComment.trim()}>
+                <Button size="sm" className="h-9 gap-1.5 px-4" onClick={() => void handleAddComment()} disabled={!canComment || !newComment.trim()}>
                   <Send className="h-3.5 w-3.5" />
                   Add comment
                 </Button>
@@ -1074,19 +1115,19 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             </section>
           </section>
         </main>
-        <aside className="min-h-0 border-t lg:border-t-0 lg:border-l border-border overflow-y-auto">
-          <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="h-full flex flex-col">
-            <div className="px-4 pt-4">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="general">General</TabsTrigger>
-                <TabsTrigger value="attachments">Files</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
+        <aside className="min-h-0 overflow-y-auto border-t border-border/70 bg-muted/10 lg:border-l lg:border-t-0">
+          <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="flex h-full flex-col">
+            <div className="border-b border-border/60 px-3 pt-3 md:px-4 md:pt-4">
+              <TabsList className="grid h-auto w-full grid-cols-3 rounded-xl bg-muted/25 p-1">
+                <TabsTrigger value="general" className="h-8 rounded-lg text-xs font-medium">General</TabsTrigger>
+                <TabsTrigger value="attachments" className="h-8 rounded-lg text-xs font-medium">Files</TabsTrigger>
+                <TabsTrigger value="history" className="h-8 rounded-lg text-xs font-medium">History</TabsTrigger>
               </TabsList>
             </div>
 
-            <TabsContent value="general" className="m-0 p-4 space-y-4 overflow-y-auto">
+            <TabsContent value="general" className="m-0 space-y-3 overflow-y-auto p-3 md:p-4">
               {planningSections.length > 0 ? (
-                <section className="rounded-lg border border-border p-3 space-y-3">
+                <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                   <DynamicWorkItemFields
                     sections={planningSections}
                     values={draft.customFields}
@@ -1104,13 +1145,16 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 </section>
               ) : null}
 
-              <section className="rounded-lg border border-border p-3 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">System</div>
+              <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">System</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Track sizing, effort, and execution details tied to this work item.</div>
+                </div>
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Priority</span>
                     <Select value={draft.priority} onValueChange={(value) => setDraft((previous) => ({ ...previous, priority: value as Issue['priority'] }))} disabled={!canUpdate || isSaving}>
-                      <SelectTrigger className="h-7 w-24"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-28 border-border/70 bg-background text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="lowest">Lowest</SelectItem>
                         <SelectItem value="low">Low</SelectItem>
@@ -1122,27 +1166,27 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Story Points</span>
-                    <Input className="h-7 w-24 text-right" value={draft.storyPoints} onChange={(event) => { const v = event.target.value.replace(/[^0-9]/g, ''); setDraft((previous) => ({ ...previous, storyPoints: v })) }} disabled={!canUpdate || isSaving} inputMode="numeric" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.storyPoints} onChange={(event) => { const v = event.target.value.replace(/[^0-9]/g, ''); setDraft((previous) => ({ ...previous, storyPoints: v })) }} disabled={!canUpdate || isSaving} inputMode="numeric" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Estimated Hours</span>
-                    <Input className="h-7 w-24 text-right" value={draft.estimatedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, estimatedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.estimatedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, estimatedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Remaining Hours</span>
-                    <Input className="h-7 w-24 text-right" value={draft.remainingHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, remainingHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.remainingHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, remainingHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Completed Hours</span>
-                    <Input className="h-7 w-24 text-right" value={draft.completedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.completedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                 </div>
               </section>
             </TabsContent>
 
-            <TabsContent value="attachments" className="m-0 p-4 space-y-3 overflow-y-auto">
+            <TabsContent value="attachments" className="m-0 space-y-3 overflow-y-auto p-3 md:p-4">
               {canUpdate && (
-                <div className="space-y-2">
+                <div className="space-y-2 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1156,7 +1200,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full gap-2 border-dashed"
+                    className="h-9 w-full gap-2 border-dashed"
                     disabled={uploadingAttachment}
                     onClick={() => fileInputRef.current?.click()}
                   >
@@ -1170,7 +1214,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               ) : attachments && attachments.length > 0 ? (
                 <div className="space-y-2">
                   {attachments.map((att) => (
-                    <div key={att.id} className="rounded-lg border border-border p-3">
+                    <div key={att.id} className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                       <div className="flex items-center gap-2">
                         <FileIcon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
@@ -1197,20 +1241,20 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/80 bg-card/50 p-6 text-sm text-muted-foreground">
                   <Paperclip className="h-4 w-4" />
                   No attachments yet.
                 </div>
               )}
             </TabsContent>
 
-            <TabsContent value="history" className="m-0 p-4 space-y-3 overflow-y-auto">
+            <TabsContent value="history" className="m-0 space-y-3 overflow-y-auto p-3 md:p-4">
               {loadingHistory && history === null ? (
                 <div className="text-sm text-muted-foreground">Loading history...</div>
               ) : history && history.length > 0 ? (
                 <div className="space-y-2">
                   {history.map((activity) => (
-                    <div key={activity.id} className="rounded-lg border border-border p-3">
+                    <div key={activity.id} className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                       <div className="flex items-center gap-2 text-sm">
                         <Avatar className="h-5 w-5">
                           <AvatarImage src={activity.user.avatar || undefined} />
@@ -1224,13 +1268,13 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground flex items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/80 bg-card/50 p-6 text-sm text-muted-foreground">
                   <Clock3 className="h-4 w-4" />
                   No history entries yet.
                 </div>
               )}
               {historyCursor ? (
-                <Button variant="outline" size="sm" className="w-full" disabled={loadingHistory} onClick={() => void loadHistory(historyCursor)}>
+                <Button variant="outline" size="sm" className="h-9 w-full" disabled={loadingHistory} onClick={() => void loadHistory(historyCursor)}>
                   Load more history
                 </Button>
               ) : null}

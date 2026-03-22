@@ -25,10 +25,10 @@ export async function POST(request: NextRequest) {
 
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, isActive: true },
     })
 
-    if (user) {
+    if (user?.isActive) {
       const { code } = await createPasswordResetOtp(normalizedEmail, user.id)
 
       const email = buildPasswordResetEmail({

@@ -7,6 +7,9 @@ import {
   requireSystemAdmin,
 } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
+import { buildUserOnboardingEmail } from '@/lib/domain/email-templates'
+import { isSmtpConfigured } from '@/lib/email'
+import { enqueueEmail } from '@/lib/email-queue'
 import { z } from 'zod'
 
 const createUserSchema = z.object({
@@ -47,6 +50,7 @@ export async function GET(request: NextRequest) {
 
       const users = await db.user.findMany({
         where: {
+          isActive: true,
           id: { notIn: excludeIds },
           ...(search
             ? {
@@ -80,7 +84,14 @@ export async function GET(request: NextRequest) {
       if (!permission.ok) return permission.response
 
       const members = await db.projectMember.findMany({
-        where: { projectId },
+        where: {
+          projectId,
+          user: {
+            is: {
+              isActive: true,
+            },
+          },
+        },
         orderBy: { user: { name: 'asc' } },
         select: {
           role: true,
@@ -106,6 +117,7 @@ export async function GET(request: NextRequest) {
 
     if (auth.user.globalRole === 'admin') {
       const users = await db.user.findMany({
+        where: { isActive: true },
         orderBy: { name: 'asc' },
         select: {
           id: true,
@@ -131,6 +143,8 @@ export async function POST(request: NextRequest) {
     const data = createUserSchema.parse(body)
     const normalizedEmail = data.email.trim().toLowerCase()
     const shouldAddToProject = Boolean(data.addToProject)
+    const loginUrl = new URL('/login', request.url).toString()
+    let assignedProjectName: string | null = null
 
     if (shouldAddToProject) {
       if (!data.projectId) {
@@ -184,6 +198,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (shouldAddToProject && data.projectId) {
+      const project = await db.project.findUnique({
+        where: { id: data.projectId },
+        select: { id: true, name: true },
+      })
+
+      if (!project) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+      }
+
       await db.projectMember.create({
         data: {
           projectId: data.projectId,
@@ -192,10 +215,40 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      assignedProjectName = project.name
       await invalidateProjectCaches(data.projectId)
     }
 
-    return NextResponse.json(user, { status: 201 })
+    let emailDelivery:
+      | { status: 'queued'; message: string }
+      | { status: 'skipped'; message: string }
+      | { status: 'failed'; message: string } = isSmtpConfigured()
+      ? { status: 'queued', message: 'Onboarding email queued.' }
+      : { status: 'skipped', message: 'SMTP not configured; onboarding email not sent.' }
+
+    if (isSmtpConfigured()) {
+      try {
+        const email = buildUserOnboardingEmail({
+          userName: user.name,
+          temporaryPassword: data.password,
+          loginUrl,
+          projectName: assignedProjectName,
+        })
+
+        await enqueueEmail({
+          to: user.email,
+          ...email,
+        })
+      } catch (error) {
+        console.error('Failed to queue onboarding email:', error)
+        emailDelivery = {
+          status: 'failed',
+          message: 'User created, but onboarding email could not be queued.',
+        }
+      }
+    }
+
+    return NextResponse.json({ ...user, emailDelivery }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

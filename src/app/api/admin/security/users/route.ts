@@ -19,13 +19,15 @@ export async function GET(request: NextRequest) {
             ],
           }
         : undefined,
-      orderBy: { name: 'asc' },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
       select: {
         id: true,
         name: true,
         email: true,
         avatar: true,
         globalRole: true,
+        isActive: true,
+        deactivatedAt: true,
         mfaEnabled: true,
         mfaEnabledAt: true,
         mfaReenrollRequired: true,
