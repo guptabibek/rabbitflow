@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,7 +18,7 @@ import {
   UserPlus,
   Shield,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LabelsManagement,
   MemberManagement,
@@ -51,7 +50,6 @@ const NAV_ITEMS = [
 ]
 
 export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
-  const router = useRouter()
   const {
     currentProject,
     currentProjectPermissions,
@@ -61,6 +59,24 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const can = (permission: string) => currentProjectPermissions.includes(permission)
+  const isSettingsView =
+    currentView === 'admin-panel' ||
+    currentView === 'work-item-types' ||
+    currentView === 'teams' ||
+    currentView === 'admin-security'
+
+  useEffect(() => {
+    if (currentProject && isSettingsView) {
+      setSettingsOpen(true)
+    }
+  }, [currentProject, isSettingsView])
+
+  const settingsItemClass = (active = false) =>
+    `w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+      active
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm'
+        : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+    }`
 
   return (
     <div className="w-52 flex flex-col h-full bg-sidebar">
@@ -102,7 +118,12 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
 
             <button
               onClick={() => setSettingsOpen((v) => !v)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] font-medium text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+              aria-expanded={settingsOpen}
+              className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors ${
+                settingsOpen || isSettingsView
+                  ? 'bg-sidebar-accent/60 text-sidebar-foreground'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+              }`}
             >
               <Settings className="h-3.5 w-3.5 flex-shrink-0" />
               Project Settings
@@ -112,11 +133,11 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
             </button>
 
             {settingsOpen && (
-              <div className="ml-3.5 space-y-px">
+              <div className="ml-3.5 space-y-1 rounded-xl border border-sidebar-border/70 bg-sidebar-accent/20 p-1.5">
                 {can('workitem:update') && (
                   <LabelsManagement
                     trigger={
-                      <button className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-[13px] text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors">
+                      <button className={settingsItemClass()}>
                         <Tags className="h-3.5 w-3.5 flex-shrink-0" />
                         Labels
                       </button>
@@ -126,11 +147,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                 {can('masterdata:manage') && (
                   <button
                     onClick={() => onViewChange('admin-panel')}
-                    className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[13px] transition-colors ${
-                      currentView === 'work-item-types' || currentView === 'admin-panel'
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                    }`}
+                    className={settingsItemClass(currentView === 'work-item-types' || currentView === 'admin-panel')}
                   >
                     <Layers className="h-3.5 w-3.5 flex-shrink-0" />
                     Admin Panel
@@ -139,11 +156,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                 {can('project:members:manage') && (
                   <button
                     onClick={() => onViewChange('teams')}
-                    className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[13px] transition-colors ${
-                      currentView === 'teams'
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                    }`}
+                    className={settingsItemClass(currentView === 'teams')}
                   >
                     <Users className="h-3.5 w-3.5 flex-shrink-0" />
                     Teams
@@ -152,7 +165,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                 {can('project:members:manage') && (
                   <MemberManagement
                     trigger={
-                      <button className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-[13px] text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors">
+                      <button className={settingsItemClass()}>
                         <UserPlus className="h-3.5 w-3.5 flex-shrink-0" />
                         Members
                       </button>
@@ -162,11 +175,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                 {currentUser?.globalRole === 'admin' && (
                   <button
                     onClick={() => onViewChange('admin-security')}
-                    className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[13px] transition-colors ${
-                      currentView === 'admin-security'
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                        : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                    }`}
+                    className={settingsItemClass(currentView === 'admin-security')}
                   >
                     <Shield className="h-3.5 w-3.5 flex-shrink-0" />
                     Admin Security

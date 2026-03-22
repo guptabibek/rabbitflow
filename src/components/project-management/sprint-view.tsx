@@ -232,18 +232,18 @@ function DraggableCard({ issue, onClick }: { issue: Issue; onClick: () => void }
 function DroppableColumn({ id, label, color, count, children }: { id: string; label: string; color: string; count: number; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id, data: { type: 'column' } })
   return (
-    <div ref={setNodeRef} className={`flex-1 min-w-[260px] max-w-[340px] rounded-xl border transition-all duration-150 ${isOver ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-lg' : 'bg-muted/10 border-border/50'}`}>
-      <div className="p-3.5 border-b flex items-center gap-2.5">
+    <div ref={setNodeRef} className={`flex h-full min-h-[26rem] w-[min(340px,78vw)] flex-shrink-0 flex-col overflow-hidden rounded-2xl border bg-card/80 shadow-sm backdrop-blur transition-all duration-150 ${isOver ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/15 shadow-lg' : 'border-border/60 hover:border-border/90'}`}>
+      <div className="flex items-center gap-2.5 border-b border-border/70 px-4 py-3.5">
         <div className={`h-2.5 w-2.5 rounded-full ${color}`} />
         <span className="font-semibold text-sm">{label}</span>
         <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-[10px] tabular-nums">{count}</Badge>
       </div>
-      <ScrollArea className="h-[calc(100vh-400px)]">
-        <div className="p-2.5 min-h-[80px]">
+      <ScrollArea className="h-[calc(100vh-26rem)] min-h-[22rem]">
+        <div className="min-h-[8rem] space-y-3 p-3">
           {children}
           {count === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/40">
-              <div className="h-8 w-8 rounded-lg border-2 border-dashed border-muted-foreground/20 flex items-center justify-center mb-2">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-muted/20 py-10 text-muted-foreground/50">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/20 bg-background/70">
                 <Plus className="h-3.5 w-3.5" />
               </div>
               <p className="text-[11px]">Drop items here</p>
@@ -251,6 +251,46 @@ function DroppableColumn({ id, label, color, count, children }: { id: string; la
           )}
         </div>
       </ScrollArea>
+    </div>
+  )
+}
+
+function SprintMetricCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = 'default',
+}: {
+  label: string
+  value: React.ReactNode
+  hint?: React.ReactNode
+  icon: React.ElementType
+  tone?: 'default' | 'positive' | 'warning' | 'danger'
+}) {
+  const toneClasses =
+    tone === 'positive'
+      ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
+      : tone === 'warning'
+        ? 'border-amber-500/20 bg-amber-500/[0.07]'
+        : tone === 'danger'
+          ? 'border-destructive/20 bg-destructive/[0.06]'
+          : 'border-border/70 bg-card/80'
+
+  return (
+    <div className={`rounded-2xl border px-4 py-4 shadow-sm backdrop-blur ${toneClasses}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {label}
+          </p>
+          <div className="mt-2 text-xl font-semibold tracking-tight text-foreground">{value}</div>
+          {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
+        </div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/80">
+          <Icon className="h-4.5 w-4.5 text-primary" />
+        </div>
+      </div>
     </div>
   )
 }
@@ -781,585 +821,649 @@ export function SprintView() {
     sprintIssues.length === 0
 
   const dragActiveIssue = dragActiveId ? sprintIssues.find((i) => i.id === dragActiveId) : null
+  const selectedTeamName =
+    selectedTeamId === ALL_TEAMS_VALUE
+      ? 'All Teams'
+      : sprintTeams.find((team) => team.id === selectedTeamId)?.name ?? 'Team'
+  const totalCapacityHours = Math.round(capacityData?.totals.totalCapacity ?? 0)
+  const plannedHours = Math.round(capacityData?.totals.totalAssignedEstimatedHours ?? 0)
+  const netAvailabilityHours = totalCapacityHours - plannedHours
+  const assignedItemsCount = capacityData?.totals.totalAssignedItems ?? sprintIssues.length
+  const assignedPoints = capacityData?.totals.totalAssignedPoints ?? analytics?.stats.totalPoints ?? 0
+  const capacityUtilizationPercent =
+    totalCapacityHours > 0
+      ? Math.min(100, Math.round((plannedHours / totalCapacityHours) * 100))
+      : plannedHours > 0
+        ? 100
+        : 0
+  const overloadedMembers =
+    capacityData?.capacities.filter((entry) => entry.assignedEstimatedHours > entry.totalCapacity).length ?? 0
+  const sprintDateLabel =
+    selectedSprint?.startDate && selectedSprint?.endDate
+      ? `${format(new Date(selectedSprint.startDate), 'MMM d')} - ${format(new Date(selectedSprint.endDate), 'MMM d, yyyy')}`
+      : 'Sprint dates not set'
+  const capacityTone: 'default' | 'positive' | 'warning' | 'danger' =
+    netAvailabilityHours < 0
+      ? 'danger'
+      : capacityUtilizationPercent >= 90
+        ? 'warning'
+        : 'positive'
 
   return (
-    <div className="flex flex-col h-full">
-      {/* ═══ Sprint Header ═══════════════════════════════════════════════ */}
-      <div className="sticky top-0 z-20 px-6 py-5 border-b bg-gradient-to-r from-background via-background to-muted/10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            {sprintTeams.length > 1 ? (
-              <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                <SelectTrigger className="w-[180px] h-10">
-                  <SelectValue placeholder="Team" />
+    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.06),_transparent_38%),linear-gradient(to_bottom,_hsl(var(--background)),_hsl(var(--background)))]">
+      <div className="sticky top-0 z-20 border-b border-border/70 bg-background/92 backdrop-blur-xl">
+        <div className="space-y-5 px-4 py-4 md:px-6 xl:px-8">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 space-y-3">
+              <div className="space-y-2">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+                  {selectedSprint?.name ?? (isAllTeamsMode ? 'Cross-team sprint planning' : 'Sprint planning')}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    {sprintDateLabel}
+                  </span>
+                  {selectedSprint?.goal ? (
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <Target className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span className="max-w-[42rem] truncate">{selectedSprint.goal}</span>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+              {sprintTeams.length > 1 ? (
+                <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                  <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/80 sm:w-[200px]">
+                    <SelectValue placeholder="Team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_TEAMS_VALUE}>All Teams</SelectItem>
+                    {sprintTeams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+
+              <Select
+                value={resolvedSelectedSprintId || ''}
+                onValueChange={setSelectedSprintId}
+                disabled={isAllTeamsMode || sprints.length === 0}
+              >
+                <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/80 text-sm font-semibold sm:w-[250px]">
+                  <SelectValue placeholder="Select Sprint" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_TEAMS_VALUE}>All Teams</SelectItem>
-                  {sprintTeams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
+                  {sprints.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      <span className="flex items-center gap-2">
+                        {s.name}
+                        {isActiveStatus(s.status) ? <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> : null}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            ) : null}
 
-            <Select
-              value={resolvedSelectedSprintId || ''}
-              onValueChange={setSelectedSprintId}
-              disabled={isAllTeamsMode || sprints.length === 0}
-            >
-              <SelectTrigger className="w-[240px] h-10 font-semibold text-base">
-                <SelectValue placeholder="Select Sprint" />
-              </SelectTrigger>
-              <SelectContent>
-                {sprints.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    <span className="flex items-center gap-2">
-                      {s.name}
-                      {isActiveStatus(s.status) && <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedSprint && (
-              <Badge variant={isActiveStatus(selectedSprint.status) ? 'default' : isClosedStatus(selectedSprint.status) ? 'secondary' : 'outline'} className="capitalize h-7 px-3">
-                {selectedSprint.status}
-              </Badge>
-            )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSprintModalOpen(true)}
+                className="h-11 gap-2 rounded-xl border-border/70 bg-background/80 px-4"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                Manage Sprints
+              </Button>
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setSprintModalOpen(true)} className="gap-1.5">
-            <Flag className="h-3.5 w-3.5" />Manage Sprints
-          </Button>
+
+          {isAllTeamsMode ? (
+            <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+              All Teams is an aggregate planning mode. Select a team to manage a sprint backlog, delivery board, and capacity plan.
+            </div>
+          ) : null}
         </div>
-        {isAllTeamsMode ? (
-          <p className="text-xs text-muted-foreground mb-3">
-            All Teams view is aggregate only. Select a team to open team-specific sprint backlog, board, and planning.
-          </p>
-        ) : null}
-        {selectedSprint && (
-          <div className="flex items-start gap-8">
-            <div className="flex-1 min-w-0 space-y-1.5">
-              {selectedSprint.goal && (
-                <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Target className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="truncate">{selectedSprint.goal}</span>
-                </p>
-              )}
-              {selectedSprint.startDate && selectedSprint.endDate && (
-                <p className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Calendar className="h-3 w-3" />
-                  {format(new Date(selectedSprint.startDate), 'MMM d')} – {format(new Date(selectedSprint.endDate), 'MMM d, yyyy')}
-                  {daysRemaining !== null && <Badge variant="outline" className="h-5 text-[10px] tabular-nums ml-1">{daysRemaining}d left</Badge>}
-                </p>
-              )}
-            </div>
-            {totalDays && (
-              <div className="w-44 shrink-0">
-                <div className="flex justify-between text-[11px] mb-1.5">
-                  <span className="text-muted-foreground">Timeline</span>
-                  <span className="font-medium tabular-nums">{Math.round((daysPassed / totalDays) * 100)}%</span>
-                </div>
-                <Progress value={(daysPassed / totalDays) * 100} className="h-1.5" />
-              </div>
-            )}
-            <div className="w-44 shrink-0">
-              <div className="flex justify-between text-[11px] mb-1.5">
-                <span className="text-muted-foreground">{analytics?.stats.completedItems ?? 0} / {analytics?.stats.totalItems ?? 0}</span>
-                <span className="font-medium tabular-nums">{progressPercent}%</span>
-              </div>
-              <Progress value={progressPercent} className="h-1.5" />
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-xl font-bold tabular-nums">{analytics?.stats.totalPoints ?? 0}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Story Points</div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ═══ Workspace Body ════════════════════════════════════════════════ */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-      <div className="min-w-0 flex-1">
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b px-6">
-          <TabsList className="h-11 bg-transparent p-0 gap-6">
-            {[
-              { value: 'overview', icon: Activity, label: 'Overview' },
-              { value: 'board', icon: KanbanSquare, label: 'Board' },
-              { value: 'backlog', icon: List, label: 'Backlog' },
-              { value: 'capacity', icon: Users, label: 'Capacity' },
-            ].map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}
-                className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2.5 text-sm">
-                <tab.icon className="h-3.5 w-3.5" /> {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-
-        {isAllTeamsMode ? (
-          <div className="flex-1 flex items-center justify-center p-8 text-center">
-            <div className="max-w-lg space-y-2">
-              <h3 className="text-lg font-semibold">All Teams Planning View</h3>
-              <p className="text-sm text-muted-foreground">
-                Sprint backlog, board, and capacity are team-scoped. Select a team from the top switcher to inspect and manage a specific sprint.
-              </p>
-            </div>
-          </div>
-        ) : showNoSprintsEmpty ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6">
-              <Zap className="h-10 w-10 text-primary/60" />
-            </div>
-            <h2 className="text-2xl font-bold mb-2">No Sprints For This Team</h2>
-            <p className="text-muted-foreground mb-8 max-w-md">
-              Create a sprint for the selected team to start planning backlog and capacity.
-            </p>
-            <Button size="lg" onClick={() => setSprintModalOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />Create Sprint
-            </Button>
-          </div>
-        ) : showLoadingSkeleton ? (
-          <div className="flex-1 p-6 flex gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex-1 min-w-[240px]">
-                <Skeleton className="h-11 w-full mb-4 rounded-xl" />
-                <Skeleton className="h-28 w-full mb-2 rounded-lg" />
-                <Skeleton className="h-28 w-full rounded-lg" />
+      <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 border-r border-border/60">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div className="border-b border-border/70 bg-background/65 px-4 md:px-6">
+              <div className="overflow-x-auto">
+                <TabsList className="h-auto w-max min-w-full justify-start gap-2 bg-transparent p-0 py-1">
+                  {[
+                    { value: 'overview', icon: Activity, label: 'Overview' },
+                    { value: 'board', icon: KanbanSquare, label: 'Board' },
+                    { value: 'backlog', icon: List, label: 'Backlog' },
+                    { value: 'capacity', icon: Users, label: 'Capacity' },
+                  ].map((tab) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="h-10 rounded-xl border border-transparent px-4 text-sm font-medium text-muted-foreground data-[state=active]:border-border/70 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <tab.icon className="h-3.5 w-3.5" />
+                        {tab.label}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
               </div>
-            ))}
-          </div>
-        ) : null}
+            </div>
 
-        {/* ─── OVERVIEW TAB ──────────────────────────────────────── */}
-        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('overview') && (
-        <TabsContent value="overview" className="flex-1 overflow-auto p-6 mt-0">
-          {analytics ? (
-            <div className="space-y-6 max-w-5xl">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard title="Total Items" value={analytics.stats.totalItems} icon={Hash} />
-                <StatCard title="Completed" value={analytics.stats.completedItems} icon={CheckCircle2} accent="text-emerald-400" />
-                <StatCard title="Remaining" value={analytics.stats.remainingItems} icon={TrendingDown} accent="text-amber-400" />
-                <StatCard title="Story Points" value={`${analytics.stats.completedPoints} / ${analytics.stats.totalPoints}`} icon={Zap} accent="text-indigo-400" />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                {analytics.burndown.length > 1 && (
-                  <Card className="lg:col-span-3">
-                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><TrendingDown className="h-4 w-4 text-primary" />Sprint Burndown</CardTitle></CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={260}>
-                        <AreaChart data={analytics.burndown}>
-                          <defs><linearGradient id="burndownGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                          <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis fontSize={10} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
-                          <RTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '11px' }} />
-                          <Area type="monotone" dataKey="ideal" stroke="#94a3b8" fill="none" strokeDasharray="6 3" strokeWidth={1.5} name="Ideal" />
-                          <Area type="monotone" dataKey="remaining" stroke="#6366f1" fill="url(#burndownGrad)" strokeWidth={2} name="Remaining" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                )}
-                <div className="lg:col-span-2 space-y-4">
-                  {analytics.byType.length > 0 && (
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">By Type</CardTitle></CardHeader>
-                      <CardContent><div className="space-y-2.5">
-                        {analytics.byType.map((t, idx) => {
-                          const pct = analytics.stats.totalItems > 0 ? Math.round((t.value / analytics.stats.totalItems) * 100) : 0
-                          return (<div key={t.name} className="flex items-center gap-3">
-                            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
-                            <span className="text-xs capitalize flex-1">{t.name}</span><span className="text-xs text-muted-foreground tabular-nums">{t.value}</span>
-                            <div className="w-16"><Progress value={pct} className="h-1" /></div>
-                          </div>)
-                        })}
-                      </div></CardContent>
-                    </Card>
-                  )}
-                  {analytics.byStatus.length > 0 && (
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">By Status</CardTitle></CardHeader>
-                      <CardContent><div className="space-y-2.5">
-                        {analytics.byStatus.map((s) => {
-                          const pct = analytics.stats.totalItems > 0 ? Math.round((s.value / analytics.stats.totalItems) * 100) : 0
-                          return (<div key={s.name}><div className="flex justify-between text-xs mb-1"><span className="capitalize">{s.name.replace(/_/g, ' ')}</span><span className="text-muted-foreground tabular-nums">{s.value} ({pct}%)</span></div><Progress value={pct} className="h-1.5" /></div>)
-                        })}
-                      </div></CardContent>
-                    </Card>
-                  )}
+            {isAllTeamsMode ? (
+              <div className="flex flex-1 items-center justify-center p-8 text-center md:p-12">
+                <div className="max-w-xl rounded-3xl border border-border/70 bg-card/70 px-8 py-10 shadow-sm">
+                  <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Users className="h-8 w-8" />
+                  </div>
+                  <h3 className="text-xl font-semibold tracking-tight">All Teams Planning View</h3>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    Team-specific backlog, board, and capacity editing are intentionally scoped. Choose a team above to enter a production planning workspace for that sprint.
+                  </p>
                 </div>
               </div>
-
-              {capacityData && (
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm font-medium flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Team Capacity Summary</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-3 rounded-lg bg-muted/30"><div className="text-2xl font-bold tabular-nums">{capacityData.totals.memberCount}</div><div className="text-[11px] text-muted-foreground">Team Members</div></div>
-                      <div className="text-center p-3 rounded-lg bg-muted/30"><div className="text-2xl font-bold tabular-nums">{Math.round(capacityData.totals.totalCapacity)}h</div><div className="text-[11px] text-muted-foreground">Total Capacity</div></div>
-                      <div className="text-center p-3 rounded-lg bg-muted/30"><div className="text-2xl font-bold tabular-nums">{capacityData.totals.totalAssignedPoints}</div><div className="text-[11px] text-muted-foreground">Assigned Points</div></div>
-                      <div className="text-center p-3 rounded-lg bg-muted/30"><div className="text-2xl font-bold tabular-nums">{capacityData.totals.totalAssignedItems}</div><div className="text-[11px] text-muted-foreground">Assigned Items</div></div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-64"><p className="text-muted-foreground text-sm">Loading analytics...</p></div>
-          )}
-        </TabsContent>
-        )}
-
-        {/* ─── BOARD TAB ──────────────────────────────────────────── */}
-        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('board') && (
-        <TabsContent value="board" className="flex-1 overflow-auto mt-0">
-          <div className="px-6 py-2.5 border-b bg-muted/20 flex items-center gap-3">
-            <span className="text-xs font-medium text-muted-foreground">Group by:</span>
-            <div className="flex gap-1">
-              {(['none', 'assignee', 'priority', 'story'] as GroupBy[]).map((g) => (
-                <Button key={g} variant={boardGroupBy === g ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2.5" onClick={() => setBoardGroupBy(g)}>
-                  {g === 'none' ? 'None' : g === 'story' ? 'Story' : g.charAt(0).toUpperCase() + g.slice(1)}
+            ) : showNoSprintsEmpty ? (
+              <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center md:px-10">
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary shadow-inner">
+                  <Zap className="h-9 w-9" />
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight">No sprints for this team</h2>
+                <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+                  Create a sprint to start planning backlog, delivery sequencing, and team capacity for {selectedTeamName}.
+                </p>
+                <Button size="lg" onClick={() => setSprintModalOpen(true)} className="mt-8 gap-2 rounded-xl px-5">
+                  <Plus className="h-4 w-4" />
+                  Create Sprint
                 </Button>
-              ))}
-            </div>
-            <div className="ml-auto text-xs text-muted-foreground tabular-nums">{sprintIssues.length} items / {analytics?.stats.totalPoints ?? 0} pts</div>
-          </div>
-          <div className="p-6">
-            {boardGroupBy === 'none' ? (
-              <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
-                <div className="flex gap-4 h-full">
-                  {boardColumns.map((col) => (
-                    <DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={col.issues.length}>
-                      {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
-                    </DroppableColumn>
+              </div>
+            ) : showLoadingSkeleton ? (
+              <div className="flex-1 p-4 md:p-6">
+                <div className="grid gap-4 xl:grid-cols-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
+                      <Skeleton className="mb-4 h-8 w-32 rounded-xl" />
+                      <Skeleton className="mb-3 h-28 w-full rounded-2xl" />
+                      <Skeleton className="h-28 w-full rounded-2xl" />
+                    </div>
                   ))}
                 </div>
-                <DragOverlay>{dragActiveIssue && (<div className="p-3 rounded-lg border bg-card shadow-2xl w-[280px] rotate-1 opacity-95"><SprintCardContent issue={dragActiveIssue} /></div>)}</DragOverlay>
-              </DndContext>
-            ) : (
-              <div className="space-y-6">
-                {groupIssues(sprintIssues, boardGroupBy).map((group) => (
-                  <div key={group.key}>
-                    <button className="flex items-center gap-2 mb-3 text-sm font-semibold hover:text-primary transition-colors" onClick={() => toggleGroup(`board-${group.key}`)}>
-                      {collapsedGroups.has(`board-${group.key}`) ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      {group.label}<Badge variant="secondary" className="text-[10px] h-5">{group.issues.length}</Badge>
-                    </button>
-                    {!collapsedGroups.has(`board-${group.key}`) && (
-                      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
-                        <div className="flex gap-4">
-                          {BOARD_COLUMNS.map((col) => {
-                            const colIssues = group.issues.filter((i) => i.status === col.id).sort((a, b) => a.columnOrder - b.columnOrder)
-                            return (<DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={colIssues.length}>
-                              {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
-                            </DroppableColumn>)
-                          })}
-                        </div>
-                        <DragOverlay>{dragActiveIssue && (<div className="p-3 rounded-lg border bg-card shadow-2xl w-[280px] rotate-1 opacity-95"><SprintCardContent issue={dragActiveIssue} /></div>)}</DragOverlay>
-                      </DndContext>
+              </div>
+            ) : null}
+
+            {/* ─── OVERVIEW TAB ──────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('overview') && (
+              <TabsContent value="overview" className="mt-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6">
+                {analytics ? (
+                  <div className="mx-auto max-w-6xl space-y-6">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <StatCard title="Total Items" value={analytics.stats.totalItems} icon={Hash} />
+                      <StatCard title="Completed" value={analytics.stats.completedItems} icon={CheckCircle2} accent="text-emerald-400" />
+                      <StatCard title="Remaining" value={analytics.stats.remainingItems} icon={TrendingDown} accent="text-amber-400" />
+                      <StatCard title="Story Points" value={`${analytics.stats.completedPoints} / ${analytics.stats.totalPoints}`} icon={Zap} accent="text-indigo-400" />
+                    </div>
+
+                    <div className="grid gap-4 xl:grid-cols-5">
+                      {analytics.burndown.length > 1 && (
+                        <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm xl:col-span-3">
+                          <CardHeader className="border-b border-border/60 pb-3">
+                            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                              <TrendingDown className="h-4 w-4 text-primary" />
+                              Sprint Burndown
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ResponsiveContainer width="100%" height={260}>
+                              <AreaChart data={analytics.burndown}>
+                                <defs><linearGradient id="burndownGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                                <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                <YAxis fontSize={10} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                <RTooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '11px' }} />
+                                <Area type="monotone" dataKey="ideal" stroke="#94a3b8" fill="none" strokeDasharray="6 3" strokeWidth={1.5} name="Ideal" />
+                                <Area type="monotone" dataKey="remaining" stroke="#6366f1" fill="url(#burndownGrad)" strokeWidth={2} name="Remaining" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </CardContent>
+                        </Card>
+                      )}
+                      <div className="space-y-4 xl:col-span-2">
+                        {analytics.byType.length > 0 && (
+                          <Card className="border-border/70 bg-card/80 shadow-sm">
+                            <CardHeader className="border-b border-border/60 pb-3"><CardTitle className="text-sm font-medium">By Type</CardTitle></CardHeader>
+                            <CardContent><div className="space-y-2.5">
+                              {analytics.byType.map((t, idx) => {
+                                const pct = analytics.stats.totalItems > 0 ? Math.round((t.value / analytics.stats.totalItems) * 100) : 0
+                                return (<div key={t.name} className="flex items-center gap-3">
+                                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
+                                  <span className="text-xs capitalize flex-1">{t.name}</span><span className="text-xs text-muted-foreground tabular-nums">{t.value}</span>
+                                  <div className="w-16"><Progress value={pct} className="h-1" /></div>
+                                </div>)
+                              })}
+                            </div></CardContent>
+                          </Card>
+                        )}
+                        {analytics.byStatus.length > 0 && (
+                          <Card className="border-border/70 bg-card/80 shadow-sm">
+                            <CardHeader className="border-b border-border/60 pb-3"><CardTitle className="text-sm font-medium">By Status</CardTitle></CardHeader>
+                            <CardContent><div className="space-y-2.5">
+                              {analytics.byStatus.map((s) => {
+                                const pct = analytics.stats.totalItems > 0 ? Math.round((s.value / analytics.stats.totalItems) * 100) : 0
+                                return (<div key={s.name}><div className="flex justify-between text-xs mb-1"><span className="capitalize">{s.name.replace(/_/g, ' ')}</span><span className="text-muted-foreground tabular-nums">{s.value} ({pct}%)</span></div><Progress value={pct} className="h-1.5" /></div>)
+                              })}
+                            </div></CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    </div>
+
+                    {capacityData && (
+                      <Card className="border-border/70 bg-card/80 shadow-sm">
+                        <CardHeader className="border-b border-border/60 pb-3"><CardTitle className="text-sm font-medium flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Capacity Signals</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{capacityData.totals.memberCount}</div><div className="mt-1 text-xs text-muted-foreground">Team members contributing capacity</div></div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{overloadedMembers}</div><div className="mt-1 text-xs text-muted-foreground">Members currently over capacity</div></div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className={`text-2xl font-semibold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-emerald-500'}`}>{Math.round(netAvailabilityHours)}h</div><div className="mt-1 text-xs text-muted-foreground">Net availability remaining</div></div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{Math.round(capacityData.totals.totalAssignedCompletedHours)}h</div><div className="mt-1 text-xs text-muted-foreground">Logged hours inside the sprint</div></div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     )}
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64"><p className="text-muted-foreground text-sm">Loading analytics...</p></div>
+                )}
+              </TabsContent>
             )}
-            {sprintIssues.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="h-12 w-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3"><KanbanSquare className="h-6 w-6 text-muted-foreground/40" /></div>
-                <p className="text-muted-foreground font-medium mb-1">No items in this sprint</p>
-                <p className="text-xs text-muted-foreground">Assign work items from the backlog</p>
-              </div>
-            )}
-          </div>
-        </TabsContent>
-        )}
 
-        {/* ─── BACKLOG TAB ────────────────────────────────────────── */}
-        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('backlog') && (
-        <TabsContent value="backlog" className="flex-1 overflow-auto mt-0">
-          <div className="px-6 py-2.5 border-b bg-muted/20 flex items-center gap-3">
-            <span className="text-xs font-medium text-muted-foreground">Group by:</span>
-            <div className="flex gap-1">
-              {(['none', 'story', 'status', 'assignee', 'priority'] as GroupBy[]).map((g) => (
-                <Button key={g} variant={backlogGroupBy === g ? 'secondary' : 'ghost'} size="sm" className="h-7 text-xs px-2.5" onClick={() => setBacklogGroupBy(g)}>
-                  {g === 'none' ? 'None' : g === 'story' ? 'Story' : g.charAt(0).toUpperCase() + g.slice(1)}
-                </Button>
-              ))}
-            </div>
-            <div className="ml-auto text-xs text-muted-foreground tabular-nums">{sprintIssues.length} items / {analytics?.stats.totalPoints ?? 0} pts</div>
-          </div>
-          <ScrollArea className="h-[calc(100vh-360px)]">
-            {backlogGroupBy === 'story' ? (
-              <div className="divide-y">
-                {storyBacklogData.storyGroups.map(({ parent, children }) => {
-                  const ParentIcon = TYPE_ICONS[parent.workItemType] || CheckCircle2
-                  const parentIconColor = TYPE_COLORS[parent.workItemType] || 'text-muted-foreground'
-                  const treeKey = `bl-story-${parent.id}`
-                  const isCollapsed = collapsedGroups.has(treeKey)
-                  const hasChildren = children.length > 0
-
-                  return (
-                    <div key={parent.id}>
-                      <div
-                        className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors"
-                        onClick={() => openWorkItem(parent.id)}
-                      >
-                        <button
-                          type="button"
-                          className="h-5 w-5 flex items-center justify-center text-muted-foreground"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            if (hasChildren) toggleGroup(treeKey)
-                          }}
-                          aria-label={hasChildren ? (isCollapsed ? 'Expand child tasks' : 'Collapse child tasks') : 'No child tasks'}
-                          aria-expanded={hasChildren ? !isCollapsed : undefined}
-                        >
-                          {hasChildren ? (
-                            isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
-                          ) : (
-                            <span className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                        <ParentIcon className={`h-4 w-4 shrink-0 ${parentIconColor}`} />
-                        <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{parent.key}</span>
-                        <span className="flex-1 text-sm truncate font-semibold">{parent.title}</span>
-                        <Badge className={`text-[10px] capitalize ${STATUS_BADGE[parent.status] || ''}`}>{parent.status.replace(/_/g, ' ')}</Badge>
-                        <Badge variant="secondary" className="text-[10px] h-5">{children.length} child{children.length === 1 ? '' : 'ren'}</Badge>
-                        <div className="w-10 text-right shrink-0">
-                          {parent.storyPoints != null && parent.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{parent.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
-                          onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(parent.id) }}><Minus className="h-3 w-3" /></Button>
+            {/* ─── BOARD TAB ──────────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('board') && (
+              <TabsContent value="board" className="flex-1 overflow-auto mt-0">
+                <div className="border-b border-border/70 bg-background/70 px-4 py-3 md:px-6">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Group by</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['none', 'assignee', 'priority', 'story'] as GroupBy[]).map((g) => (
+                          <Button key={g} variant={boardGroupBy === g ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-full px-3 text-xs" onClick={() => setBoardGroupBy(g)}>
+                            {g === 'none' ? 'None' : g === 'story' ? 'Story' : g.charAt(0).toUpperCase() + g.slice(1)}
+                          </Button>
+                        ))}
                       </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="h-7 rounded-full px-3 font-mono">{sprintIssues.length} items</Badge>
+                      <Badge variant="outline" className="h-7 rounded-full px-3 font-mono">{analytics?.stats.totalPoints ?? 0} pts</Badge>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 md:p-6">
+                  {boardGroupBy === 'none' ? (
+                    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+                      <div className="flex gap-4 overflow-x-auto pb-3">
+                        {boardColumns.map((col) => (
+                          <DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={col.issues.length}>
+                            {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
+                          </DroppableColumn>
+                        ))}
+                      </div>
+                      <DragOverlay>{dragActiveIssue && (<div className="p-3 rounded-lg border bg-card shadow-2xl w-[280px] rotate-1 opacity-95"><SprintCardContent issue={dragActiveIssue} /></div>)}</DragOverlay>
+                    </DndContext>
+                  ) : (
+                    <div className="space-y-6">
+                      {groupIssues(sprintIssues, boardGroupBy).map((group) => (
+                        <div key={group.key} className="rounded-2xl border border-border/60 bg-card/60 p-4 shadow-sm">
+                          <button className="mb-4 flex items-center gap-2 text-sm font-semibold transition-colors hover:text-primary" onClick={() => toggleGroup(`board-${group.key}`)}>
+                            {collapsedGroups.has(`board-${group.key}`) ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            {group.label}<Badge variant="secondary" className="text-[10px] h-5">{group.issues.length}</Badge>
+                          </button>
+                          {!collapsedGroups.has(`board-${group.key}`) && (
+                            <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+                              <div className="flex gap-4 overflow-x-auto pb-2">
+                                {BOARD_COLUMNS.map((col) => {
+                                  const colIssues = group.issues.filter((i) => i.status === col.id).sort((a, b) => a.columnOrder - b.columnOrder)
+                                  return (<DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={colIssues.length}>
+                                    {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
+                                  </DroppableColumn>)
+                                })}
+                              </div>
+                              <DragOverlay>{dragActiveIssue && (<div className="p-3 rounded-lg border bg-card shadow-2xl w-[280px] rotate-1 opacity-95"><SprintCardContent issue={dragActiveIssue} /></div>)}</DragOverlay>
+                            </DndContext>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {sprintIssues.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-64 text-center">
+                      <div className="h-12 w-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3"><KanbanSquare className="h-6 w-6 text-muted-foreground/40" /></div>
+                      <p className="text-muted-foreground font-medium mb-1">No items in this sprint</p>
+                      <p className="text-xs text-muted-foreground">Assign work items from the backlog</p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            )}
 
-                      {hasChildren && !isCollapsed ? (
-                        <div className="border-t bg-muted/10">
-                          {children.map((issue) => {
+            {/* ─── BACKLOG TAB ────────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('backlog') && (
+              <TabsContent value="backlog" className="flex-1 overflow-auto mt-0">
+                <div className="border-b border-border/70 bg-background/70 px-4 py-3 md:px-6">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Group by</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['none', 'story', 'status', 'assignee', 'priority'] as GroupBy[]).map((g) => (
+                          <Button key={g} variant={backlogGroupBy === g ? 'secondary' : 'ghost'} size="sm" className="h-8 rounded-full px-3 text-xs" onClick={() => setBacklogGroupBy(g)}>
+                            {g === 'none' ? 'None' : g === 'story' ? 'Story' : g.charAt(0).toUpperCase() + g.slice(1)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className="h-7 rounded-full px-3 font-mono">{sprintIssues.length} items</Badge>
+                      <Badge variant="outline" className="h-7 rounded-full px-3 font-mono">{analytics?.stats.totalPoints ?? 0} pts</Badge>
+                    </div>
+                  </div>
+                </div>
+                <ScrollArea className="h-[calc(100vh-24rem)] min-h-[22rem]">
+                  {backlogGroupBy === 'story' ? (
+                    <div className="divide-y divide-border/70">
+                      {storyBacklogData.storyGroups.map(({ parent, children }) => {
+                        const ParentIcon = TYPE_ICONS[parent.workItemType] || CheckCircle2
+                        const parentIconColor = TYPE_COLORS[parent.workItemType] || 'text-muted-foreground'
+                        const treeKey = `bl-story-${parent.id}`
+                        const isCollapsed = collapsedGroups.has(treeKey)
+                        const hasChildren = children.length > 0
+
+                        return (
+                          <div key={parent.id}>
+                            <div
+                              className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/20 md:px-6"
+                              onClick={() => openWorkItem(parent.id)}
+                            >
+                              <button
+                                type="button"
+                                className="h-5 w-5 flex items-center justify-center text-muted-foreground"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  if (hasChildren) toggleGroup(treeKey)
+                                }}
+                                aria-label={hasChildren ? (isCollapsed ? 'Expand child tasks' : 'Collapse child tasks') : 'No child tasks'}
+                                aria-expanded={hasChildren ? !isCollapsed : undefined}
+                              >
+                                {hasChildren ? (
+                                  isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+                                ) : (
+                                  <span className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                              <ParentIcon className={`h-4 w-4 shrink-0 ${parentIconColor}`} />
+                              <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{parent.key}</span>
+                              <span className="flex-1 text-sm truncate font-semibold">{parent.title}</span>
+                              <Badge className={`text-[10px] capitalize ${STATUS_BADGE[parent.status] || ''}`}>{parent.status.replace(/_/g, ' ')}</Badge>
+                              <Badge variant="secondary" className="text-[10px] h-5">{children.length} child{children.length === 1 ? '' : 'ren'}</Badge>
+                              <div className="w-10 text-right shrink-0">
+                                {parent.storyPoints != null && parent.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{parent.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(parent.id) }}><Minus className="h-3 w-3" /></Button>
+                            </div>
+
+                            {hasChildren && !isCollapsed ? (
+                              <div className="border-t border-border/60 bg-muted/10">
+                                {children.map((issue) => {
+                                  const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
+                                  const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
+                                  return (
+                                    <div key={issue.id} className="group flex items-center gap-3 py-3 pl-14 pr-4 transition-colors hover:bg-muted/20 md:pr-6" onClick={() => openWorkItem(issue.id)}>
+                                      <Icon className={`h-3.5 w-3.5 shrink-0 ${iconColor}`} />
+                                      <span className="font-mono text-[11px] text-muted-foreground w-20 shrink-0">{issue.key}</span>
+                                      <span className="flex-1 text-xs truncate font-medium">{issue.title}</span>
+                                      <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-[10px] opacity-0 group-hover:opacity-100"
+                                        aria-label="Remove parent link"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          void handleRemoveParentLink(issue.id)
+                                        }}
+                                      >
+                                        Unlink
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                                        onClick={(event) => { event.stopPropagation(); void handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+
+                      {storyBacklogData.standalone.length > 0 ? (
+                        <div>
+                          <div className="border-y border-border/60 bg-muted/20 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground md:px-6">Standalone Work</div>
+                          {storyBacklogData.standalone.map((issue) => {
                             const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
                             const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
                             return (
-                              <div key={issue.id} className="pl-14 pr-6 py-2.5 flex items-center gap-3 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
-                                <Icon className={`h-3.5 w-3.5 shrink-0 ${iconColor}`} />
-                                <span className="font-mono text-[11px] text-muted-foreground w-20 shrink-0">{issue.key}</span>
-                                <span className="flex-1 text-xs truncate font-medium">{issue.title}</span>
+                              <div key={issue.id} className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/20 md:px-6" onClick={() => openWorkItem(issue.id)}>
+                                <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
+                                <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
+                                <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
                                 <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px] opacity-0 group-hover:opacity-100"
-                                  aria-label="Remove parent link"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    void handleRemoveParentLink(issue.id)
-                                  }}
-                                >
-                                  Unlink
-                                </Button>
                                 <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
-                                  onClick={(event) => { event.stopPropagation(); void handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
                               </div>
                             )
                           })}
                         </div>
                       ) : null}
                     </div>
-                  )
-                })}
-
-                {storyBacklogData.standalone.length > 0 ? (
-                  <div>
-                    <div className="px-6 py-2 border-y bg-muted/30 text-xs font-semibold text-muted-foreground">Standalone Work</div>
-                    {storyBacklogData.standalone.map((issue) => {
-                      const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
-                      const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
-                      return (
-                        <div key={issue.id} className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
-                          <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
-                          <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
-                          <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
-                          <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
-                            onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              groupIssues(sprintIssues, backlogGroupBy).map((group) => (
-                <div key={group.key}>
-                  {backlogGroupBy !== 'none' && (
-                    <button className="w-full px-6 py-2 border-b bg-muted/30 flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => toggleGroup(`bl-${group.key}`)}>
-                      {collapsedGroups.has(`bl-${group.key}`) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      {group.label}<Badge variant="secondary" className="text-[10px] h-4 ml-1">{group.issues.length}</Badge>
-                      <span className="ml-auto tabular-nums">{group.issues.reduce((s, i) => s + (i.storyPoints || 0), 0)} pts</span>
-                    </button>
-                  )}
-                  {!collapsedGroups.has(`bl-${group.key}`) && (
-                    <div className="divide-y">
-                      {group.issues.map((issue) => {
-                        const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
-                        const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
-                        return (
-                          <div key={issue.id} className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30 cursor-pointer group transition-colors" onClick={() => openWorkItem(issue.id)}>
-                            <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
-                            <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
-                            <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
-                            <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
-                            <div className="w-24 shrink-0">
-                              {issue.assignee ? (
-                                <div className="flex items-center gap-1.5">
-                                  <Avatar className="h-5 w-5"><AvatarImage src={issue.assignee.avatar || undefined} /><AvatarFallback className="text-[8px]">{issue.assignee.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-                                  <span className="text-xs truncate">{issue.assignee.name.split(' ')[0]}</span>
+                  ) : (
+                    groupIssues(sprintIssues, backlogGroupBy).map((group) => (
+                      <div key={group.key} className="border-b border-border/60 last:border-b-0">
+                        {backlogGroupBy !== 'none' && (
+                          <button className="flex w-full items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground md:px-6"
+                            onClick={() => toggleGroup(`bl-${group.key}`)}>
+                            {collapsedGroups.has(`bl-${group.key}`) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            {group.label}<Badge variant="secondary" className="text-[10px] h-4 ml-1">{group.issues.length}</Badge>
+                            <span className="ml-auto tabular-nums">{group.issues.reduce((s, i) => s + (i.storyPoints || 0), 0)} pts</span>
+                          </button>
+                        )}
+                        {!collapsedGroups.has(`bl-${group.key}`) && (
+                          <div className="divide-y">
+                            {group.issues.map((issue) => {
+                              const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
+                              const iconColor = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
+                              return (
+                                <div key={issue.id} className="group flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/20 md:px-6" onClick={() => openWorkItem(issue.id)}>
+                                  <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
+                                  <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{issue.key}</span>
+                                  <span className="flex-1 text-sm truncate font-medium">{issue.title}</span>
+                                  <Badge className={`text-[10px] capitalize ${STATUS_BADGE[issue.status] || ''}`}>{issue.status.replace(/_/g, ' ')}</Badge>
+                                  <div className="w-24 shrink-0">
+                                    {issue.assignee ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <Avatar className="h-5 w-5"><AvatarImage src={issue.assignee.avatar || undefined} /><AvatarFallback className="text-[8px]">{issue.assignee.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+                                        <span className="text-xs truncate">{issue.assignee.name.split(' ')[0]}</span>
+                                      </div>
+                                    ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
+                                  </div>
+                                  <div className="w-10 text-right shrink-0">
+                                    {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                                  </div>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
                                 </div>
-                              ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
-                            </div>
-                            <div className="w-10 text-right shrink-0">
-                              {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
-                              onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
+                              )
+                            })}
                           </div>
-                        )
-                      })}
+                        )}
+                      </div>
+                    ))
+                  )}
+                  {sprintIssues.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <List className="h-8 w-8 text-muted-foreground/30 mb-3" /><p className="text-muted-foreground font-medium mb-1">Sprint backlog is empty</p><p className="text-xs text-muted-foreground">Go to the Backlog view and assign items</p>
                     </div>
                   )}
-                </div>
-              ))
+                </ScrollArea>
+              </TabsContent>
             )}
-            {sprintIssues.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <List className="h-8 w-8 text-muted-foreground/30 mb-3" /><p className="text-muted-foreground font-medium mb-1">Sprint backlog is empty</p><p className="text-xs text-muted-foreground">Go to the Backlog view and assign items</p>
-              </div>
+
+            {/* ─── CAPACITY TAB ────────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('capacity') && (
+              <TabsContent value="capacity" className="flex-1 overflow-auto mt-0">
+                <CapacityTab
+                  key={`capacity-${selectedSprint?.id ?? 'none'}-${capacityData?.capacities.map((entry) => `${entry.userId}:${entry.hoursPerDay}:${entry.daysOff}`).join('|') ?? 'empty'}`}
+                  data={capacityData}
+                  onSave={handleCapacitySave}
+                />
+              </TabsContent>
             )}
-          </ScrollArea>
-        </TabsContent>
-        )}
-
-        {/* ─── CAPACITY TAB ────────────────────────────────────────── */}
-        {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('capacity') && (
-        <TabsContent value="capacity" className="flex-1 overflow-auto mt-0">
-          <CapacityTab
-            key={`capacity-${selectedSprint?.id ?? 'none'}-${capacityData?.capacities.map((entry) => `${entry.userId}:${entry.hoursPerDay}:${entry.daysOff}`).join('|') ?? 'empty'}`}
-            data={capacityData}
-            onSave={handleCapacitySave}
-          />
-        </TabsContent>
-        )}
-      </Tabs>
-      </div>
-
-      <aside className="hidden xl:flex w-[360px] flex-col border-l bg-muted/10">
-        <div className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur px-4 py-3">
-          <h3 className="text-sm font-semibold">Sprint Planning Panel</h3>
-          <p className="text-xs text-muted-foreground">
-            Team capacity stays visible while you navigate sprint backlog and board.
-          </p>
+          </Tabs>
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-4 space-y-4">
-            {isAllTeamsMode ? (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">All Teams Snapshot</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {sprintTeams.map((team) => {
-                    const teamSprints = allSprints.filter((sprint) => sprint.teamId === team.id)
-                    const activeCount = teamSprints.filter((sprint) => isActiveStatus(sprint.status)).length
-                    return (
-                      <div key={team.id} className="rounded border bg-background p-2.5">
-                        <div className="text-sm font-medium">{team.name}</div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {teamSprints.length} sprint{teamSprints.length === 1 ? '' : 's'}
-                          {activeCount > 0 ? `, ${activeCount} active` : ''}
+        <aside className="hidden xl:flex w-[360px] flex-col bg-muted/10">
+          <div className="sticky top-0 z-10 border-b border-border/70 bg-background/90 px-5 py-4 backdrop-blur">
+            <h3 className="text-sm font-semibold tracking-tight">Sprint Planning Panel</h3>
+          </div>
+
+          <ScrollArea className="h-full w-full">
+            <div className="flex flex-col gap-4 p-4">
+              {isAllTeamsMode ? (
+                <Card className="border-border/60 shadow-none bg-transparent sm:bg-card/50">
+                  <CardHeader className="py-3 px-4 border-b border-border/40">
+                    <CardTitle className="text-sm font-semibold">All Teams Snapshot</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {sprintTeams.map((team) => {
+                      const teamSprints = allSprints.filter((s) => s.teamId === team.id);
+                      const activeCount = teamSprints.filter((s) => isActiveStatus(s.status)).length;
+                      return (
+                        <div key={team.id} className="flex items-center justify-between px-4 py-2 hover:bg-muted/30 border-b border-border/40 last:border-0 transition-colors">
+                          <div className="min-w-0">
+                            <div className="text-[13px] font-medium truncate">{team.name}</div>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                              <span>{teamSprints.length} Sprints</span>
+                              {activeCount > 0 && <span className="text-emerald-600 font-medium">• {activeCount} Active</span>}
+                            </div>
+                          </div>
+                          <div className="h-6 w-6 rounded-md bg-secondary/50 flex items-center justify-center text-[10px]">→</div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              ) : selectedSprint ? (
+                <div className="space-y-4">
+                  {/* Planning Health - Compressed Header */}
+                  <Card className="overflow-hidden border-border/60 shadow-none bg-card/50">
+                    <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/40">
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Utilization</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-sm font-bold tabular-nums">{capacityUtilizationPercent}%</span>
+                          <Progress value={capacityUtilizationPercent} className="h-1 flex-1" />
                         </div>
                       </div>
-                    )
-                  })}
-                </CardContent>
-              </Card>
-            ) : selectedSprint ? (
-              <>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Capacity Overview</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Available capacity</span>
-                      <span className="font-medium tabular-nums">{Math.round(capacityData?.totals.totalCapacity ?? 0)}h</span>
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Availability</p>
+                        <p className={`text-sm font-bold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-emerald-600'}`}>
+                          {netAvailabilityHours}h
+                        </p>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">At-Risk</p>
+                        <p className="text-sm font-bold tabular-nums">{overloadedMembers}</p>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Items</p>
+                        <p className="text-sm font-bold tabular-nums">{assignedItemsCount}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Planned estimate</span>
-                      <span className="font-medium tabular-nums">{Math.round(capacityData?.totals.totalAssignedEstimatedHours ?? 0)}h</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Total available</span>
-                      <span className={`font-medium tabular-nums ${(capacityData?.totals.totalCapacity ?? 0) - (capacityData?.totals.totalAssignedEstimatedHours ?? 0) < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                        {Math.round((capacityData?.totals.totalCapacity ?? 0) - (capacityData?.totals.totalAssignedEstimatedHours ?? 0))}h
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </Card>
 
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Team Member Capacity</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="grid grid-cols-[minmax(0,1fr)_64px_64px_72px] gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Member</span>
-                      <span className="text-right">Capacity</span>
-                      <span className="text-right">Estimated</span>
-                      <span className="text-right">Available</span>
+                  {/* Team Load Table */}
+                  <div className="rounded-lg border border-border/60 bg-card/50 overflow-hidden">
+                    {/* Header Row */}
+                    <div className="grid grid-cols-[1fr_80px_100px] items-center bg-muted/50 px-4 py-1.5 border-b border-border/60">
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground">Member</span>
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground text-center">Load</span>
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground text-right">Balance</span>
                     </div>
-                    {(capacityData?.capacities ?? []).map((entry) => {
-                      const freeHours = entry.totalCapacity - entry.assignedEstimatedHours
-                      const availableClass = freeHours < 0 ? 'text-red-500' : 'text-emerald-500'
-                      return (
-                        <div
-                          key={entry.userId}
-                          className="grid grid-cols-[minmax(0,1fr)_64px_64px_72px] items-center gap-2 rounded border bg-background p-2.5"
-                        >
-                          <span className="text-sm font-medium truncate" title={entry.user.name}>
-                            {entry.user.name}
-                          </span>
-                          <span className="text-xs text-right tabular-nums">
-                            {Math.round(entry.totalCapacity)}h
-                          </span>
-                          <span className="text-xs text-right tabular-nums">
-                            {Math.round(entry.assignedEstimatedHours)}h
-                          </span>
-                          <span className={`text-xs text-right font-medium tabular-nums ${availableClass}`}>
-                            {Math.round(freeHours)}h
-                          </span>
-                          <div className="col-span-4 text-[10px] text-muted-foreground">
-                            Remaining estimate {Math.round(entry.assignedRemainingHours)}h, completed logged {Math.round(entry.assignedCompletedHours)}h
+
+                    <div className="divide-y divide-border/40">
+                      {(capacityData?.capacities ?? []).map((entry) => {
+                        const freeHours = entry.totalCapacity - entry.assignedEstimatedHours;
+                        const isOverloaded = freeHours < 0;
+                        const loadPercentage = entry.totalCapacity > 0 ? (entry.assignedEstimatedHours / entry.totalCapacity) * 100 : 0;
+
+                        return (
+                          <div key={entry.userId} className="group relative grid grid-cols-[1fr_80px_100px] items-center px-4 py-2 hover:bg-muted/40 transition-colors">
+                            {isOverloaded && <div className="absolute left-0 top-0 h-full w-0.5 bg-destructive" />}
+
+                            {/* Name & Quick Stats */}
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-[13px] font-medium">{entry.user.name}</span>
+                                {isOverloaded && <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground flex gap-2">
+                                <span>Rem: <b className="text-foreground/70">{Math.round(entry.assignedRemainingHours)}h</b></span>
+                                <span>Log: <b className="text-foreground/70">{Math.round(entry.assignedCompletedHours)}h</b></span>
+                              </div>
+                            </div>
+
+                            {/* Load Progress */}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`text-[11px] font-bold tabular-nums ${isOverloaded ? 'text-destructive' : ''}`}>
+                                {Math.round(loadPercentage)}%
+                              </span>
+                              <Progress value={loadPercentage} className="h-1 w-12 sm:w-16" />
+                            </div>
+
+                            {/* Balance */}
+                            <div className="text-right">
+                              <span className={`text-xs font-bold tabular-nums ${isOverloaded ? 'text-destructive' : 'text-emerald-600'}`}>
+                                {isOverloaded ? '' : '+'}{Math.round(freeHours)}h
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                    {(capacityData?.capacities?.length ?? 0) === 0 ? (
-                      <div className="text-xs text-muted-foreground">No capacity data yet.</div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              <Card>
-                <CardContent className="p-4 text-sm text-muted-foreground">
-                  Select a team and sprint to view planning insights.
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </ScrollArea>
-      </aside>
+                        );
+                      })}
+                    </div>
+
+                    {(capacityData?.capacities?.length ?? 0) === 0 && (
+                      <div className="p-8 text-center text-xs text-muted-foreground">
+                        No member data found.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Selection State stays relatively the same but with smaller padding */
+                <div className="flex h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/5 p-4 text-center">
+                  <Calendar className="h-4 w-4 text-muted-foreground mb-2" />
+                  <p className="text-xs font-medium text-muted-foreground">Select team/sprint for insights</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </aside>
       </div>
     </div>
   )
@@ -1397,75 +1501,95 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
 
   if (!data) return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground text-sm">Loading capacity data...</p></div>
 
+  const overloadedMembers = data.capacities.filter((cap) => cap.assignedEstimatedHours > cap.totalCapacity).length
+  const totalCapacityHours = Math.round(data.totals.totalCapacity)
+  const totalPlannedHours = Math.round(data.totals.totalAssignedEstimatedHours)
+  const averageLoadPercent = totalCapacityHours > 0 ? Math.round((totalPlannedHours / totalCapacityHours) * 100) : 0
+
   return (
-    <div className="max-w-5xl">
-      <div className="px-6 py-4 border-b bg-muted/20">
-        <div className="grid grid-cols-4 gap-6">
-          <div><div className="text-xs text-muted-foreground mb-0.5">Sprint Days</div><div className="text-lg font-bold tabular-nums">{data.totals.sprintDays}</div></div>
-          <div><div className="text-xs text-muted-foreground mb-0.5">Total Capacity</div><div className="text-lg font-bold tabular-nums">{Math.round(data.totals.totalCapacity)}h</div></div>
-          <div><div className="text-xs text-muted-foreground mb-0.5">Planned Hours</div><div className="text-lg font-bold tabular-nums">{Math.round(data.totals.totalAssignedEstimatedHours)}h</div></div>
-          <div><div className="text-xs text-muted-foreground mb-0.5">Assigned Items</div><div className="text-lg font-bold tabular-nums">{data.totals.totalAssignedItems}</div></div>
+    <div className="mx-auto max-w-6xl px-4 py-4 md:px-6 md:py-6">
+      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight"><Users className="h-4.5 w-4.5 text-primary" />Capacity Planning</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Adjust working hours and time off per team member. Capacity, plan, and risk signals update without changing sprint business rules.
+          </p>
         </div>
+        <Button size="sm" onClick={handleSave} disabled={!isDirty} className="h-10 gap-1.5 rounded-xl px-4">
+          Save Changes
+        </Button>
       </div>
 
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-primary" />Team Capacity</h3>
-          <Button size="sm" onClick={handleSave} disabled={!isDirty} className="gap-1.5">Save Changes</Button>
-        </div>
+      <div className="space-y-4">
+        {data.capacities.map((cap) => {
+          const edited = editedCapacities[cap.userId] || { hoursPerDay: cap.hoursPerDay, daysOff: cap.daysOff }
+          const availableDays = Math.max(0, data.totals.sprintDays - edited.daysOff)
+          const totalCap = availableDays * edited.hoursPerDay
+          const isOverloaded = cap.assignedEstimatedHours > totalCap
+          const remainingCapacity = totalCap - cap.assignedEstimatedHours
+          const loadPercent = totalCap > 0 ? Math.min(100, Math.round((cap.assignedEstimatedHours / totalCap) * 100)) : 0
+          return (
+            <Card key={cap.userId} className={` overflow-hidden border-border/70 bg-card/80 shadow-sm py-2 ${isOverloaded ? 'border-destructive/30 bg-destructive/[0.03]' : ''}`}>
+              <CardContent className="p-1 md:p-1">
+                <div className="group flex items-center justify-between gap-4 border-b border-border/40 px-2 py-1.5 transition-colors hover:bg-muted/30 last:border-0">
+                  {/* User Information */}
+                  <div className="flex flex-1 items-center gap-3 min-w-0">
+                    <Avatar className="h-7 w-7 ring-1 ring-border/50">
+                      <AvatarImage src={cap.user.avatar || undefined} />
+                      <AvatarFallback className="bg-primary/10 text-[9px] font-medium text-primary">
+                        {cap.user.name.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
 
-        <div className="grid grid-cols-12 gap-4 px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b">
-          <div className="col-span-3">Team Member</div><div className="col-span-1 text-center">Role</div><div className="col-span-1 text-center">Hrs/Day</div>
-          <div className="col-span-1 text-center">Days Off</div><div className="col-span-2 text-center">Capacity</div><div className="col-span-2 text-center">Planned</div>
-          <div className="col-span-2 text-center">Status</div>
-        </div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="truncate text-[13px] font-medium text-foreground tracking-tight">
+                        {cap.user.name}
+                      </span>
+                      <Badge variant="outline" className="h-4 rounded px-1 text-[9px] font-bold uppercase tracking-wide opacity-60">
+                        {cap.role}
+                      </Badge>
+                      {isOverloaded && (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive animate-pulse" title="Overloaded" />
+                      )}
+                    </div>
 
-        <div className="divide-y">
-          {data.capacities.map((cap) => {
-            const edited = editedCapacities[cap.userId] || { hoursPerDay: cap.hoursPerDay, daysOff: cap.daysOff }
-            const availableDays = Math.max(0, data.totals.sprintDays - edited.daysOff)
-            const totalCap = availableDays * edited.hoursPerDay
-            const isOverloaded = cap.assignedEstimatedHours > totalCap
-            const remainingCapacity = totalCap - cap.assignedEstimatedHours
-            return (
-              <div key={cap.userId} className={`grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors ${isOverloaded ? 'bg-red-500/5' : ''}`}>
-                <div className="col-span-3 flex items-center gap-2.5">
-                  <Avatar className="h-8 w-8"><AvatarImage src={cap.user.avatar || undefined} /><AvatarFallback className="text-xs bg-primary/10 text-primary">{cap.user.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-                  <div><div className="text-sm font-medium">{cap.user.name}</div><div className="text-[11px] text-muted-foreground">{cap.user.email}</div></div>
-                </div>
-                <div className="col-span-1 text-center"><Badge variant="outline" className="text-[10px] h-5 capitalize">{cap.role}</Badge></div>
-                <div className="col-span-1 flex justify-center">
-                  <Input type="number" min={0} max={24} step={0.5} value={edited.hoursPerDay} onChange={(e) => handleChange(cap.userId, 'hoursPerDay', parseFloat(e.target.value) || 0)} className="h-7 w-16 text-xs text-center" />
-                </div>
-                <div className="col-span-1 flex justify-center">
-                  <Input type="number" min={0} max={data.totals.sprintDays} value={edited.daysOff} onChange={(e) => handleChange(cap.userId, 'daysOff', parseInt(e.target.value) || 0)} className="h-7 w-16 text-xs text-center" />
-                </div>
-                <div className="col-span-2 text-center">
-                  <span className="text-sm font-bold tabular-nums">{Math.round(totalCap)}h</span>
-                  <div className="text-[10px] text-muted-foreground">{availableDays}d × {edited.hoursPerDay}h</div>
-                </div>
-                <div className="col-span-2 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-sm font-medium tabular-nums">{Math.round(cap.assignedEstimatedHours)}h</span>
-                    <span className="text-[10px] text-muted-foreground">({cap.assignedItems})</span>
+                    {/* Email hidden on smaller screens, shown on hover/large screens to save space */}
+                    <span className="hidden xl:inline truncate text-[11px] text-muted-foreground/60 max-w-[150px]">
+                      {cap.user.email}
+                    </span>
                   </div>
-                  <Progress value={totalCap > 0 ? Math.min(100, (cap.assignedEstimatedHours / totalCap) * 100) : 0} className="h-1 mt-1" />
+
+                  {/* Input Actions */}
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter">H/Day</span>
+                      <Input
+                        type="number"
+                        value={edited.hoursPerDay}
+                        onChange={(e) => handleChange(cap.userId, 'hoursPerDay', parseFloat(e.target.value) || 0)}
+                        className="h-7 w-11 border-border/50 bg-background/50 px-1 text-center text-xs focus-visible:ring-1 focus-visible:ring-primary/30"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter">Off</span>
+                      <Input
+                        type="number"
+                        value={edited.daysOff}
+                        onChange={(e) => handleChange(cap.userId, 'daysOff', parseInt(e.target.value) || 0)}
+                        className="h-7 w-11 border-border/50 bg-background/50 px-1 text-center text-xs focus-visible:ring-1 focus-visible:ring-primary/30"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="col-span-2 text-center">
-                  {isOverloaded ? (
-                    <div className="flex items-center justify-center gap-1.5 text-red-400"><AlertTriangle className="h-3.5 w-3.5" /><span className="text-sm font-medium">Overloaded</span></div>
-                  ) : (
-                    <span className="text-sm font-medium text-emerald-400 tabular-nums">{Math.round(remainingCapacity)}h remaining</span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        {data.capacities.length === 0 && (
-          <div className="text-center py-12"><Users className="h-8 w-8 mx-auto text-muted-foreground/30 mb-3" /><p className="text-sm font-medium text-muted-foreground mb-1">No team members</p><p className="text-xs text-muted-foreground">Add members to the project to plan capacity</p></div>
-        )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
+      {data.capacities.length === 0 && (
+        <div className="rounded-3xl border border-dashed border-border/80 bg-muted/20 py-14 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm font-medium text-muted-foreground">No team members</p><p className="mt-1 text-xs text-muted-foreground">Add members to the project to plan capacity</p></div>
+      )}
     </div>
   )
 }
@@ -1476,11 +1600,11 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
 
 function StatCard({ title, value, icon: Icon, accent }: { title: string; value: string | number; icon: React.ElementType; accent?: string }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm">
       <CardContent className="pt-5 pb-5">
         <div className="flex items-center justify-between">
-          <div><p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5">{title}</p><p className="text-2xl font-bold tabular-nums">{value}</p></div>
-          <div className="h-11 w-11 rounded-xl bg-muted/50 flex items-center justify-center"><Icon className={`h-5 w-5 ${accent || 'text-muted-foreground'}`} /></div>
+          <div><p className="mb-1.5 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{title}</p><p className="text-2xl font-semibold tabular-nums tracking-tight">{value}</p></div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-border/60 bg-muted/30"><Icon className={`h-5 w-5 ${accent || 'text-muted-foreground'}`} /></div>
         </div>
       </CardContent>
     </Card>

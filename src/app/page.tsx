@@ -318,6 +318,7 @@ export default function HomePage() {
   }, [currentView, setViewMode])
 
   const handleViewChange = (view: ViewType) => {
+    closeWorkItem()
     setCreateIssueOpen(false)
     setSprintModalOpen(false)
     setCurrentView(view)

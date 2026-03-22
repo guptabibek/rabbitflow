@@ -44,6 +44,7 @@ import {
   getWorkItemTypeDefinition,
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
+import { workItemUrl } from '@/lib/domain/work-item-url'
 import {
   AlertCircle,
   CheckCircle2,
@@ -429,10 +430,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const mentionCandidates =
     commentMentionContext || editingMentionContext
       ? context.users
-          .filter((user) =>
-            mentionQuery ? user.name.toLowerCase().includes(mentionQuery.toLowerCase()) : true
-          )
-          .slice(0, 5)
+        .filter((user) =>
+          mentionQuery ? user.name.toLowerCase().includes(mentionQuery.toLowerCase()) : true
+        )
+        .slice(0, 5)
       : []
 
   const canModerateComments = ['Admin', 'PM'].includes(access.role ?? '')
@@ -441,8 +442,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     setLoadingRelations(true)
     try {
       const response = await fetch(
-        `/api/relations?issueId=${issue.id}&flat=true&paginate=true&take=30${
-          cursor ? `&cursor=${cursor}` : ''
+        `/api/relations?issueId=${issue.id}&flat=true&paginate=true&take=30${cursor ? `&cursor=${cursor}` : ''
         }`
       )
 
@@ -465,8 +465,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     setLoadingComments(true)
     try {
       const response = await fetch(
-        `/api/comments?issueId=${issue.id}&paginate=true&take=30&includeRevisions=true${
-          cursor ? `&cursor=${cursor}` : ''
+        `/api/comments?issueId=${issue.id}&paginate=true&take=30&includeRevisions=true${cursor ? `&cursor=${cursor}` : ''
         }`
       )
       if (!response.ok) {
@@ -827,6 +826,16 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     }
   }
 
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(workItemUrl(issue.id))
+      toast.success('Work item link copied')
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to copy link')
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       <header className="border-b border-border bg-background px-4 py-3 space-y-3">
@@ -868,7 +877,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={() => navigator.clipboard.writeText(window.location.href)}
+                  onClick={() => void handleCopyLink()}
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   Copy link
@@ -967,6 +976,24 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             />
           </section>
 
+          {nonPlanningSections.length > 0 && (
+            <section className="rounded-lg border border-border p-4">
+              <DynamicWorkItemFields
+                sections={nonPlanningSections}
+                values={draft.customFields}
+                users={context.users}
+                iterations={context.iterations}
+                areas={context.areas}
+                teams={context.teams}
+                onChange={(key, value) =>
+                  setDraft((previous) => ({
+                    ...previous,
+                    customFields: { ...previous.customFields, [key]: value },
+                  }))
+                }
+              />
+            </section>
+          )}
           <section className="rounded-lg border border-border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Discussion</Label>
@@ -1046,31 +1073,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
             </section>
           </section>
-
-          {nonPlanningSections.length > 0 ? (
-            <section className="rounded-lg border border-border p-4">
-              <DynamicWorkItemFields
-                sections={nonPlanningSections}
-                values={draft.customFields}
-                users={context.users}
-                iterations={context.iterations}
-                areas={context.areas}
-                teams={context.teams}
-                onChange={(key, value) =>
-                  setDraft((previous) => ({
-                    ...previous,
-                    customFields: { ...previous.customFields, [key]: value },
-                  }))
-                }
-              />
-            </section>
-          ) : activeTypeDefinition?.sections?.length ? null : (
-            <section className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-              This work item type has no configured schema sections.
-            </section>
-          )}
         </main>
-
         <aside className="min-h-0 border-t lg:border-t-0 lg:border-l border-border overflow-y-auto">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="h-full flex flex-col">
             <div className="px-4 pt-4">
@@ -1082,119 +1085,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             </div>
 
             <TabsContent value="general" className="m-0 p-4 space-y-4 overflow-y-auto">
-              <section className="rounded-lg border border-border p-3 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <GitBranch className="h-3.5 w-3.5" />
-                  Hierarchy
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Parent</div>
-                    {issue.parentIssue ? (
-                      <button
-                        type="button"
-                        className="text-left hover:text-primary"
-                        onClick={() => openWorkItem(issue.parentIssue!.id)}
-                      >
-                        <span className="font-mono text-xs text-muted-foreground">{issue.parentIssue.key}</span>{' '}
-                        <span>{issue.parentIssue.title}</span>
-                      </button>
-                    ) : (
-                      <p className="text-muted-foreground">No parent work item</p>
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Children</div>
-                    {issue.subIssues && issue.subIssues.length > 0 ? (
-                      <div className="space-y-1">
-                        {issue.subIssues.map((child) => (
-                          <button
-                            key={child.id}
-                            type="button"
-                            className="w-full text-left rounded border border-border px-2 py-1.5 hover:bg-accent"
-                            onClick={() => openWorkItem(child.id)}
-                          >
-                            <span className="font-mono text-xs text-muted-foreground">{child.key}</span>{' '}
-                            <span className="text-sm">{child.title}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground">No child work items</p>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-border p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Linked Work</div>
-                  {loadingRelations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                </div>
-                {relations && relations.length > 0 ? (
-                  <div className="space-y-2">
-                    {relations.map((relation) => (
-                      <div key={relation.id} className="rounded border border-border px-2 py-1.5">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px]">
-                            {RELATION_LINK_TYPES.find((item) => item.value === relation.relationType)?.label ?? relation.relationType}
-                          </Badge>
-                          <button type="button" className="min-w-0 flex-1 text-left hover:text-primary" onClick={() => openWorkItem(relation.linkedIssue.id)}>
-                            <span className="font-mono text-xs text-muted-foreground">{relation.linkedIssue.key}</span>{' '}
-                            <span className="truncate text-sm">{relation.linkedIssue.title}</span>
-                          </button>
-                          {canLink ? (
-                            <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove relation" onClick={() => void handleRemoveLink(relation.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No linked work items</div>
-                )}
-                {relationsCursor ? (
-                  <Button variant="outline" size="sm" className="w-full" disabled={loadingRelations} onClick={() => void loadRelations(relationsCursor)}>
-                    Load more links
-                  </Button>
-                ) : null}
-                {canLink ? (
-                  <div className="space-y-2 border-t border-border pt-3">
-                    <div className="flex items-center gap-2">
-                      <Select value={linkType} onValueChange={(value) => setLinkType(value as LinkType)}>
-                        <SelectTrigger className="w-[140px] h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {linkTypeOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Input className="h-8" value={linkSearch} onChange={(event) => setLinkSearch(event.target.value)} placeholder="Search work items" />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Use Parent/Child to update hierarchy, or use relation types for dependency links.
-                    </p>
-                    {isSearchingLinks ? (
-                      <div className="text-xs text-muted-foreground">Searching...</div>
-                    ) : linkCandidates.length > 0 ? (
-                      <div className="space-y-1 max-h-48 overflow-y-auto rounded border border-border p-1">
-                        {linkCandidates.map((candidate) => (
-                          <button key={candidate.id} type="button" className="w-full text-left rounded px-2 py-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => void handleAddLink(candidate.id)}>
-                            <span className="font-mono text-xs text-muted-foreground">{candidate.key}</span>{' '}
-                            <span className="text-sm">{candidate.title}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">Type at least 2 characters to search.</div>
-                    )}
-                  </div>
-                ) : null}
-              </section>
-
               {planningSections.length > 0 ? (
                 <section className="rounded-lg border border-border p-3 space-y-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Planning</div>
                   <DynamicWorkItemFields
                     sections={planningSections}
                     values={draft.customFields}
@@ -1244,10 +1136,6 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     <span className="text-muted-foreground">Completed Hours</span>
                     <Input className="h-7 w-24 text-right" value={draft.completedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
-                  <Separator />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Created</span><span>{getRelativeTime(issue.createdAt)}</span></div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Updated</span><span>{getRelativeTime(issue.updatedAt)}</span></div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground"><span>Version</span><span>{issue.version ?? '-'}</span></div>
                 </div>
               </section>
             </TabsContent>
@@ -1350,19 +1238,6 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           </Tabs>
         </aside>
       </div>
-
-      {!canUpdate ? (
-        <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground flex items-center gap-2">
-          <AlertCircle className="h-3.5 w-3.5" />
-          You have read-only access to this work item.
-        </div>
-      ) : (
-        <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground flex items-center gap-2">
-          {hasChanges ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          {hasChanges ? 'Unsaved changes' : 'All changes saved'}
-          {isSaving || isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-        </div>
-      )}
     </div>
   )
 }

@@ -289,16 +289,21 @@ export function TeamManagement({
   }
 
   const header = (
-    <div className="border-b border-border px-5 py-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-base font-semibold">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+    <div className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
             <Shield className="h-4 w-4 text-primary" />
           </div>
-          Team Management
+          <div>
+            <div className="text-base font-semibold tracking-tight">Team Management</div>
+            <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+              Compact ownership, staffing, and team membership planning.
+            </div>
+          </div>
         </div>
         {isScreenMode && onClose && (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={onClose}>
             <ArrowLeft className="h-3.5 w-3.5" />
             Back
           </Button>
@@ -308,9 +313,9 @@ export function TeamManagement({
   )
 
   const content = (
-    <div className={`flex ${isScreenMode ? 'min-h-0 flex-1' : 'h-[calc(88vh-60px)]'}`}>
-      <div className="w-80 border-r border-border bg-muted/5 p-4">
-        <div className="mb-3 flex items-center justify-between">
+    <div className={`flex min-h-0 ${isScreenMode ? 'flex-1 flex-col lg:flex-row' : 'h-[calc(88vh-68px)] flex-col lg:flex-row'}`}>
+      <div className="flex w-full min-h-0 flex-col border-b border-border/70 bg-muted/5 p-4 lg:w-[21rem] lg:flex-shrink-0 lg:border-b-0 lg:border-r">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Teams
@@ -325,13 +330,13 @@ export function TeamManagement({
           </Button>
         </div>
 
-        <ScrollArea className={`${isScreenMode ? 'h-[calc(100vh-240px)]' : 'h-[calc(88vh-160px)]'} pr-2`}>
+        <ScrollArea className="min-h-0 flex-1 pr-2 max-lg:max-h-[16rem] lg:max-h-none">
           <div className="space-y-2">
             {sortedTeams.map((team) => (
               <button
                 key={team.id}
                 type="button"
-                className={`w-full rounded-lg border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`w-full rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   selectedTeamId === team.id
                     ? 'border-primary bg-primary/5'
                     : 'border-border/60 bg-background hover:bg-accent/40'
@@ -374,9 +379,9 @@ export function TeamManagement({
         </ScrollArea>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="space-y-6 p-5">
-          <div className="flex items-center justify-between gap-3">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-6 p-4 md:p-5 lg:p-6">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h3 className="text-base font-semibold">
                 {form.id ? 'Edit Team' : 'Create Team'}
@@ -385,7 +390,7 @@ export function TeamManagement({
                 Manage iteration ownership, lead assignment, and team membership.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {form.id ? (
                 <Button
                   variant="outline"
@@ -409,8 +414,8 @@ export function TeamManagement({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-1.5">
               <Label htmlFor="team-name">Name</Label>
               <Input
                 id="team-name"
@@ -418,10 +423,10 @@ export function TeamManagement({
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, name: event.target.value }))
                 }
-                className="mt-1.5"
+                className="h-10 w-full"
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="team-key">Key</Label>
               <Input
                 id="team-key"
@@ -432,11 +437,11 @@ export function TeamManagement({
                     key: event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''),
                   }))
                 }
-                className="mt-1.5 font-mono"
+                className="h-10 w-full font-mono"
                 maxLength={20}
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="team-color">Color</Label>
               <Input
                 id="team-color"
@@ -444,10 +449,10 @@ export function TeamManagement({
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, color: event.target.value }))
                 }
-                className="mt-1.5"
+                className="h-10 w-full"
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label>Lead</Label>
               <Select
                 value={form.leadId}
@@ -455,7 +460,7 @@ export function TeamManagement({
                   setForm((previous) => ({ ...previous, leadId: value }))
                 }
               >
-                <SelectTrigger className="mt-1.5">
+                <SelectTrigger className="h-10 w-full">
                   <SelectValue placeholder="No lead assigned" />
                 </SelectTrigger>
                 <SelectContent>
@@ -470,7 +475,7 @@ export function TeamManagement({
             </div>
           </div>
 
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="team-description">Description</Label>
             <Textarea
               id="team-description"
@@ -482,7 +487,7 @@ export function TeamManagement({
                 }))
               }
               rows={3}
-              className="mt-1.5"
+              className="min-h-[96px] w-full resize-y"
             />
           </div>
 
@@ -494,13 +499,14 @@ export function TeamManagement({
               </p>
             </div>
 
-            <div className="rounded-xl border border-border/70">
-              <div className="grid grid-cols-[1fr_140px_120px] gap-3 border-b border-border/70 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/70 shadow-sm">
+              <div className="hidden grid-cols-[minmax(0,1fr)_150px_122px] gap-3 border-b border-border/70 bg-muted/20 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:grid">
                 <span>Member</span>
                 <span>Team Role</span>
                 <span>Lead</span>
               </div>
-              <div className="divide-y">
+              <ScrollArea className="max-h-[min(48vh,34rem)] lg:max-h-[min(52vh,38rem)]">
+                <div className="divide-y divide-border/70">
                 {sortedUsers.map((user: User) => {
                   const selected = selectedMemberIds.has(user.id)
                   const roleValue = form.memberRoles[user.id] ?? 'member'
@@ -508,69 +514,82 @@ export function TeamManagement({
                   return (
                     <div
                       key={user.id}
-                      className="grid grid-cols-[1fr_140px_120px] gap-3 px-4 py-3"
+                      className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_150px_122px] lg:items-center"
                     >
-                      <label className="flex items-center gap-3">
+                      <label className="flex min-w-0 items-center gap-3">
                         <Checkbox
                           checked={selected}
                           onCheckedChange={(checked) =>
                             handleMemberToggle(user.id, checked === true)
                           }
                         />
-                        <div>
-                          <p className="text-sm font-medium">{user.name}</p>
-                          <p className="text-xs text-muted-foreground">{user.email}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{user.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                         </div>
                       </label>
-                      <Select
-                        value={roleValue}
-                        onValueChange={(value) =>
-                          setForm((previous) => ({
-                            ...previous,
-                            memberRoles: {
-                              ...previous.memberRoles,
-                              [user.id]: value,
-                            },
-                          }))
-                        }
-                        disabled={!selected}
-                      >
-                        <SelectTrigger className="h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MEMBER_ROLE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant={form.leadId === user.id ? 'default' : 'outline'}
-                        size="sm"
-                        className="h-8"
-                        onClick={() =>
-                          setForm((previous) => ({
-                            ...previous,
-                            leadId:
-                              previous.leadId === user.id ? NONE_VALUE : user.id,
-                            memberRoles: {
-                              ...previous.memberRoles,
-                              [user.id]:
-                                previous.memberRoles[user.id] ??
-                                (previous.leadId === user.id ? 'member' : 'lead'),
-                            },
-                          }))
-                        }
-                      >
-                        {form.leadId === user.id ? 'Lead' : 'Set Lead'}
-                      </Button>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:contents">
+                        <div className="space-y-1.5 lg:space-y-0">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:hidden">
+                            Team Role
+                          </Label>
+                          <Select
+                            value={roleValue}
+                            onValueChange={(value) =>
+                              setForm((previous) => ({
+                                ...previous,
+                                memberRoles: {
+                                  ...previous.memberRoles,
+                                  [user.id]: value,
+                                },
+                              }))
+                            }
+                            disabled={!selected}
+                          >
+                            <SelectTrigger className="h-9 w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {MEMBER_ROLE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5 lg:space-y-0">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:hidden">
+                            Lead
+                          </Label>
+                          <Button
+                            type="button"
+                            variant={form.leadId === user.id ? 'default' : 'outline'}
+                            size="sm"
+                            className="h-9 w-full"
+                            onClick={() =>
+                              setForm((previous) => ({
+                                ...previous,
+                                leadId:
+                                  previous.leadId === user.id ? NONE_VALUE : user.id,
+                                memberRoles: {
+                                  ...previous.memberRoles,
+                                  [user.id]:
+                                    previous.memberRoles[user.id] ??
+                                    (previous.leadId === user.id ? 'member' : 'lead'),
+                                },
+                              }))
+                            }
+                          >
+                            {form.leadId === user.id ? 'Lead' : 'Set Lead'}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )
                 })}
-              </div>
+                </div>
+              </ScrollArea>
             </div>
           </div>
         </div>

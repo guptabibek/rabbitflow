@@ -4,10 +4,16 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* =========================================
+     CORE SYSTEM TOKENS
+     ========================================= */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--app-font-sans);
-  --font-mono: var(--app-font-mono);
+
+  /* Upgraded Font Stack for a premium, crisp look */
+  --font-sans: "Inter", "Geist", "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Geist Mono", "Cascadia Code", "JetBrains Mono", monospace;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -16,11 +22,7 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -37,35 +39,35 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Refined, slightly softer border radii */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  /* Custom status colors */
+
+  /* =========================================
+     SEMANTIC TOKENS (Dynamically mapped)
+     ========================================= */
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+
+  /* Status Tokens */
   --color-status-backlog: var(--status-backlog);
   --color-status-todo: var(--status-todo);
   --color-status-in-progress: var(--status-in-progress);
   --color-status-in-review: var(--status-in-review);
   --color-status-done: var(--status-done);
   --color-status-cancelled: var(--status-cancelled);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
 
-  /* Status background tokens */
   --color-status-backlog-bg: var(--status-backlog-bg);
   --color-status-todo-bg: var(--status-todo-bg);
   --color-status-in-progress-bg: var(--status-in-progress-bg);
   --color-status-in-review-bg: var(--status-in-review-bg);
   --color-status-done-bg: var(--status-done-bg);
   --color-status-cancelled-bg: var(--status-cancelled-bg);
-  --color-status-backlog-bar: var(--status-backlog-bar);
-  --color-status-todo-bar: var(--status-todo-bar);
-  --color-status-in-progress-bar: var(--status-in-progress-bar);
-  --color-status-in-review-bar: var(--status-in-review-bar);
-  --color-status-done-bar: var(--status-done-bar);
-  --color-status-cancelled-bar: var(--status-cancelled-bar);
 
-  /* Work-item type tokens */
+  /* Work-item Type Tokens */
   --color-type-epic: var(--type-epic);
   --color-type-feature: var(--type-feature);
   --color-type-story: var(--type-story);
@@ -74,6 +76,7 @@
   --color-type-issue: var(--type-issue);
   --color-type-design-doc: var(--type-design-doc);
   --color-type-release-item: var(--type-release-item);
+
   --color-type-epic-bg: var(--type-epic-bg);
   --color-type-feature-bg: var(--type-feature-bg);
   --color-type-story-bg: var(--type-story-bg);
@@ -83,19 +86,20 @@
   --color-type-design-doc-bg: var(--type-design-doc-bg);
   --color-type-release-item-bg: var(--type-release-item-bg);
 
-  /* Priority tokens */
+  /* Priority Tokens */
   --color-priority-highest: var(--priority-highest);
   --color-priority-high: var(--priority-high);
   --color-priority-medium: var(--priority-medium);
   --color-priority-low: var(--priority-low);
   --color-priority-lowest: var(--priority-lowest);
+
   --color-priority-highest-bg: var(--priority-highest-bg);
   --color-priority-high-bg: var(--priority-high-bg);
   --color-priority-medium-bg: var(--priority-medium-bg);
   --color-priority-low-bg: var(--priority-low-bg);
   --color-priority-lowest-bg: var(--priority-lowest-bg);
 
-  /* Role tokens */
+  /* Role Tokens */
   --color-role-admin: var(--role-admin);
   --color-role-admin-bg: var(--role-admin-bg);
   --color-role-pm: var(--role-pm);
@@ -107,16 +111,13 @@
   --color-role-viewer: var(--role-viewer);
   --color-role-viewer-bg: var(--role-viewer-bg);
 
-  /* Brand tokens */
+  /* Brand & Misc Tokens */
   --color-brand-primary: var(--brand-primary);
   --color-brand-secondary: var(--brand-secondary);
   --color-brand-glow: var(--brand-glow);
-
-  /* Mention tokens */
   --color-mention: var(--mention);
   --color-mention-bg: var(--mention-bg);
 
-  /* Category badge tokens */
   --color-category-done: var(--category-done);
   --color-category-done-bg: var(--category-done-bg);
   --color-category-active: var(--category-active);
@@ -125,184 +126,178 @@
   --color-category-default-bg: var(--category-default-bg);
 }
 
+/* =========================================
+   LIGHT THEME (Professional, Crisp, High Contrast)
+   ========================================= */
 :root {
-  --app-font-sans: "Segoe UI Variable Text", "Aptos", "Trebuchet MS", "Segoe UI", sans-serif;
-  --app-font-mono: "Cascadia Code", "Consolas", "Courier New", monospace;
   --radius: 0.5rem;
+
+  /* Base Colors - Adjusted to cooler, neutral Zincs for a cleaner UI */
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #09090b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #09090b;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #3b82f6;
+  --popover-foreground: #09090b;
+
+  /* Primary shifts to a more robust, slightly deeper blue */
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #334155;
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
   --destructive: #ef4444;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #3b82f6;
-  --chart-1: #3b82f6;
-  --chart-2: #10b981;
-  --chart-3: #f59e0b;
-  --chart-4: #8b5cf6;
-  --chart-5: #ec4899;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #2563eb;
+
+  /* Sidebar */
   --sidebar: #f8fafc;
   --sidebar-foreground: #0f172a;
-  --sidebar-primary: #3b82f6;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e2e8f0;
+  --sidebar-accent: #f1f5f9;
   --sidebar-accent-foreground: #0f172a;
   --sidebar-border: #e2e8f0;
-  --sidebar-ring: #3b82f6;
-  /* Status palette */
-  --status-backlog: #94a3b8;
+  --sidebar-ring: #2563eb;
+
+  /* Surfaces */
+  --surface: #fafafa;
+  --surface-hover: #f4f4f5;
+
+  /* Status Colors - Tweaked to be slightly more legible on light backgrounds */
+  --status-backlog: #8b92a5;
   --status-todo: #64748b;
-  --status-in-progress: #3b82f6;
-  --status-in-review: #f59e0b;
-  --status-done: #22c55e;
-  --status-cancelled: #ef4444;
-  /* Surface */
-  --surface: #f8fafc;
-  --surface-hover: #f1f5f9;
+  --status-in-progress: #2563eb;
+  --status-in-review: #d97706;
+  --status-done: #16a34a;
+  --status-cancelled: #dc2626;
 
-  /* Status background */
-  --status-backlog-bg: rgba(148,163,184,0.1);
-  --status-todo-bg: rgba(100,116,139,0.1);
-  --status-in-progress-bg: rgba(59,130,246,0.1);
-  --status-in-review-bg: rgba(245,158,11,0.1);
-  --status-done-bg: rgba(34,197,94,0.1);
-  --status-cancelled-bg: rgba(239,68,68,0.1);
-  --status-backlog-bar: #94a3b8;
-  --status-todo-bar: #64748b;
-  --status-in-progress-bar: #3b82f6;
-  --status-in-review-bar: #f59e0b;
-  --status-done-bar: #22c55e;
-  --status-cancelled-bar: #ef4444;
+  --status-backlog-bg: rgba(139, 146, 165, 0.1);
+  --status-todo-bg: rgba(100, 116, 139, 0.1);
+  --status-in-progress-bg: rgba(37, 99, 235, 0.1);
+  --status-in-review-bg: rgba(217, 119, 6, 0.1);
+  --status-done-bg: rgba(22, 163, 74, 0.1);
+  --status-cancelled-bg: rgba(220, 38, 38, 0.1);
 
-  /* Work-item types */
-  --type-epic: #6366f1;
-  --type-feature: #06b6d4;
-  --type-story: #8b5cf6;
-  --type-task: #10b981;
-  --type-bug: #ef4444;
-  --type-issue: #f97316;
-  --type-design-doc: #14b8a6;
-  --type-release-item: #f97316;
-  --type-epic-bg: rgba(99,102,241,0.1);
-  --type-feature-bg: rgba(6,182,212,0.1);
-  --type-story-bg: rgba(139,92,246,0.1);
-  --type-task-bg: rgba(16,185,129,0.1);
-  --type-bug-bg: rgba(239,68,68,0.1);
-  --type-issue-bg: rgba(249,115,22,0.1);
-  --type-design-doc-bg: rgba(20,184,166,0.1);
-  --type-release-item-bg: rgba(249,115,22,0.1);
+  /* Work-item Types */
+  --type-epic: #4f46e5;
+  --type-feature: #0891b2;
+  --type-story: #7c3aed;
+  --type-task: #059669;
+  --type-bug: #dc2626;
+  --type-issue: #ea580c;
+  --type-design-doc: #0d9488;
+  --type-release-item: #ea580c;
 
-  /* Priority */
-  --priority-highest: #ef4444;
-  --priority-high: #f97316;
-  --priority-medium: #f59e0b;
+  --type-epic-bg: rgba(79, 70, 229, 0.1);
+  --type-feature-bg: rgba(8, 145, 178, 0.1);
+  --type-story-bg: rgba(124, 58, 237, 0.1);
+  --type-task-bg: rgba(5, 150, 105, 0.1);
+  --type-bug-bg: rgba(220, 38, 38, 0.1);
+  --type-issue-bg: rgba(234, 88, 12, 0.1);
+  --type-design-doc-bg: rgba(13, 148, 136, 0.1);
+  --type-release-item-bg: rgba(234, 88, 12, 0.1);
+
+  /* Priorities */
+  --priority-highest: #dc2626;
+  --priority-high: #ea580c;
+  --priority-medium: #d97706;
   --priority-low: #64748b;
   --priority-lowest: #94a3b8;
-  --priority-highest-bg: rgba(239,68,68,0.1);
-  --priority-high-bg: rgba(249,115,22,0.1);
-  --priority-medium-bg: rgba(245,158,11,0.1);
-  --priority-low-bg: rgba(100,116,139,0.1);
-  --priority-lowest-bg: rgba(148,163,184,0.1);
 
-  /* Role */
-  --role-admin: #f59e0b;
-  --role-admin-bg: rgba(245,158,11,0.1);
-  --role-pm: #3b82f6;
-  --role-pm-bg: rgba(59,130,246,0.1);
-  --role-dev: #10b981;
-  --role-dev-bg: rgba(16,185,129,0.1);
-  --role-qa: #8b5cf6;
-  --role-qa-bg: rgba(139,92,246,0.1);
+  --priority-highest-bg: rgba(220, 38, 38, 0.1);
+  --priority-high-bg: rgba(234, 88, 12, 0.1);
+  --priority-medium-bg: rgba(217, 119, 6, 0.1);
+  --priority-low-bg: rgba(100, 116, 139, 0.1);
+  --priority-lowest-bg: rgba(148, 163, 184, 0.1);
+
+  /* Roles */
+  --role-admin: #d97706;
+  --role-admin-bg: rgba(217, 119, 6, 0.1);
+  --role-pm: #2563eb;
+  --role-pm-bg: rgba(37, 99, 235, 0.1);
+  --role-dev: #059669;
+  --role-dev-bg: rgba(5, 150, 105, 0.1);
+  --role-qa: #7c3aed;
+  --role-qa-bg: rgba(124, 58, 237, 0.1);
   --role-viewer: #64748b;
-  --role-viewer-bg: rgba(100,116,139,0.1);
+  --role-viewer-bg: rgba(100, 116, 139, 0.1);
 
   /* Brand */
-  --brand-primary: #10b981;
-  --brand-secondary: #0d9488;
-  --brand-glow: rgba(16,185,129,0.2);
+  --brand-primary: #059669;
+  --brand-secondary: #0f766e;
+  --brand-glow: rgba(5, 150, 105, 0.15);
 
-  /* Mention */
-  --mention: #06b6d4;
-  --mention-bg: rgba(6,182,212,0.1);
-
-  /* Category badge */
-  --category-done: #10b981;
-  --category-done-bg: rgba(16,185,129,0.1);
-  --category-active: #3b82f6;
-  --category-active-bg: rgba(59,130,246,0.1);
+  /* Mentions & Categories */
+  --mention: #0891b2;
+  --mention-bg: rgba(8, 145, 178, 0.15);
+  --category-done: #059669;
+  --category-done-bg: rgba(5, 150, 105, 0.1);
+  --category-active: #2563eb;
+  --category-active-bg: rgba(37, 99, 235, 0.1);
   --category-default: #64748b;
-  --category-default-bg: rgba(100,116,139,0.1);
+  --category-default-bg: rgba(100, 116, 139, 0.1);
 }
 
+/* =========================================
+   DARK THEME (Deep, Immersive, Low Eye-strain)
+   ========================================= */
 .dark {
-  --background: #0b0f1a;
-  --foreground: #e2e8f0;
-  --card: #131928;
-  --card-foreground: #e2e8f0;
-  --popover: #131928;
-  --popover-foreground: #e2e8f0;
-  --primary: #60a5fa;
-  --primary-foreground: #0b0f1a;
-  --secondary: #1e293b;
-  --secondary-foreground: #e2e8f0;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #1e293b;
-  --accent-foreground: #e2e8f0;
+  /* Using deeply saturated near-blacks (Zinc-950/900) instead of flat gray */
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #141415;
+  --card-foreground: #fafafa;
+  --popover: #141415;
+  --popover-foreground: #fafafa;
+
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
   --destructive: #f87171;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #60a5fa;
-  --chart-1: #60a5fa;
-  --chart-2: #34d399;
-  --chart-3: #fbbf24;
-  --chart-4: #a78bfa;
-  --chart-5: #f472b6;
-  --sidebar: #0f1629;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0b0f1a;
-  --sidebar-accent: #1e293b;
-  --sidebar-accent-foreground: #e2e8f0;
-  --sidebar-border: #1e293b;
-  --sidebar-ring: #60a5fa;
-  /* Status palette dark */
-  --status-backlog: #64748b;
-  --status-todo: #94a3b8;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #3b82f6;
+
+  /* Sidebar */
+  --sidebar: #09090b;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #3b82f6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #27272a;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #3b82f6;
+
+  /* Surfaces */
+  --surface: #141415;
+  --surface-hover: #27272a;
+
+  /* Status Colors (Vibrant but with boosted alpha for dark mode visibility) */
+  --status-backlog: #94a3b8;
+  --status-todo: #cbd5e1;
   --status-in-progress: #60a5fa;
   --status-in-review: #fbbf24;
   --status-done: #4ade80;
   --status-cancelled: #f87171;
-  /* Surface */
-  --surface: #131928;
-  --surface-hover: #1e293b;
 
-  /* Status background (dark) */
-  --status-backlog-bg: rgba(100,116,139,0.15);
-  --status-todo-bg: rgba(148,163,184,0.15);
-  --status-in-progress-bg: rgba(96,165,250,0.15);
-  --status-in-review-bg: rgba(251,191,36,0.15);
-  --status-done-bg: rgba(74,222,128,0.15);
-  --status-cancelled-bg: rgba(248,113,113,0.15);
-  --status-backlog-bar: #64748b;
-  --status-todo-bar: #94a3b8;
-  --status-in-progress-bar: #60a5fa;
-  --status-in-review-bar: #fbbf24;
-  --status-done-bar: #4ade80;
-  --status-cancelled-bar: #f87171;
+  --status-backlog-bg: rgba(148, 163, 184, 0.15);
+  --status-todo-bg: rgba(203, 213, 225, 0.15);
+  --status-in-progress-bg: rgba(96, 165, 250, 0.15);
+  --status-in-review-bg: rgba(251, 191, 36, 0.15);
+  --status-done-bg: rgba(74, 222, 128, 0.15);
+  --status-cancelled-bg: rgba(248, 113, 113, 0.15);
 
-  /* Work-item types (dark) */
+  /* Work-item Types */
   --type-epic: #818cf8;
   --type-feature: #22d3ee;
   --type-story: #a78bfa;
@@ -311,87 +306,265 @@
   --type-issue: #fb923c;
   --type-design-doc: #2dd4bf;
   --type-release-item: #fb923c;
-  --type-epic-bg: rgba(129,140,248,0.12);
-  --type-feature-bg: rgba(34,211,238,0.12);
-  --type-story-bg: rgba(167,139,250,0.12);
-  --type-task-bg: rgba(52,211,153,0.12);
-  --type-bug-bg: rgba(248,113,113,0.12);
-  --type-issue-bg: rgba(251,146,60,0.12);
-  --type-design-doc-bg: rgba(45,212,191,0.12);
-  --type-release-item-bg: rgba(251,146,60,0.12);
 
-  /* Priority (dark) */
+  --type-epic-bg: rgba(129, 140, 248, 0.15);
+  --type-feature-bg: rgba(34, 211, 238, 0.15);
+  --type-story-bg: rgba(167, 139, 250, 0.15);
+  --type-task-bg: rgba(52, 211, 153, 0.15);
+  --type-bug-bg: rgba(248, 113, 113, 0.15);
+  --type-issue-bg: rgba(251, 146, 60, 0.15);
+  --type-design-doc-bg: rgba(45, 212, 191, 0.15);
+  --type-release-item-bg: rgba(251, 146, 60, 0.15);
+
+  /* Priorities */
   --priority-highest: #f87171;
   --priority-high: #fb923c;
   --priority-medium: #fbbf24;
   --priority-low: #94a3b8;
   --priority-lowest: #64748b;
-  --priority-highest-bg: rgba(248,113,113,0.15);
-  --priority-high-bg: rgba(251,146,60,0.15);
-  --priority-medium-bg: rgba(251,191,36,0.15);
-  --priority-low-bg: rgba(148,163,184,0.15);
-  --priority-lowest-bg: rgba(100,116,139,0.15);
 
-  /* Role (dark) */
+  --priority-highest-bg: rgba(248, 113, 113, 0.15);
+  --priority-high-bg: rgba(251, 146, 60, 0.15);
+  --priority-medium-bg: rgba(251, 191, 36, 0.15);
+  --priority-low-bg: rgba(148, 163, 184, 0.15);
+  --priority-lowest-bg: rgba(100, 116, 139, 0.15);
+
+  /* Roles */
   --role-admin: #fbbf24;
-  --role-admin-bg: rgba(251,191,36,0.15);
+  --role-admin-bg: rgba(251, 191, 36, 0.15);
   --role-pm: #60a5fa;
-  --role-pm-bg: rgba(96,165,250,0.15);
+  --role-pm-bg: rgba(96, 165, 250, 0.15);
   --role-dev: #34d399;
-  --role-dev-bg: rgba(52,211,153,0.15);
+  --role-dev-bg: rgba(52, 211, 153, 0.15);
   --role-qa: #a78bfa;
-  --role-qa-bg: rgba(167,139,250,0.15);
+  --role-qa-bg: rgba(167, 139, 250, 0.15);
   --role-viewer: #94a3b8;
-  --role-viewer-bg: rgba(148,163,184,0.15);
+  --role-viewer-bg: rgba(148, 163, 184, 0.15);
 
-  /* Brand (dark) */
+  /* Brand */
   --brand-primary: #34d399;
   --brand-secondary: #2dd4bf;
-  --brand-glow: rgba(52,211,153,0.25);
+  --brand-glow: rgba(52, 211, 153, 0.25);
 
-  /* Mention (dark) */
+  /* Mentions & Categories */
   --mention: #67e8f9;
-  --mention-bg: rgba(103,232,249,0.1);
-
-  /* Category badge (dark) */
+  --mention-bg: rgba(103, 232, 249, 0.15);
   --category-done: #34d399;
-  --category-done-bg: rgba(52,211,153,0.15);
+  --category-done-bg: rgba(52, 211, 153, 0.15);
   --category-active: #60a5fa;
-  --category-active-bg: rgba(96,165,250,0.15);
+  --category-active-bg: rgba(96, 165, 250, 0.15);
   --category-default: #94a3b8;
-  --category-default-bg: rgba(148,163,184,0.15);
+  --category-default-bg: rgba(148, 163, 184, 0.15);
 }
 
+/* =========================================
+   BASE LAYER & GLOBAL POLISH
+   ========================================= */
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+    /* Font smoothing for that premium App feel */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans selection:bg-primary/20 selection:text-primary;
+    overscroll-behavior-y: none;
+    /* Prevents bounce effect on desktop wrappers */
+  }
+
+  /* Accessible focus rings (hides outline on mouse click, shows on keyboard tab) */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background transition-shadow duration-200;
   }
 }
 
-/* Scrollbar styling for dark/light */
-@layer base {
+/* =========================================
+   COMPONENT OVERRIDES & MICRO-INTERACTIONS
+   ========================================= */
+@layer utilities {
+
+  /* Premium floating scrollbar (Mac-like) */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 14px;
+    /* Slightly wider track for easier grabbing */
+    height: 14px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 3px;
+    background: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+    border: 4px solid transparent;
+    /* Creates the "floating" pill effect */
+    background-clip: padding-box;
+    border-radius: 9999px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--muted-foreground);
+    background: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
+    background-clip: padding-box;
+  }
+
+  /* Corner piece where x/y scrollbars meet */
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Kanban drag-over feedback (Upgraded with smooth pulse and better contrast) */
+  .kanban-column-drag-over {
+    background: var(--surface-hover) !important;
+    outline: 2px dashed var(--primary);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--primary-bg, rgba(37, 99, 235, 0.05));
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-/* Kanban drag-over feedback */
-.kanban-column-drag-over {
-  background: var(--accent) !important;
-  outline: 2px dashed var(--primary);
-  outline-offset: -2px;
+@layer base {
+  /* =========================================
+     FORM ELEMENTS (Input, Select, Textarea)
+     ========================================= */
+
+  /* 1. Base Shared Styling */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    @apply flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors duration-200;
+    /* Ensure iOS doesn't zoom in on inputs */
+    font-size: 16px;
+  }
+
+  @media (min-width: 640px) {
+
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea {
+      @apply text-sm;
+      /* Safe to drop to 14px on desktop */
+    }
+  }
+
+  /* 2. Specific Sizing & Layout */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select {
+    @apply h-10;
+  }
+
+  textarea {
+    @apply min-h-[80px] resize-y;
+    /* Restrict resize to vertical only to prevent layout breaking */
+  }
+
+  select {
+    /* Optional: Custom chevron SVG can be added via background-image in utility classes.
+       For global consistency, we ensure text doesn't overlap default browser arrows */
+    @apply pr-8;
+  }
+
+  /* 3. Interactive States (Hover & Focus) */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover:not(:disabled):not(:read-only),
+  select:hover:not(:disabled),
+  textarea:hover:not(:disabled):not(:read-only) {
+    /* Subtly darken the border on hover using a color mix */
+    border-color: color-mix(in srgb, var(--input) 70%, var(--foreground) 30%);
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background border-ring;
+  }
+
+  /* 4. Disabled & Read-Only States */
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    @apply cursor-not-allowed opacity-50 bg-muted text-muted-foreground border-input shadow-none;
+  }
+
+  input:read-only,
+  textarea:read-only {
+    @apply cursor-default bg-surface focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-input shadow-none;
+  }
+
+  /* 5. Typography & Placeholders */
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground opacity-100;
+    /* opacity-100 fixes iOS Safari fading issue */
+  }
+
+  /* 6. Fix Browser Autofill (Crucial for Dark Mode) */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--foreground);
+    /* Forces the background to match your theme instead of browser yellow/blue */
+    -webkit-box-shadow: 0 0 0px 1000px var(--background) inset;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
+  /* 7. File Input Styling */
+  input[type="file"] {
+    @apply p-0 border-0 bg-transparent shadow-none h-auto;
+  }
+
+  input[type="file"]::file-selector-button {
+    @apply h-10 cursor-pointer border-0 border-r border-input bg-muted px-4 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover mr-4;
+  }
+
+  /* 8. Webkit Normalizations */
+  /* Remove default clear 'x' on search inputs for custom UI control */
+  input[type="search"]::-webkit-search-decoration,
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-results-button,
+  input[type="search"]::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+  }
+
+  /* Hide number input spinners (arrows) by default for a cleaner look */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    /* Firefox */
+  }
+
+  /* Date/Time pickers */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"],
+  input[type="week"] {
+    @apply appearance-none;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    /* Makes the calendar icon respect dark mode text colors */
+    filter: invert(var(--is-dark-mode, 0));
+    opacity: 0.6;
+    cursor: pointer;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator,
+  .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  .dark input[type="time"]::-webkit-calendar-picker-indicator {
+    --is-dark-mode: 1;
+  }
 }

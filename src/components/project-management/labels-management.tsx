@@ -101,29 +101,46 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-5 py-4 border-b flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Tags className="h-4 w-4 text-primary" />
-            Manage Labels
+      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Tags className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <div>Manage Labels</div>
+              <div className="mt-0.5 text-xs font-normal text-muted-foreground">Compact categorization for work items across the project.</div>
+            </div>
           </DialogTitle>
         </DialogHeader>
 
-        {/* Create form */}
-        <div className="px-5 py-4 border-b bg-muted/30 flex-shrink-0">
-          <div className="flex gap-2">
-            <div className="flex-1">
+        <div className="flex-shrink-0 border-b border-border/70 bg-muted/20 px-4 py-4 md:px-5">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+            <div className="space-y-3">
               <Input
                 placeholder="Label name..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="h-9"
+                className="h-9 w-full"
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
+              <div className="flex flex-wrap gap-1.5">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    className={`h-5 w-5 rounded-md transition-all ${
+                      color === c ? 'ring-2 ring-primary ring-offset-1 ring-offset-background scale-110' : 'hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setColor(c)}
+                    aria-label={`Select ${c} as label color`}
+                  />
+                ))}
+              </div>
             </div>
             <Button
               size="sm"
-              className="h-9 px-3"
+              className="h-9 px-4 sm:self-start"
               onClick={handleCreate}
               disabled={isCreating || !name.trim()}
             >
@@ -131,27 +148,22 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
               Add
             </Button>
           </div>
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                className={`h-5 w-5 rounded-md transition-all ${
-                  color === c ? 'ring-2 ring-primary ring-offset-1 ring-offset-background scale-110' : 'hover:scale-105'
-                }`}
-                style={{ backgroundColor: c }}
-                onClick={() => setColor(c)}
-              />
-            ))}
-          </div>
         </div>
 
-        {/* Labels list */}
         <ScrollArea className="flex-1 min-h-0">
-          <div className="p-3 space-y-1">
+          <div className="p-3 md:p-4">
+            <div className="mb-3 flex items-center justify-between gap-2 px-1">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Existing Labels</p>
+                <p className="text-xs text-muted-foreground">{labels.length} configured label{labels.length === 1 ? '' : 's'}</p>
+              </div>
+              {labels.length > 0 ? <Badge variant="secondary" className="h-5 px-2 text-[10px]">{labels.length}</Badge> : null}
+            </div>
+            <div className="space-y-1.5">
             {labels.map((label) => (
               <div
                 key={label.id}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-muted/50 group transition-colors"
+                className="group flex items-center gap-2.5 rounded-xl border border-border/60 bg-card/70 px-3 py-2.5 shadow-sm transition-colors hover:bg-muted/30"
               >
                 {editingId === label.id ? (
                   <>
@@ -162,7 +174,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     <Input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="h-7 text-sm flex-1"
+                      className="h-8 flex-1 text-sm"
                       autoFocus
                       onKeyDown={(e) => e.key === 'Enter' && handleUpdate(label.id)}
                     />
@@ -189,7 +201,7 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       className="h-4 w-4 rounded-full flex-shrink-0"
                       style={{ backgroundColor: label.color }}
                     />
-                    <span className="flex-1 text-sm font-medium">{label.name}</span>
+                    <span className="flex-1 truncate text-sm font-medium">{label.name}</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -216,8 +228,9 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
                 )}
               </div>
             ))}
+            </div>
             {labels.length === 0 && (
-              <div className="text-center py-8">
+              <div className="rounded-2xl border border-dashed border-border/80 bg-muted/10 py-10 text-center">
                 <Tags className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
                 <p className="text-sm text-muted-foreground">No labels yet</p>
                 <p className="text-xs text-muted-foreground">Create labels above to categorize work items</p>

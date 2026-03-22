@@ -250,7 +250,7 @@ async function ensurePlanningConfigurationForType(
     },
     update: {
       title: 'Planning',
-      description: 'Planning configuration and estimation metadata.',
+      description: '',
       sectionType: 'fields',
       isSystem: true,
       order: 900,
@@ -261,7 +261,7 @@ async function ensurePlanningConfigurationForType(
       workItemTypeId,
       key: 'planning',
       title: 'Planning',
-      description: 'Planning configuration and estimation metadata.',
+      description: '',
       sectionType: 'fields',
       isSystem: true,
       order: 900,

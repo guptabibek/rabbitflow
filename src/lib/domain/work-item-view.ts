@@ -1,4 +1,5 @@
 import type { Issue, WorkItemTypeDefinition } from '@/store/app-store'
+import { workItemPath } from '@/lib/domain/work-item-url'
 
 export const UNASSIGNED_VALUE = '__none__'
 
@@ -55,7 +56,7 @@ function normalizeCustomFields(value: Record<string, unknown>) {
 }
 
 export function canonicalWorkItemRoute(workItemId: string) {
-  return `/work-items/${encodeURIComponent(workItemId)}`
+  return workItemPath(workItemId)
 }
 
 export function getWorkItemTypeDefinition(

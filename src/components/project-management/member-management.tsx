@@ -304,30 +304,37 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="flex max-h-[80vh] max-w-lg flex-col overflow-hidden p-0 gap-0">
-        <DialogHeader className="flex-shrink-0 border-b border-border px-5 py-3.5">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
               <Users className="h-4 w-4 text-primary" />
             </div>
-            <span>Project Members</span>
-            {currentProject && (
-              <Badge variant="outline" className="ml-1 text-[10px] font-normal">
-                {currentProject.name}
-              </Badge>
-            )}
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>Project Members</span>
+                {currentProject && (
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    {currentProject.name}
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                Compact access management for project membership and roles.
+              </div>
+            </div>
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-border/50 px-5 py-3">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-4 py-3 md:px-5">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search members..."
-                className="h-8 pl-8 text-xs"
+                className="h-9 pl-8 text-xs"
               />
             </div>
 
@@ -340,21 +347,21 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs">
+                  <Button size="sm" className="h-9 gap-1.5 text-xs">
                     <UserPlus className="h-3.5 w-3.5" />
                     Add
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-md p-0 gap-0">
-                  <DialogHeader className="border-b border-border px-5 py-3.5">
-                    <DialogTitle className="text-base">
+                <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+                  <DialogHeader className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
+                    <DialogTitle className="text-base font-semibold tracking-tight">
                       {showCreateForm ? 'Create New User' : 'Add Member to Project'}
                     </DialogTitle>
                   </DialogHeader>
 
                   {!showCreateForm ? (
                     /* ── Add existing user ─────────────────────────── */
-                    <div className="space-y-3 px-5 py-4">
+                    <div className="space-y-3 px-4 py-4 md:px-5">
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Search Users
@@ -368,7 +375,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               setSelectedUserId(null)
                             }}
                             placeholder="Search by name or email..."
-                            className="h-8 pl-8 text-sm"
+                            className="h-9 pl-8 text-sm"
                           />
                         </div>
                       </div>
@@ -443,7 +450,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               setAddRole(v as (typeof ROLE_OPTIONS)[number]['value'])
                             }
                           >
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-9 text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -461,7 +468,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       )}
 
                       <Button
-                        className="h-8 w-full text-xs"
+                        className="h-9 w-full text-xs"
                         onClick={handleAddExistingUser}
                         disabled={!selectedUserId || isAdding}
                       >
@@ -482,7 +489,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           </div>
                           <Button
                             variant="outline"
-                            className="h-8 w-full gap-1.5 text-xs border-dashed"
+                            className="h-9 w-full gap-1.5 border-dashed text-xs"
                             onClick={() => setShowCreateForm(true)}
                           >
                             <Plus className="h-3.5 w-3.5" />
@@ -493,7 +500,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     </div>
                   ) : (
                     /* ── Create new user ───────────────────────────── */
-                    <div className="space-y-3 px-5 py-4">
+                    <div className="space-y-3 px-4 py-4 md:px-5">
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Name
@@ -502,7 +509,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           value={newUserName}
                           onChange={(e) => setNewUserName(e.target.value)}
                           placeholder="John Doe"
-                          className="h-8 text-sm"
+                          className="h-9 text-sm"
                         />
                       </div>
                       <div>
@@ -514,7 +521,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           value={newUserEmail}
                           onChange={(e) => setNewUserEmail(e.target.value)}
                           placeholder="john@example.com"
-                          className="h-8 text-sm"
+                          className="h-9 text-sm"
                         />
                       </div>
                       <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
@@ -536,7 +543,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               setNewUserRole(v as (typeof ROLE_OPTIONS)[number]['value'])
                             }
                           >
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-9 text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -558,19 +565,19 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           value={newUserPassword}
                           onChange={(e) => setNewUserPassword(e.target.value)}
                           placeholder="Minimum 8 characters"
-                          className="h-8 text-sm"
+                          className="h-9 text-sm"
                         />
                       </div>
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
-                          className="h-8 flex-1 text-xs"
+                          className="h-9 flex-1 text-xs"
                           onClick={() => setShowCreateForm(false)}
                         >
                           Back
                         </Button>
                         <Button
-                          className="h-8 flex-1 text-xs"
+                          className="h-9 flex-1 text-xs"
                           onClick={handleCreateAndAdd}
                           disabled={
                             !newUserEmail || !newUserName || newUserPassword.length < 8 || isAdding

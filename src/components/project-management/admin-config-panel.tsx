@@ -37,7 +37,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { GripVertical, Loader2, Save, Trash2 } from 'lucide-react'
+import { GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 type TypeStateMappingRecord = {
@@ -901,23 +901,30 @@ export function AdminConfigPanel() {
   )
 
   return (
-    <div className="p-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Admin Panel</h2>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-3 p-4 md:p-5 lg:p-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Layers className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Admin Panel</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
             Configure work item types, dynamic states, field mappings, and planning metadata.
-          </p>
+            </p>
+          </div>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-        <TabsList className="mb-4 grid w-full grid-cols-4 md:w-auto md:grid-cols-4">
-          <TabsTrigger value="types">Work Item Types</TabsTrigger>
-          <TabsTrigger value="states">State Management</TabsTrigger>
-          <TabsTrigger value="fields">Field Management</TabsTrigger>
-          <TabsTrigger value="planning">Planning Config</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="mb-3 grid h-auto w-full min-w-[44rem] grid-cols-4 rounded-xl bg-muted/20 p-1 md:w-auto">
+            <TabsTrigger value="types" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Work Item Types</TabsTrigger>
+            <TabsTrigger value="states" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">State Management</TabsTrigger>
+            <TabsTrigger value="fields" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Field Management</TabsTrigger>
+            <TabsTrigger value="planning" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Planning Config</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="types" className="mt-0">
           <WorkItemTypeManagement mode="screen" />

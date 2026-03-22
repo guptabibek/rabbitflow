@@ -3,6 +3,7 @@ import { enqueueEmail } from '@/lib/email-queue'
 import { toPlainTextPreview } from '@/lib/domain/content'
 import { stripMentionMarkup } from '@/lib/domain/mentions'
 import { buildMentionEmail, buildAssignmentEmail } from '@/lib/domain/email-templates'
+import { workItemUrl } from '@/lib/domain/work-item-url'
 
 type MentionNotificationArgs = {
   issueId: string
@@ -15,31 +16,6 @@ type AssignmentNotificationArgs = {
   issueId: string
   assigneeUserId: string
   actorUserId: string
-}
-
-function resolveAppBaseUrl() {
-  const configuredUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
-  if (!configuredUrl) {
-    throw new Error('APP_URL (or NEXT_PUBLIC_APP_URL) is not configured')
-  }
-
-  try {
-    const normalizedUrl = /^https?:\/\//i.test(configuredUrl)
-      ? configuredUrl
-      : `http://${configuredUrl}`
-    const base = new URL(normalizedUrl)
-    if (!base.pathname.endsWith('/')) {
-      base.pathname = `${base.pathname}/`
-    }
-    return base
-  } catch {
-    throw new Error('APP_URL (or NEXT_PUBLIC_APP_URL) must be a valid absolute URL')
-  }
-}
-
-function workItemUrl(issueId: string) {
-  const base = resolveAppBaseUrl()
-  return new URL(`work-items/${encodeURIComponent(issueId)}`, base).toString()
 }
 
 export async function sendMentionNotificationEmails(args: MentionNotificationArgs) {

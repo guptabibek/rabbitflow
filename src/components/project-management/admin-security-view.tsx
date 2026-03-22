@@ -287,38 +287,45 @@ export function AdminSecurityView() {
   }
 
   return (
-    <div className="h-full overflow-auto p-4 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">Admin Security Console</h2>
-          <p className="text-xs text-muted-foreground">Force MFA re-enrollment, revoke sessions, review audit timeline.</p>
+    <div className="h-full space-y-3 overflow-auto bg-[linear-gradient(to_bottom,_hsl(var(--background)),_hsl(var(--background)))] p-4 md:p-5 lg:p-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Shield className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Admin Security Console</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Force MFA re-enrollment, revoke sessions, and review audit history from one compact control surface.</p>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing || operationLoading}>
+        <Button variant="outline" size="sm" className="h-9 gap-1.5 self-start" onClick={refreshAll} disabled={isRefreshing || operationLoading}>
           {isRefreshing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />}
           Refresh
         </Button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="space-y-2 p-4">
-            <CardTitle className="text-sm">Users</CardTitle>
-            <div className="space-y-1">
-              <Label htmlFor="security-user-search" className="text-[11px] text-muted-foreground">Search users</Label>
-              <Input
-                id="security-user-search"
-                className="h-8 text-xs"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Name or email"
-                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void loadUsers(query) } }}
-              />
+      <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)]">
+        <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm">
+          <CardHeader className="space-y-3 border-b border-border/60 p-4">
+            <CardTitle className="text-sm font-semibold">Users</CardTitle>
+            <div className="space-y-1.5">
+              <Label htmlFor="security-user-search" className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Search users</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="security-user-search"
+                  className="h-9 text-xs"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Name or email"
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void loadUsers(query) } }}
+                />
+                <Button size="sm" variant="secondary" className="h-9 px-3 text-xs" onClick={() => void loadUsers(query)} disabled={isRefreshing || operationLoading}>
+                  Apply
+                </Button>
+              </div>
             </div>
-            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => void loadUsers(query)} disabled={isRefreshing || operationLoading}>
-              Apply Filter
-            </Button>
           </CardHeader>
-          <CardContent className="max-h-[60vh] overflow-auto p-0">
+          <CardContent className="max-h-[65vh] overflow-auto p-0">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -332,15 +339,15 @@ export function AdminSecurityView() {
                   const isSelected = selectedUserId === user.id
                   return (
                     <tr key={user.id} className={`cursor-pointer border-b transition-colors hover:bg-muted/40 ${isSelected ? 'bg-muted/60' : ''}`} onClick={() => setSelectedUserId(user.id)}>
-                      <td className="px-3 py-1.5 align-top">
+                      <td className="px-3 py-2 align-top">
                         <div className="font-medium text-xs">{user.name}</div>
                         <div className="text-[11px] text-muted-foreground">{user.email}</div>
                       </td>
-                      <td className="px-3 py-1.5 align-top">
+                      <td className="px-3 py-2 align-top">
                         {user.mfaEnabled ? <Badge className="bg-category-done-bg text-category-done border-0 text-[10px]">On</Badge> : <Badge variant="outline" className="text-[10px]">Off</Badge>}
                         {user.mfaReenrollRequired ? <div className="mt-0.5"><Badge className="bg-status-in-review-bg text-status-in-review border-0 text-[10px]">Re-enroll</Badge></div> : null}
                       </td>
-                      <td className="px-3 py-1.5 align-top text-xs">{user.activeSessions}</td>
+                      <td className="px-3 py-2 align-top text-xs">{user.activeSessions}</td>
                     </tr>
                   )
                 })}
@@ -351,21 +358,21 @@ export function AdminSecurityView() {
         </Card>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-3 p-4">
-              <div>
-                <CardTitle className="text-sm">Sessions & Devices</CardTitle>
-                {selectedUser ? <p className="text-[11px] text-muted-foreground mt-0.5">{selectedUser.name} ({selectedUser.email})</p> : null}
+          <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm">
+            <CardHeader className="gap-3 border-b border-border/60 p-4">
+              <div className="flex flex-col gap-1">
+                <CardTitle className="text-sm font-semibold">Sessions & Devices</CardTitle>
+                {selectedUser ? <p className="text-[11px] text-muted-foreground">{selectedUser.name} ({selectedUser.email})</p> : <p className="text-[11px] text-muted-foreground">Select a user to manage active sessions and MFA state.</p>}
               </div>
               {selectedUser ? (
-                <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => void resetMfaForUser(selectedUser.id, true)} disabled={operationLoading}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="destructive" size="sm" className="h-8 text-xs" onClick={() => void resetMfaForUser(selectedUser.id, true)} disabled={operationLoading}>
                     <ShieldAlert className="mr-1 h-3 w-3" />Reset MFA + Revoke
                   </Button>
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void resetMfaForUser(selectedUser.id, false)} disabled={operationLoading}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => void resetMfaForUser(selectedUser.id, false)} disabled={operationLoading}>
                     <Shield className="mr-1 h-3 w-3" />MFA Only
                   </Button>
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void revokeAllSessionsForUser(selectedUser.id)} disabled={operationLoading}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => void revokeAllSessionsForUser(selectedUser.id)} disabled={operationLoading}>
                     <XCircle className="mr-1 h-3 w-3" />Revoke All
                   </Button>
                 </div>
@@ -379,7 +386,7 @@ export function AdminSecurityView() {
               ) : sessions.length === 0 ? (
                 <div className="p-4 text-xs text-muted-foreground">No sessions found.</div>
               ) : (
-                <div className="max-h-[40vh] overflow-auto">
+                <div className="max-h-[38vh] overflow-auto lg:max-h-[42vh]">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -392,20 +399,20 @@ export function AdminSecurityView() {
                     <tbody>
                       {sessions.map((session) => (
                         <tr key={session.id} className="border-b align-top">
-                          <td className="px-3 py-1.5">
+                          <td className="px-3 py-2">
                             <div className="font-medium">{session.deviceLabel || 'Unknown device'}</div>
                             <div className="text-[11px] text-muted-foreground">IP: {session.ipAddress || 'N/A'}</div>
                           </td>
-                          <td className="px-3 py-1.5 space-y-0.5">
+                          <td className="px-3 py-2 space-y-0.5">
                             {session.revokedAt ? <Badge variant="outline" className="text-destructive border-destructive/40 text-[10px]">Revoked</Badge> : <Badge className="bg-category-done-bg text-category-done border-0 text-[10px]">Active</Badge>}
                             {session.mfaBypassed ? <div><Badge className="bg-status-in-review-bg text-status-in-review border-0 text-[10px]">MFA bypassed</Badge></div> : null}
                           </td>
-                          <td className="px-3 py-1.5 text-[11px] text-muted-foreground space-y-0.5">
+                          <td className="px-3 py-2 text-[11px] text-muted-foreground space-y-0.5">
                             <div>Created: {formatDateTime(session.createdAt)}</div>
                             <div>Last seen: {formatDateTime(session.lastSeenAt)}</div>
                           </td>
-                          <td className="px-3 py-1.5">
-                            <Button size="sm" variant="outline" className="h-6 text-[11px]" disabled={operationLoading || Boolean(session.revokedAt)} onClick={() => void revokeSession(session.id)}>
+                          <td className="px-3 py-2">
+                            <Button size="sm" variant="outline" className="h-7 text-[11px]" disabled={operationLoading || Boolean(session.revokedAt)} onClick={() => void revokeSession(session.id)}>
                               <XCircle className="mr-1 h-3 w-3" />Revoke
                             </Button>
                           </td>
@@ -418,10 +425,10 @@ export function AdminSecurityView() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="p-4">
-              <CardTitle className="text-sm">Audit Timeline</CardTitle>
-              {selectedUser ? <p className="text-[11px] text-muted-foreground mt-0.5">Security events for {selectedUser.name}</p> : null}
+          <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm">
+            <CardHeader className="border-b border-border/60 p-4">
+              <CardTitle className="text-sm font-semibold">Audit Timeline</CardTitle>
+              {selectedUser ? <p className="mt-0.5 text-[11px] text-muted-foreground">Security events for {selectedUser.name}</p> : null}
             </CardHeader>
             <CardContent className="p-4 pt-0">
               {auditLoading ? (
@@ -431,11 +438,11 @@ export function AdminSecurityView() {
               ) : auditEvents.length === 0 ? (
                 <div className="text-xs text-muted-foreground">No security events recorded.</div>
               ) : (
-                <div className="max-h-[24vh] space-y-1.5 overflow-auto pr-1">
+                <div className="max-h-[26vh] space-y-2 overflow-auto pr-1 lg:max-h-[28vh]">
                   {auditEvents.map((event) => {
                     const details = describeAuditDetails(event)
                     return (
-                      <div key={event.id} className="rounded border bg-muted/20 p-2.5">
+                      <div key={event.id} className="rounded-xl border border-border/60 bg-muted/20 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="text-xs font-medium">{formatAuditAction(event.action)}</div>
@@ -454,7 +461,7 @@ export function AdminSecurityView() {
         </div>
       </div>
 
-      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <History className="h-3 w-3" />
         Use reset and revoke controls to enforce re-enrollment and terminate risky sessions instantly.
       </div>

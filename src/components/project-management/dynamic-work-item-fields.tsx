@@ -50,15 +50,19 @@ export function DynamicWorkItemFields({
   if (sections.length === 0) return null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {sections.map((section) => (
-        <section key={section.id} className="space-y-4">
-          <div>
+        <section
+          key={section.id}
+          className="p-0"
+        >
+          {/* Header */}
+          <div className="mb-4">
             {section.isCollapsible ? (
               <Button
                 type="button"
                 variant="ghost"
-                className="h-auto px-0 py-0 text-left hover:bg-transparent"
+                className="group flex items-center gap-2 px-0 py-0 text-left hover:bg-transparent"
                 onClick={() =>
                   setCollapsedSections((previous) => ({
                     ...previous,
@@ -66,41 +70,58 @@ export function DynamicWorkItemFields({
                   }))
                 }
               >
-                {collapsedSections[section.id] ? (
-                  <ChevronRight className="mr-2 h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="mr-2 h-4 w-4 text-muted-foreground" />
-                )}
-                <span className="text-sm font-semibold text-foreground">{section.title}</span>
+                <span className="flex items-center justify-center rounded-md border p-1">
+                  {collapsedSections[section.id] ? (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </span>
+                <span className="text-sm font-semibold tracking-tight">
+                  {section.title}
+                </span>
               </Button>
             ) : (
-              <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+              <h3 className="text-sm font-semibold tracking-tight">
+                {section.title}
+              </h3>
             )}
-            {section.description ? (
-              <p className="mt-1 text-xs text-muted-foreground">{section.description}</p>
-            ) : null}
+
+            {section.description && (
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                {section.description}
+              </p>
+            )}
           </div>
 
+          {/* Fields */}
           <div
-            className={`grid gap-4 md:grid-cols-2 ${section.isCollapsible && collapsedSections[section.id] ? 'hidden' : ''}`}
+            className={`grid gap-5 grid-cols-1 ${
+              section.isCollapsible && collapsedSections[section.id]
+                ? 'hidden'
+                : ''
+            }`}
           >
             {section.fields.map((field) => {
-              if (HIDDEN_SYSTEM_FIELD_KEYS.has(field.key)) {
-                return null
-              }
+              if (HIDDEN_SYSTEM_FIELD_KEYS.has(field.key)) return null
 
               const value = values[field.key]
 
+              const baseWrapper =
+                'space-y-1.5 transition-all duration-200'
+
               if (field.dataType === 'markdown') {
                 return (
-                  <div key={field.id} className="md:col-span-2">
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={`${baseWrapper} md:col-span-2`}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <Textarea
                       value={typeof value === 'string' ? value : ''}
-                      onChange={(event) => onChange(field.key, event.target.value)}
+                      onChange={(e) => onChange(field.key, e.target.value)}
                       placeholder={field.placeholder || undefined}
                       rows={6}
-                      className="mt-1.5"
+                      className="mt-1 w-full rounded-xl border-muted focus-visible:ring-2"
                     />
                   </div>
                 )
@@ -108,13 +129,15 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'text') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <Input
+                      className="mt-1 rounded-xl w-full"
                       value={typeof value === 'string' ? value : ''}
-                      onChange={(event) => onChange(field.key, event.target.value)}
+                      onChange={(e) => onChange(field.key, e.target.value)}
                       placeholder={field.placeholder || undefined}
-                      className="mt-1.5"
                     />
                   </div>
                 )
@@ -122,19 +145,21 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'number') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <Input
                       type="number"
                       value={typeof value === 'number' ? String(value) : ''}
-                      onChange={(event) =>
+                      onChange={(e) =>
                         onChange(
                           field.key,
-                          event.target.value === '' ? null : Number(event.target.value)
+                          e.target.value === '' ? null : Number(e.target.value)
                         )
                       }
                       placeholder={field.placeholder || undefined}
-                      className="mt-1.5"
+                      className="mt-1 rounded-xl"
                     />
                   </div>
                 )
@@ -142,13 +167,15 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'date') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <Input
                       type="date"
                       value={typeof value === 'string' ? value.slice(0, 10) : ''}
-                      onChange={(event) => onChange(field.key, event.target.value || null)}
-                      className="mt-1.5"
+                      onChange={(e) => onChange(field.key, e.target.value || null)}
+                      className="mt-1 rounded-xl"
                     />
                   </div>
                 )
@@ -156,16 +183,25 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'boolean') {
                 return (
-                  <div key={field.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div
+                    key={field.id}
+                    className="flex items-center justify-between rounded-xl border bg-muted/30 p-4 hover:bg-muted/50 transition"
+                  >
                     <div>
-                      <div className="text-sm font-medium">{field.label}</div>
-                      {field.description ? (
-                        <p className="mt-1 text-xs text-muted-foreground">{field.description}</p>
-                      ) : null}
+                      <div className="text-sm font-medium">
+                        {field.label}
+                      </div>
+                      {field.description && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {field.description}
+                        </p>
+                      )}
                     </div>
                     <Checkbox
                       checked={Boolean(value)}
-                      onCheckedChange={(checked) => onChange(field.key, checked === true)}
+                      onCheckedChange={(checked) =>
+                        onChange(field.key, checked === true)
+                      }
                     />
                   </div>
                 )
@@ -173,16 +209,24 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'single_select') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <Select
-                      value={typeof value === 'string' && value ? value : EMPTY_SELECT}
-                      onValueChange={(nextValue) =>
-                        onChange(field.key, nextValue === EMPTY_SELECT ? null : nextValue)
+                      value={
+                        typeof value === 'string' && value
+                          ? value
+                          : EMPTY_SELECT
+                      }
+                      onValueChange={(next) =>
+                        onChange(field.key, next === EMPTY_SELECT ? null : next)
                       }
                     >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder={field.placeholder || 'Select'} />
+                      <SelectTrigger className="mt-1 w-full">
+                        <SelectValue
+                          placeholder={field.placeholder || 'Select'}
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={EMPTY_SELECT}>None</SelectItem>
@@ -199,26 +243,27 @@ export function DynamicWorkItemFields({
 
               if (field.dataType === 'multi_select') {
                 const currentValues = Array.isArray(value)
-                  ? value.filter((item): item is string => typeof item === 'string')
+                  ? value.filter((v): v is string => typeof v === 'string')
                   : []
 
                 return (
-                  <div key={field.id} className="md:col-span-2">
-                    <Label className="text-xs">{field.label}</Label>
+                  <div key={field.id} className={`${baseWrapper} md:col-span-2`}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {(field.options || []).map((option) => {
                         const selected = currentValues.includes(option)
-
                         return (
                           <Badge
                             key={option}
                             variant={selected ? 'default' : 'outline'}
-                            className="cursor-pointer"
+                            className="cursor-pointer rounded-full px-3 py-1 text-xs transition hover:scale-105"
                             onClick={() =>
                               onChange(
                                 field.key,
                                 selected
-                                  ? currentValues.filter((item) => item !== option)
+                                  ? currentValues.filter((i) => i !== option)
                                   : [...currentValues, option]
                               )
                             }
@@ -232,106 +277,90 @@ export function DynamicWorkItemFields({
                 )
               }
 
+              const renderSelect = (
+                items: { id: string; label: string }[],
+                placeholder: string
+              ) => (
+                <Select
+                  value={
+                    typeof value === 'string' && value ? value : EMPTY_SELECT
+                  }
+                  onValueChange={(next) =>
+                    onChange(field.key, next === EMPTY_SELECT ? null : next)
+                  }
+                >
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue placeholder={placeholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMPTY_SELECT}>None</SelectItem>
+                    {items.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+
               if (field.dataType === 'user') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
-                    <Select
-                      value={typeof value === 'string' && value ? value : EMPTY_SELECT}
-                      onValueChange={(nextValue) =>
-                        onChange(field.key, nextValue === EMPTY_SELECT ? null : nextValue)
-                      }
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Select a user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={EMPTY_SELECT}>None</SelectItem>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    {renderSelect(
+                      users.map((u) => ({ id: u.id, label: u.name })),
+                      'Select a user'
+                    )}
                   </div>
                 )
               }
 
               if (field.dataType === 'iteration') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
-                    <Select
-                      value={typeof value === 'string' && value ? value : EMPTY_SELECT}
-                      onValueChange={(nextValue) =>
-                        onChange(field.key, nextValue === EMPTY_SELECT ? null : nextValue)
-                      }
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Select an iteration" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={EMPTY_SELECT}>None</SelectItem>
-                        {iterations.map((iteration) => (
-                          <SelectItem key={iteration.id} value={iteration.id}>
-                            {iteration.path || iteration.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    {renderSelect(
+                      iterations.map((i) => ({
+                        id: i.id,
+                        label: i.path || i.name,
+                      })),
+                      'Select an iteration'
+                    )}
                   </div>
                 )
               }
 
               if (field.dataType === 'area') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
-                    <Select
-                      value={typeof value === 'string' && value ? value : EMPTY_SELECT}
-                      onValueChange={(nextValue) =>
-                        onChange(field.key, nextValue === EMPTY_SELECT ? null : nextValue)
-                      }
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Select an area" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={EMPTY_SELECT}>None</SelectItem>
-                        {areas.map((area) => (
-                          <SelectItem key={area.id} value={area.id}>
-                            {area.path || area.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    {renderSelect(
+                      areas.map((a) => ({
+                        id: a.id,
+                        label: a.path || a.name,
+                      })),
+                      'Select an area'
+                    )}
                   </div>
                 )
               }
 
               if (field.dataType === 'team') {
                 return (
-                  <div key={field.id}>
-                    <Label className="text-xs">{field.label}</Label>
-                    <Select
-                      value={typeof value === 'string' && value ? value : EMPTY_SELECT}
-                      onValueChange={(nextValue) =>
-                        onChange(field.key, nextValue === EMPTY_SELECT ? null : nextValue)
-                      }
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Select a team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={EMPTY_SELECT}>None</SelectItem>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div key={field.id} className={baseWrapper}>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    {renderSelect(
+                      teams.map((t) => ({ id: t.id, label: t.name })),
+                      'Select a team'
+                    )}
                   </div>
                 )
               }
