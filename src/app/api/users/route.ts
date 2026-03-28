@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, isUniqueConstraintError } from '@/lib/db'
 import { hashPassword } from '@/lib/auth'
 import {
   requireAuthenticatedUser,
@@ -20,8 +20,10 @@ const createUserSchema = z.object({
   globalRole: z.enum(['admin', 'member']).optional(),
   addToProject: z.boolean().optional(),
   projectId: z.string().optional(),
-  projectRole: z.enum(['Admin', 'PM', 'Dev', 'QA', 'Viewer']).optional(),
+  projectRole: z.enum(['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer']).optional(),
 })
+
+class ProjectProvisioningError extends Error {}
 
 export async function GET(request: NextRequest) {
   try {
@@ -179,44 +181,53 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await hashPassword(data.password)
 
-    const user = await db.user.create({
-      data: {
-        name: data.name.trim(),
-        email: normalizedEmail,
-        avatar: data.avatar,
-        passwordHash,
-        globalRole: data.globalRole ?? 'member',
-        mustResetPassword: true,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        globalRole: true,
-      },
-    })
+    const { user, projectIdToInvalidate } = await db.$transaction(async (tx) => {
+      const userRecord = await tx.user.create({
+        data: {
+          name: data.name.trim(),
+          email: normalizedEmail,
+          avatar: data.avatar,
+          passwordHash,
+          globalRole: data.globalRole ?? 'member',
+          mustResetPassword: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar: true,
+          globalRole: true,
+        },
+      })
 
-    if (shouldAddToProject && data.projectId) {
-      const project = await db.project.findUnique({
+      if (!shouldAddToProject || !data.projectId) {
+        return { user: userRecord, projectIdToInvalidate: null as string | null }
+      }
+
+      const project = await tx.project.findUnique({
         where: { id: data.projectId },
         select: { id: true, name: true },
       })
 
       if (!project) {
-        return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        throw new ProjectProvisioningError('Project not found')
       }
 
-      await db.projectMember.create({
+      await tx.projectMember.create({
         data: {
           projectId: data.projectId,
-          userId: user.id,
+          userId: userRecord.id,
           role: data.projectRole ?? 'Dev',
         },
       })
 
       assignedProjectName = project.name
-      await invalidateProjectCaches(data.projectId)
+
+      return { user: userRecord, projectIdToInvalidate: data.projectId }
+    })
+
+    if (projectIdToInvalidate) {
+      await invalidateProjectCaches(projectIdToInvalidate)
     }
 
     let emailDelivery:
@@ -254,6 +265,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: error.issues[0]?.message || 'Validation failed' },
         { status: 400 }
+      )
+    }
+    if (error instanceof ProjectProvisioningError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (isUniqueConstraintError(error, ['email'])) {
+      return NextResponse.json(
+        { error: 'A user with this email already exists' },
+        { status: 409 }
       )
     }
     console.error('Error creating user:', error)

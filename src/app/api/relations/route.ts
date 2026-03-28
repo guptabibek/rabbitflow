@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@/lib/db'
+import { db, isUniqueConstraintError } from '@/lib/db'
+import { getAreaAccessScope } from '@/lib/domain/access-control'
 import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
@@ -65,23 +66,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'issueId or projectId is required' }, { status: 400 })
     }
 
+    let resolvedProjectId = projectId
+    let relationViewerRole: string | null = null
+    let relationViewerExtraPermissions: string[] = []
+
     if (projectId) {
-      const auth = await requireProjectPermission(request, projectId, 'workitem:read')
+      const auth = await requireProjectPermission(request, projectId, 'workitem:read', undefined, {
+        allowScoped: true,
+      })
       if (!auth.ok) return auth.response
+      relationViewerRole = auth.actor.projectRole
+      relationViewerExtraPermissions = auth.actor.extraPermissions
     }
 
     if (issueId) {
       const issue = await db.issue.findUnique({
         where: { id: issueId },
-        select: { projectId: true },
+        select: { projectId: true, areaId: true },
       })
 
       if (!issue) {
         return NextResponse.json({ error: 'Work item not found' }, { status: 404 })
       }
+      resolvedProjectId = issue.projectId
 
-      const auth = await requireProjectPermission(request, issue.projectId, 'workitem:read')
+      const auth = await requireProjectPermission(request, issue.projectId, 'workitem:read', undefined, {
+        areaId: issue.areaId ?? null,
+      })
       if (!auth.ok) return auth.response
+      relationViewerRole = auth.actor.projectRole
+      relationViewerExtraPermissions = auth.actor.extraPermissions
     }
 
     const where = issueId
@@ -99,12 +113,21 @@ export async function GET(request: NextRequest) {
 
     const include = {
       sourceIssue: {
-        select: { id: true, key: true, title: true, status: true, workItemType: true },
+        select: { id: true, key: true, title: true, status: true, workItemType: true, areaId: true },
       },
       targetIssue: {
-        select: { id: true, key: true, title: true, status: true, workItemType: true },
+        select: { id: true, key: true, title: true, status: true, workItemType: true, areaId: true },
       },
     }
+
+    const areaScope = resolvedProjectId
+      ? await getAreaAccessScope(
+          resolvedProjectId,
+          relationViewerRole,
+          'workitem:read',
+          relationViewerExtraPermissions
+        )
+      : null
 
     if (paginate) {
       const rows = await db.issueRelation.findMany({
@@ -115,8 +138,20 @@ export async function GET(request: NextRequest) {
         orderBy: { id: 'desc' },
       })
 
-      const hasMore = rows.length > take
-      const items = hasMore ? rows.slice(0, take) : rows
+      const filteredRows = areaScope
+        ? rows.filter((relation) => {
+            const sourceAllowed = relation.sourceIssue.areaId === undefined || relation.sourceIssue.areaId === null
+              ? areaScope.allowUnassigned
+              : areaScope.allowedAreaIds.includes(relation.sourceIssue.areaId)
+            const targetAllowed = relation.targetIssue.areaId === undefined || relation.targetIssue.areaId === null
+              ? areaScope.allowUnassigned
+              : areaScope.allowedAreaIds.includes(relation.targetIssue.areaId)
+            return sourceAllowed && targetAllowed
+          })
+        : rows
+
+      const hasMore = filteredRows.length > take
+      const items = hasMore ? filteredRows.slice(0, take) : filteredRows
       const nextCursor = hasMore ? items[items.length - 1]?.id ?? null : null
 
       if (flat && issueId) {
@@ -151,9 +186,21 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
+    const filteredRelations = areaScope
+      ? relations.filter((relation) => {
+          const sourceAllowed = relation.sourceIssue.areaId === undefined || relation.sourceIssue.areaId === null
+            ? areaScope.allowUnassigned
+            : areaScope.allowedAreaIds.includes(relation.sourceIssue.areaId)
+          const targetAllowed = relation.targetIssue.areaId === undefined || relation.targetIssue.areaId === null
+            ? areaScope.allowUnassigned
+            : areaScope.allowedAreaIds.includes(relation.targetIssue.areaId)
+          return sourceAllowed && targetAllowed
+        })
+      : relations
+
     if (flat && issueId) {
       return NextResponse.json(
-        relations.map((relation) => {
+        filteredRelations.map((relation) => {
           const isOutgoing = relation.sourceIssueId === issueId
           return {
             id: relation.id,
@@ -170,7 +217,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json(relations)
+    return NextResponse.json(filteredRelations)
   } catch (error) {
     console.error('Error fetching relations:', error)
     return NextResponse.json({ error: 'Failed to fetch relations' }, { status: 500 })
@@ -197,6 +244,7 @@ export async function POST(request: NextRequest) {
           key: true,
           projectId: true,
           iterationId: true,
+          areaId: true,
         },
       }),
       db.issue.findUnique({
@@ -206,6 +254,7 @@ export async function POST(request: NextRequest) {
           key: true,
           projectId: true,
           iterationId: true,
+          areaId: true,
         },
       }),
     ])
@@ -221,7 +270,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const auth = await requireProjectPermission(request, sourceIssue.projectId, 'workitem:link')
+    const auth = await requireProjectPermission(request, sourceIssue.projectId, 'workitem:link', undefined, {
+      areaId: sourceIssue.areaId ?? null,
+    })
     if (!auth.ok) return auth.response
 
     const inverseRelationType = getInverseRelationType(data.relationType)
@@ -280,6 +331,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })
+    }
+    if (isUniqueConstraintError(error)) {
+      return NextResponse.json({ error: 'Link already exists' }, { status: 409 })
     }
 
     console.error('Error creating relation:', error)

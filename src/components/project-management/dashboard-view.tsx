@@ -109,14 +109,14 @@ export function DashboardView() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
-        <Skeleton className="h-40 rounded-xl" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Skeleton className="h-32 rounded-xl" />
+        <div className="grid gap-6 md:grid-cols-2">
           <Skeleton className="h-72 rounded-xl" />
           <Skeleton className="h-72 rounded-xl" />
         </div>
@@ -156,12 +156,12 @@ export function DashboardView() {
   ]
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((card) => (
-          <Card key={card.label} className="border-border/50 bg-card">
-            <CardContent className="p-5">
+          <Card key={card.label} className="border-border/50 bg-card transition-shadow hover:shadow-md">
+            <CardContent className="p-4 sm:p-5">
               <div className="flex items-center gap-3.5">
                 <div className={`h-10 w-10 rounded-lg ${card.iconBg} flex items-center justify-center flex-shrink-0`}>
                   <card.icon className={`h-5 w-5 ${card.iconColor}`} />
@@ -177,8 +177,8 @@ export function DashboardView() {
       </div>
 
       {/* Progress Overview */}
-      <Card className="border-border/50 bg-card">
-        <CardContent className="p-5">
+      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
+        <CardContent className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-foreground">Issue Progress</h3>
@@ -207,10 +207,10 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Left Panel */}
-        <Card className="border-border/50 bg-card">
-          <CardContent className="p-5">
+        <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
+          <CardContent className="p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">
               {currentProject ? 'Active Sprint' : 'Recent Projects'}
             </h3>
@@ -293,8 +293,8 @@ export function DashboardView() {
         </Card>
 
         {/* Recent Issues */}
-        <Card className="border-border/50 bg-card">
-          <CardContent className="p-5">
+        <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
+          <CardContent className="p-4 sm:p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">Recent Issues</h3>
             <ScrollArea className="h-60">
               <div className="space-y-1">

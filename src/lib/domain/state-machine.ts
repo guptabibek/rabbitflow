@@ -1,6 +1,9 @@
 import { db } from '@/lib/db'
+import { normalizeStateCategory, statusFromStateCategory } from '@/lib/domain/state-categories'
+import type { WorkItemStateCategory } from '@/lib/domain/state-categories'
 
-export type WorkItemStateCategory = 'New' | 'In Progress' | 'Done'
+export { normalizeStateCategory, statusFromStateCategory }
+export type { WorkItemStateCategory }
 
 const STATUS_CATEGORY_MAP: Record<string, WorkItemStateCategory[]> = {
   backlog: ['New'],
@@ -9,32 +12,6 @@ const STATUS_CATEGORY_MAP: Record<string, WorkItemStateCategory[]> = {
   in_review: ['In Progress'],
   done: ['Done'],
   cancelled: ['Done'],
-}
-
-export function normalizeStateCategory(category: string): WorkItemStateCategory {
-  if (category === 'Done' || category === 'Completed' || category === 'Resolved') {
-    return 'Done'
-  }
-
-  if (category === 'In Progress' || category === 'InProgress') {
-    return 'In Progress'
-  }
-
-  return 'New'
-}
-
-export function statusFromStateCategory(category: string): string {
-  const normalized = normalizeStateCategory(category)
-
-  if (normalized === 'Done') {
-    return 'done'
-  }
-
-  if (normalized === 'In Progress') {
-    return 'in_progress'
-  }
-
-  return 'backlog'
 }
 
 function categoriesForStatus(status: string): WorkItemStateCategory[] {
@@ -53,6 +30,39 @@ async function getWorkItemTypeId(projectId: string, typeKey: string) {
   })
 
   return typeDefinition?.id ?? null
+}
+
+export async function getStateTransitionConfig(
+  projectId: string,
+  typeKey: string,
+  fromStateId: string,
+  toStateId: string
+) {
+  if (fromStateId === toStateId) {
+    return null
+  }
+
+  const typeId = await getWorkItemTypeId(projectId, typeKey)
+  if (!typeId) {
+    return null
+  }
+
+  return db.stateTransition.findUnique({
+    where: {
+      workItemTypeId_fromStateId_toStateId: {
+        workItemTypeId: typeId,
+        fromStateId,
+        toStateId,
+      },
+    },
+    select: {
+      id: true,
+      isEnabled: true,
+      requiresApproval: true,
+      approverRoles: true,
+      minApprovals: true,
+    },
+  })
 }
 
 export async function getMappedStatesForType(projectId: string, typeKey: string) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
+import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
 import { withCache } from '@/lib/redis'
 import { z } from 'zod'
 
@@ -58,6 +59,15 @@ export async function POST(request: NextRequest) {
         name: data.name,
         color: data.color || '#6b7280',
       },
+    })
+
+    void dispatchWebhookEvent(data.projectId, 'label.created', {
+      label: {
+        id: label.id,
+        name: label.name,
+        color: label.color,
+      },
+      actorUserId: auth.actor.userId,
     })
 
     await invalidateProjectCaches(data.projectId)

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Camera, Lock, Settings, Shield, User } from 'lucide-react'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 
 interface UserProfileProps {
   open: boolean
@@ -52,16 +53,15 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), email: email.trim(), avatar: avatar.trim() || null }),
       })
-      if (res.ok) {
-        const updated = await res.json()
-        setCurrentUser({ ...currentUser, name: updated.name, email: updated.email, avatar: updated.avatar })
-        toast.success('Profile updated')
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to update profile')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to update profile'))
       }
-    } catch {
-      toast.error('Network error')
+
+      const updated = await res.json()
+      setCurrentUser({ ...currentUser, name: updated.name, email: updated.email, avatar: updated.avatar })
+      toast.success('Profile updated')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update profile')
     }
     setIsSaving(false)
   }
@@ -82,17 +82,16 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),
       })
-      if (res.ok) {
-        toast.success('Password changed successfully')
-        setCurrentPassword('')
-        setNewPassword('')
-        setConfirmPassword('')
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to change password')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to change password'))
       }
-    } catch {
-      toast.error('Network error')
+
+      toast.success('Password changed successfully')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to change password')
     }
     setIsChangingPassword(false)
   }
@@ -112,9 +111,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to upload avatar')
-        return
+        throw new Error(await getApiErrorMessage(res, 'Failed to upload avatar'))
       }
 
       const updated = await res.json()
@@ -124,8 +121,8 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
         avatar: updated.avatar,
       })
       toast.success('Avatar updated')
-    } catch {
-      toast.error('Network error')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -142,8 +139,8 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0">
-        <DialogHeader className="px-6 py-5 border-b">
+      <DialogContent className="max-w-[95vw] sm:max-w-lg p-0 gap-0">
+        <DialogHeader className="px-4 py-5 border-b sm:px-6">
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
             Profile Settings
@@ -151,7 +148,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="w-full">
-          <div className="px-6 border-b">
+          <div className="px-4 border-b sm:px-6">
             <TabsList className="h-10 bg-transparent p-0 gap-4 w-full justify-start">
               <TabsTrigger
                 value="profile"
@@ -168,7 +165,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             </TabsList>
           </div>
 
-          <TabsContent value="profile" className="p-6 mt-0 space-y-6">
+          <TabsContent value="profile" className="p-4 mt-0 space-y-6 sm:p-6">
             {/* Avatar section */}
             <div className="flex items-center gap-4">
               <div className="relative">
@@ -209,32 +206,31 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
 
             {/* Edit fields */}
             <div className="space-y-4">
-              <div>
-                <Label>Full Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1.5"
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Full Name</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1.5"
-                />
-              </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label>Avatar URL</Label>
                 <Input
                   value={avatar}
                   onChange={(e) => setAvatar(e.target.value)}
                   placeholder="https://example.com/avatar.png"
-                  className="mt-1.5"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Paste an image URL or use the camera button to upload an avatar</p>
+                <p className="text-xs text-muted-foreground">Paste an image URL or use the camera button to upload an avatar</p>
               </div>
               <Button onClick={handleSaveProfile} disabled={isSaving} className="w-full">
                 {isSaving ? 'Saving...' : 'Save Changes'}
@@ -242,7 +238,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="security" className="p-6 mt-0 space-y-4">
+          <TabsContent value="security" className="p-4 mt-0 space-y-4 sm:p-6">
             <div>
               <h3 className="font-semibold mb-1">Change Password</h3>
               <p className="text-sm text-muted-foreground">Update your password to keep your account secure</p>
@@ -251,32 +247,29 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             <Separator />
 
             <div className="space-y-4">
-              <div>
+              <div className="space-y-1.5">
                 <Label>Current Password</Label>
                 <Input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="mt-1.5"
                 />
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label>New Password</Label>
                 <Input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Minimum 8 characters"
-                  className="mt-1.5"
                 />
               </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label>Confirm New Password</Label>
                 <Input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="mt-1.5"
                 />
               </div>
               <Button

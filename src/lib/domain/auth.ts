@@ -7,10 +7,12 @@ import {
   normalizeProjectRole,
   Permission,
 } from '@/lib/domain/rbac'
+import { canAccessProjectPermission, getProjectPermissionRules } from '@/lib/domain/access-control'
 
 export type ActorContext = {
   userId: string
   projectRole: string | null
+  extraPermissions: string[]
   sessionId: string | null
 }
 
@@ -169,6 +171,7 @@ export async function resolveActorContext(
     },
     select: {
       role: true,
+      extraPermissions: true,
       userId: true,
     },
   })
@@ -176,7 +179,12 @@ export async function resolveActorContext(
   if (!membership) {
     // Fall back to system-wide admin role
     if (user?.globalRole === 'admin') {
-      return { userId: user.id, projectRole: 'Admin', sessionId: identity.sessionId }
+      return {
+        userId: user.id,
+        projectRole: 'Admin',
+        extraPermissions: [],
+        sessionId: identity.sessionId,
+      }
     }
 
     return null
@@ -185,6 +193,9 @@ export async function resolveActorContext(
   return {
     userId: membership.userId,
     projectRole: membership.role,
+    extraPermissions: Array.isArray(membership.extraPermissions)
+      ? membership.extraPermissions.filter((value): value is string => typeof value === 'string')
+      : [],
     sessionId: identity.sessionId,
   }
 }
@@ -196,7 +207,8 @@ export async function requireProjectPermission(
   request: NextRequest,
   projectId: string,
   permission: Permission,
-  _fallbackUserId?: string | null
+  _fallbackUserId?: string | null,
+  options?: { areaId?: string | null; allowScoped?: boolean }
 ): Promise<{ ok: true; actor: ActorContext } | { ok: false; response: NextResponse }> {
   const actor = await resolveActorContext(request, projectId)
 
@@ -207,8 +219,14 @@ export async function requireProjectPermission(
     }
   }
 
-  if (!hasPermission(actor.projectRole, permission)) {
+  const access = await canAccessProjectPermission(projectId, actor.projectRole, permission, {
+    ...options,
+    extraPermissions: actor.extraPermissions,
+  })
+
+  if (!access.granted) {
     const normalizedRole = normalizeProjectRole(actor.projectRole)
+    const rules = await getProjectPermissionRules(projectId)
     return {
       ok: false,
       response: NextResponse.json(
@@ -217,7 +235,16 @@ export async function requireProjectPermission(
           details: {
             role: normalizedRole,
             requiredPermission: permission,
-            grantedPermissions: listPermissions(normalizedRole),
+            grantedPermissions: listPermissions(normalizedRole, {
+              rules: rules.map((rule) => ({
+                role: rule.role,
+                permission: rule.permission,
+                effect: rule.effect,
+                areaId: rule.areaId,
+              })),
+              areaId: options?.areaId ?? null,
+              extraPermissions: actor.extraPermissions,
+            }),
           },
         },
         { status: 403 }

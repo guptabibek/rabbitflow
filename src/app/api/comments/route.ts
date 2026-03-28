@@ -7,6 +7,8 @@ import { sanitizeRichText, toPlainTextPreview } from '@/lib/domain/content'
 import { parseCommentMentions } from '@/lib/domain/mentions'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { sendMentionNotificationEmails } from '@/lib/domain/notifications'
+import { evaluateAutomationRules } from '@/lib/domain/automation-service'
+import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
 
 const createCommentSchema = z.object({
   issueId: z.string(),
@@ -186,6 +188,52 @@ export async function POST(request: NextRequest) {
         commentContent: sanitizedContent,
       })
     }
+
+    const issueRecord = await db.issue.findUnique({
+      where: { id: data.issueId },
+      include: {
+        labels: {
+          include: {
+            label: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    })
+
+    if (issueRecord) {
+      await evaluateAutomationRules({
+        type: 'issue:comment_added',
+        projectId: issue.projectId,
+        issueId: issueRecord.id,
+        userId: auth.actor.userId,
+        issue: {
+          id: issueRecord.id,
+          key: issueRecord.key,
+          title: issueRecord.title,
+          status: issueRecord.status,
+          priority: issueRecord.priority,
+          assigneeId: issueRecord.assigneeId,
+          workItemType: issueRecord.workItemType,
+          storyPoints: issueRecord.storyPoints,
+          labels: issueRecord.labels.map((entry) => ({
+            id: entry.label.id,
+            name: entry.label.name,
+          })),
+        },
+      })
+    }
+
+    void dispatchWebhookEvent(issue.projectId, 'comment.created', {
+      comment: {
+        id: comment.id,
+        issueId: comment.issueId,
+        authorId: comment.authorId,
+        contentPreview: toPlainTextPreview(comment.content, 120),
+      },
+      actorUserId: auth.actor.userId,
+    })
 
     await invalidateSprintCaches(issue.projectId, issue.iterationId)
 

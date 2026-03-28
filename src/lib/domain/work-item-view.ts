@@ -1,5 +1,4 @@
-import type { Issue, WorkItemTypeDefinition } from '@/store/app-store'
-import { workItemPath } from '@/lib/domain/work-item-url'
+import type { Issue, WorkItemTypeDefinition } from '../../store/app-store'
 
 export const UNASSIGNED_VALUE = '__none__'
 
@@ -14,6 +13,8 @@ export type WorkItemDraft = {
   areaId: string
   stateId: string
   parentIssueId: string
+  startDate: string
+  dueDate: string
   storyPoints: string
   estimatedHours: string
   remainingHours: string
@@ -31,11 +32,17 @@ type PatchPayload = {
   areaId?: string | null
   stateId?: string | null
   parentIssueId?: string | null
+  startDate?: string | null
+  dueDate?: string | null
   storyPoints?: number | null
   estimatedHours?: number | null
   remainingHours?: number | null
   completedHours?: number | null
   customFields?: Record<string, unknown>
+}
+
+function normalizeDateInput(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : ''
 }
 
 function isPrimitiveEqual(left: unknown, right: unknown) {
@@ -56,7 +63,7 @@ function normalizeCustomFields(value: Record<string, unknown>) {
 }
 
 export function canonicalWorkItemRoute(workItemId: string) {
-  return workItemPath(workItemId)
+  return `/work-items/${encodeURIComponent(workItemId)}`
 }
 
 export function getWorkItemTypeDefinition(
@@ -97,6 +104,16 @@ export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft):
   const currentParentId = current.parentIssue?.id ?? current.parentIssueId ?? UNASSIGNED_VALUE
   if (draft.parentIssueId !== currentParentId) {
     payload.parentIssueId = draft.parentIssueId === UNASSIGNED_VALUE ? null : draft.parentIssueId
+  }
+
+  const currentStartDate = normalizeDateInput(current.startDate)
+  if (draft.startDate !== currentStartDate) {
+    payload.startDate = draft.startDate || null
+  }
+
+  const currentDueDate = normalizeDateInput(current.dueDate)
+  if (draft.dueDate !== currentDueDate) {
+    payload.dueDate = draft.dueDate || null
   }
 
   const currentStoryPoints = current.storyPoints?.toString() ?? ''

@@ -21,6 +21,7 @@ function createIssue(overrides: Partial<Issue> = {}): Issue {
     severity: null,
     storyPoints: 5,
     dueDate: null,
+    startDate: null,
     columnOrder: 1000,
     version: 7,
     customFields: { hypothesis: 'Current hypothesis', reason: 'Investigate' },
@@ -47,6 +48,8 @@ function createDraft(overrides: Partial<WorkItemDraft> = {}): WorkItemDraft {
     areaId: 'area-1',
     stateId: 'state-1',
     parentIssueId: UNASSIGNED_VALUE,
+    startDate: '',
+    dueDate: '',
     storyPoints: '5',
     estimatedHours: '',
     remainingHours: '',
@@ -92,7 +95,7 @@ test('buildWorkItemPatchPayload does not mutate work item type after creation', 
   })
 
   const payload = buildWorkItemPatchPayload(issue, draft)
-  assert.equal(payload?.workItemType, undefined)
+  assert.equal((payload as Record<string, unknown>)?.workItemType, undefined)
   assert.deepEqual(payload?.customFields, {
     repro_steps: 'Step 1',
     expected: 'Expected',
@@ -149,4 +152,23 @@ test('buildWorkItemPatchPayload returns null when no persisted value changed', (
   })
 
   assert.equal(buildWorkItemPatchPayload(issue, draft), null)
+})
+
+test('buildWorkItemPatchPayload emits schedule field updates using date input values', () => {
+  const issue = createIssue({
+    startDate: '2026-03-20T00:00:00.000Z',
+    dueDate: '2026-03-28T00:00:00.000Z',
+  })
+
+  const draft = createDraft({
+    startDate: '2026-03-22',
+    dueDate: '',
+  })
+
+  const payload = buildWorkItemPatchPayload(issue, draft)
+
+  assert.deepEqual(payload, {
+    startDate: '2026-03-22',
+    dueDate: null,
+  })
 })

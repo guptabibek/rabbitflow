@@ -89,13 +89,13 @@
 - `src/app/api/projects/route.ts`
 - `src/app/api/projects/active/route.ts`
 - `src/app/api/users/route.ts`
-- `src/app/api/users/[id]/route.ts`
-- `src/app/api/users/[id]/avatar/route.ts`
+- `src/app/api/users/[userId]/route.ts`
+- `src/app/api/users/[userId]/avatar/route.ts`
 - `src/app/api/issues/route.ts`
-- `src/app/api/issues/[id]/route.ts`
+- `src/app/api/issues/[issueId]/route.ts`
 - `src/app/api/comments/route.ts`
 - `src/app/api/labels/route.ts`
-- `src/app/api/labels/[id]/route.ts`
+- `src/app/api/labels/[labelId]/route.ts`
 - `src/app/api/board/route.ts`
 - `src/app/api/backlog/route.ts`
 - `src/app/api/dashboard/route.ts`

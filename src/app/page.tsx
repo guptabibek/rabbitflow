@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/app-store'
+import type { Project, User as AppUser } from '@/store/app-store'
 import {
   AppSidebar,
   BacklogView,
@@ -17,7 +18,31 @@ import {
   SprintView,
   TeamManagement,
   UserProfile,
+  CommandPalette,
+  NotificationBell,
+  DocumentsView,
+  ObjectivesView,
+  RetrospectivesView,
+  WebhookManagement,
+  ImportWizard,
+  AutomationRuleBuilder,
+  TestPlanManager,
+  SlaDashboard,
+  ApiTokenManagement,
+  RecurringTaskManager,
+  ApprovalDashboard,
+  RoadmapView,
+  PortfolioView,
+  CalendarView,
+  DependencyGraphView,
+  ActivityFeedView,
+  BrandingStudio,
+  AclManagement,
 } from '@/components/project-management'
+import { OnboardingChecklist } from '@/components/project-management/onboarding-checklist'
+import { OnboardingConfigView } from '@/components/project-management/onboarding-config-view'
+import { OnboardingProvider } from '@/hooks/use-onboarding'
+import { useOnboardingEvents } from '@/hooks/use-onboarding-events'
 import { WorkItemPage } from '@/components/project-management/work-item-page'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -41,6 +66,7 @@ import {
   Sun,
   User,
 } from 'lucide-react'
+import { fetchWithRetry, getApiErrorMessage, parseJsonResponse } from '@/lib/utils'
 
 type ViewType =
   | 'dashboard'
@@ -49,8 +75,27 @@ type ViewType =
   | 'sprints'
   | 'list'
   | 'reports'
+  | 'roadmap'
+  | 'portfolio'
+  | 'calendar'
+  | 'dependency-graph'
+  | 'activity'
   | 'teams'
   | 'settings'
+  | 'documents'
+  | 'objectives'
+  | 'retrospectives'
+  | 'approvals'
+  | 'webhooks'
+  | 'automations'
+  | 'imports'
+  | 'recurring-tasks'
+  | 'test-plans'
+  | 'sla'
+  | 'api-tokens'
+  | 'branding'
+  | 'acl'
+  | 'onboarding-config'
 
 export default function HomePage() {
   const router = useRouter()
@@ -85,10 +130,14 @@ export default function HomePage() {
   } = useAppStore()
 
   const { theme, setTheme } = useTheme()
+  const { trackAction } = useOnboardingEvents()
   const [currentView, setCurrentView] = useState<ViewType>('dashboard')
   const [isInitialized, setIsInitialized] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [appLoadError, setAppLoadError] = useState<string | null>(null)
+  const [projectDataError, setProjectDataError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     const handleResize = () => {
@@ -101,43 +150,84 @@ export default function HomePage() {
 
   const fetchProjectDataLegacy = useCallback(
     async (projectId: string) => {
-      const [
-        issuesRes,
-        labelsRes,
-        iterationsRes,
-        statesRes,
-        usersRes,
-        areasRes,
-        teamsRes,
-        workItemTypesRes,
-        rbacRes,
-      ] = await Promise.all([
-        fetch(`/api/issues?projectId=${projectId}&pageSize=200`),
-        fetch(`/api/labels?projectId=${projectId}`),
-        fetch(`/api/iterations?projectId=${projectId}`),
-        fetch(`/api/states?projectId=${projectId}`),
-        fetch(`/api/users?projectId=${projectId}`),
-        fetch(`/api/areas?projectId=${projectId}`),
-        fetch(`/api/teams?projectId=${projectId}`),
-        fetch(`/api/work-item-types?projectId=${projectId}`),
-        fetch(`/api/rbac?projectId=${projectId}`),
-      ])
+      const requests = [
+        {
+          label: 'issues',
+          request: () => fetchWithRetry(`/api/issues?projectId=${projectId}&pageSize=200`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setIssues(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'labels',
+          request: () => fetchWithRetry(`/api/labels?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setLabels(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'iterations',
+          request: () => fetchWithRetry(`/api/iterations?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setIterations(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'states',
+          request: () => fetchWithRetry(`/api/states?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setStates(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'users',
+          request: () => fetchWithRetry(`/api/users?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setUsers(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'areas',
+          request: () => fetchWithRetry(`/api/areas?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setAreas(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'teams',
+          request: () => fetchWithRetry(`/api/teams?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setTeams(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'work item types',
+          request: () => fetchWithRetry(`/api/work-item-types?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => setWorkItemTypes(Array.isArray(payload) ? payload : []),
+        },
+        {
+          label: 'access rules',
+          request: () => fetchWithRetry(`/api/rbac?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
+          apply: (payload: unknown) => {
+            const access = payload as { role?: string | null; permissions?: string[] } | null
+            setProjectAccess({
+              role: access?.role ?? null,
+              permissions: Array.isArray(access?.permissions) ? access.permissions : [],
+            })
+          },
+        },
+      ]
 
-      if (issuesRes.ok) setIssues(await issuesRes.json())
-      if (labelsRes.ok) setLabels(await labelsRes.json())
-      if (iterationsRes.ok) setIterations(await iterationsRes.json())
-      if (statesRes.ok) setStates(await statesRes.json())
-      if (usersRes.ok) setUsers(await usersRes.json())
-      if (areasRes.ok) setAreas(await areasRes.json())
-      if (teamsRes.ok) setTeams(await teamsRes.json())
-      if (workItemTypesRes.ok) setWorkItemTypes(await workItemTypesRes.json())
-      if (rbacRes.ok) {
-        const access = await rbacRes.json()
-        setProjectAccess({
-          role: access.role ?? null,
-          permissions: access.permissions ?? [],
+      const results = await Promise.allSettled(
+        requests.map(async (entry) => {
+          const response = await entry.request()
+          if (!response.ok) {
+            throw new Error(await getApiErrorMessage(response, `Failed to load ${entry.label}`))
+          }
+
+          const payload = await parseJsonResponse<unknown>(response, null)
+          if (payload === null) {
+            throw new Error(`${entry.label} returned malformed data`)
+          }
+
+          entry.apply(payload)
         })
+      )
+
+      const failed = results.filter((result) => result.status === 'rejected')
+      if (failed.length === requests.length) {
+        throw new Error('Project data could not be loaded')
       }
+
+      setProjectDataError(
+        failed.length > 0 ? 'Some project data is delayed or unavailable. Showing the latest successful slices.' : null
+      )
     },
     [
       setAreas,
@@ -156,29 +246,39 @@ export default function HomePage() {
     async (projectId: string) => {
       setIsLoading(true)
       try {
-        const bootstrapRes = await fetch(
-          `/api/projects/bootstrap?projectId=${projectId}&pageSize=200`
+        const bootstrapRes = await fetchWithRetry(
+          `/api/projects/bootstrap?projectId=${projectId}&pageSize=200`,
+          { timeoutMs: 10_000, retries: 1 }
         )
 
         if (bootstrapRes.ok) {
-          const payload = await bootstrapRes.json()
-          setIssues(payload.issues ?? [])
-          setLabels(payload.labels ?? [])
-          setIterations(payload.iterations ?? [])
-          setStates(payload.states ?? [])
-          setUsers(payload.users ?? [])
-          setAreas(payload.areas ?? [])
-          setTeams(payload.teams ?? [])
-          setWorkItemTypes(payload.workItemTypes ?? [])
-          setProjectAccess({
-            role: payload.rbac?.role ?? null,
-            permissions: payload.rbac?.permissions ?? [],
-          })
+          const payload = await parseJsonResponse<Record<string, unknown> | null>(bootstrapRes, null)
+
+          if (payload) {
+            setIssues(Array.isArray(payload.issues) ? payload.issues : [])
+            setLabels(Array.isArray(payload.labels) ? payload.labels : [])
+            setIterations(Array.isArray(payload.iterations) ? payload.iterations : [])
+            setStates(Array.isArray(payload.states) ? payload.states : [])
+            setUsers(Array.isArray(payload.users) ? payload.users : [])
+            setAreas(Array.isArray(payload.areas) ? payload.areas : [])
+            setTeams(Array.isArray(payload.teams) ? payload.teams : [])
+            setWorkItemTypes(Array.isArray(payload.workItemTypes) ? payload.workItemTypes : [])
+            const rbac = (payload.rbac ?? null) as { role?: string | null; permissions?: string[] } | null
+            setProjectAccess({
+              role: rbac?.role ?? null,
+              permissions: Array.isArray(rbac?.permissions) ? rbac.permissions : [],
+            })
+            setProjectDataError(null)
+            return
+          }
         } else {
-          await fetchProjectDataLegacy(projectId)
+          setProjectDataError(await getApiErrorMessage(bootstrapRes, 'Project bootstrap failed. Falling back to segmented loading.'))
         }
+
+        await fetchProjectDataLegacy(projectId)
       } catch (error) {
         console.error('Failed to fetch project data:', error)
+        setProjectDataError('Project data is temporarily unavailable. Retrying the segmented fallback.')
         await fetchProjectDataLegacy(projectId)
       } finally {
         setIsLoading(false)
@@ -231,26 +331,50 @@ export default function HomePage() {
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true)
+      setAppLoadError(null)
+
       try {
-        const [meRes, projectsRes] = await Promise.all([
-          fetch('/api/auth/me'),
-          fetch('/api/projects'),
-        ])
+        const meRes = await fetchWithRetry('/api/auth/me', {
+          timeoutMs: 8_000,
+          retries: 1,
+          cache: 'no-store',
+        })
 
         if (!meRes.ok) {
-          router.replace('/login')
+          if (meRes.status === 401) {
+            router.replace('/login')
+            return
+          }
+
+          setAppLoadError(await getApiErrorMessage(meRes, 'Failed to restore your session'))
           return
         }
 
-        const me = await meRes.json()
+        const me = await parseJsonResponse<AppUser | null>(meRes, null)
+        if (!me) {
+          setAppLoadError('Session restore returned malformed data')
+          return
+        }
+
         setCurrentUser(me)
 
+        const projectsRes = await fetchWithRetry('/api/projects', {
+          timeoutMs: 8_000,
+          retries: 1,
+          cache: 'no-store',
+        })
+
         if (!projectsRes.ok) {
-          router.replace('/dashboard')
+          setAppLoadError(await getApiErrorMessage(projectsRes, 'Failed to load projects'))
           return
         }
 
-        const availableProjects = await projectsRes.json()
+        const availableProjects = await parseJsonResponse<Project[] | null>(projectsRes, null)
+        if (!availableProjects || !Array.isArray(availableProjects)) {
+          setAppLoadError('Projects returned malformed data')
+          return
+        }
+
         setProjects(availableProjects)
 
         if (!availableProjects.length) {
@@ -260,11 +384,17 @@ export default function HomePage() {
         }
 
         const persistedProjectId = useAppStore.getState().activeProjectId
-        const activeRes = await fetch('/api/projects/active')
-        const activePayload = activeRes.ok ? await activeRes.json() : { project: null }
+        const activeRes = await fetchWithRetry('/api/projects/active', {
+          timeoutMs: 6_000,
+          retries: 1,
+          cache: 'no-store',
+        })
+        const activePayload = activeRes.ok
+          ? await parseJsonResponse<{ project?: { id?: string | null } | null }>(activeRes, { project: null })
+          : { project: null }
         const resolvedActiveProject =
           availableProjects.find(
-            (project: { id: string }) =>
+            (project) =>
               project.id === activePayload.project?.id || project.id === persistedProjectId
           ) ?? null
 
@@ -286,7 +416,9 @@ export default function HomePage() {
         }
       } catch (error) {
         console.error('Failed to initialize app:', error)
-        router.replace('/login')
+        setAppLoadError(
+          error instanceof Error ? error.message : 'Failed to initialize the application'
+        )
       } finally {
         setIsLoading(false)
         setIsInitialized(true)
@@ -295,6 +427,7 @@ export default function HomePage() {
 
     initializeApp()
   }, [
+    reloadKey,
     resetProjectContext,
     router,
     setActiveProjectId,
@@ -320,8 +453,21 @@ export default function HomePage() {
     setCreateIssueOpen(false)
     setSprintModalOpen(false)
     setCurrentView(view)
-    if (view === 'board') setViewMode('board')
-    else if (view === 'list') setViewMode('list')
+    if (view === 'board') {
+      setViewMode('board')
+      trackAction('view_board')
+    } else if (view === 'list') {
+      setViewMode('list')
+    }
+    if (view === 'reports') trackAction('view_reports')
+  }
+
+  const handleOnboardingNavigate = (viewOrAction: string) => {
+    if (viewOrAction === '__create_issue') {
+      setCreateIssueOpen(true)
+    } else {
+      handleViewChange(viewOrAction as ViewType)
+    }
   }
 
   const handleViewModeChange = (mode: 'board' | 'list') => {
@@ -357,8 +503,8 @@ export default function HomePage() {
 
   if (!isInitialized) {
     return (
-      <div className="flex h-screen bg-background">
-        <div className="flex w-52 flex-col border-r border-border bg-sidebar">
+      <div className="flex h-dvh bg-background">
+        <div className="hidden w-52 flex-col border-r border-border bg-sidebar md:flex">
           <div className="border-b border-border p-3">
             <Skeleton className="h-6 w-32" />
           </div>
@@ -368,36 +514,32 @@ export default function HomePage() {
             <Skeleton className="h-8 w-full rounded-md" />
             <Skeleton className="h-8 w-full rounded-md" />
           </div>
-          <div className="mt-3 p-2">
-            <Skeleton className="mb-2 h-3.5 w-16" />
-            <div className="space-y-1.5">
+          <div className="mt-4 px-2">
+            <Skeleton className="mb-2 h-3 w-12" />
+            <div className="space-y-1">
               <Skeleton className="h-7 w-full rounded-md" />
               <Skeleton className="h-7 w-full rounded-md" />
             </div>
           </div>
         </div>
         <div className="flex flex-1 flex-col">
-          <div className="flex h-11 items-center justify-between border-b border-border px-4">
+          <div className="flex h-12 items-center justify-between border-b border-border px-4">
             <Skeleton className="h-6 w-44" />
             <div className="flex items-center gap-2">
               <Skeleton className="h-7 w-7 rounded-md" />
               <Skeleton className="h-7 w-7 rounded-full" />
             </div>
           </div>
-          <div className="flex-1 p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <Skeleton className="h-8 w-56 rounded-md" />
-              <Skeleton className="h-8 w-28 rounded-md" />
-              <Skeleton className="h-8 w-28 rounded-md" />
-            </div>
-            <div className="flex gap-3">
+          <div className="flex-1 p-4 sm:p-6">
+            <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
               {[1, 2, 3, 4].map((index) => (
-                <div key={index} className="w-64 space-y-2">
-                  <Skeleton className="h-9 w-full rounded-lg" />
-                  <Skeleton className="h-24 w-full rounded-lg" />
-                  <Skeleton className="h-24 w-full rounded-lg" />
-                </div>
+                <Skeleton key={index} className="h-24 rounded-xl" />
               ))}
+            </div>
+            <Skeleton className="mb-6 h-32 rounded-xl" />
+            <div className="grid gap-6 md:grid-cols-2">
+              <Skeleton className="h-64 rounded-xl" />
+              <Skeleton className="h-64 rounded-xl" />
             </div>
           </div>
         </div>
@@ -405,14 +547,36 @@ export default function HomePage() {
     )
   }
 
+  if (appLoadError && !currentProject) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h1 className="text-lg font-semibold">Workspace failed to initialize</h1>
+          <p className="mt-2 text-sm text-muted-foreground" data-testid="home-init-error">
+            {appLoadError}
+          </p>
+          <div className="mt-4 flex items-center gap-2">
+            <Button onClick={() => setReloadKey((value) => value + 1)} data-testid="home-init-retry-button">
+              Retry
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <OnboardingProvider>
+    <div className="flex h-dvh overflow-hidden bg-background">
       <aside
         role="complementary"
         aria-label="Project navigation"
         className={`${
           sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-52'
-        } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40`}
+        } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl`}
       >
         <AppSidebar currentView={currentView} onViewChange={handleViewChange} />
       </aside>
@@ -426,7 +590,7 @@ export default function HomePage() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 flex-shrink-0 items-center justify-between border-b border-border bg-background px-3">
+        <header className="flex h-12 flex-shrink-0 items-center justify-between border-b border-border bg-background px-3 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
@@ -489,7 +653,9 @@ export default function HomePage() {
             )}
           </div>
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-1">
+            <CommandPalette />
+            <NotificationBell />
             <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
               {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </Button>
@@ -568,6 +734,21 @@ export default function HomePage() {
                 />
                 )}
 
+              {projectDataError ? (
+                <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900" data-testid="home-project-data-error">
+                  <span>{projectDataError}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 border-amber-300 bg-white/80 text-amber-900 hover:bg-white"
+                    onClick={() => currentProject && void fetchProjectData(currentProject.id)}
+                    data-testid="home-project-data-retry-button"
+                  >
+                    Retry sync
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="flex-1 overflow-auto">
                 {isCreateScreenVisible ? (
                   <CreateIssueDialog
@@ -578,13 +759,39 @@ export default function HomePage() {
                   <SprintManagement />
                 ) : (
                   <>
-                    {currentView === 'dashboard' && <DashboardView />}
+                    {currentView === 'dashboard' && (
+                      <>
+                        <div className="px-6 pt-6">
+                          <OnboardingChecklist onNavigate={handleOnboardingNavigate} />
+                        </div>
+                        <DashboardView />
+                      </>
+                    )}
                     {currentView === 'backlog' && <BacklogView />}
                     {currentView === 'board' && <KanbanBoard />}
                     {currentView === 'sprints' && <SprintView />}
                     {currentView === 'list' && <ListView />}
+                    {currentView === 'roadmap' && <RoadmapView />}
+                    {currentView === 'portfolio' && <PortfolioView />}
+                    {currentView === 'calendar' && <CalendarView />}
+                    {currentView === 'dependency-graph' && <DependencyGraphView />}
+                    {currentView === 'activity' && <ActivityFeedView />}
                     {currentView === 'reports' && <ReportsView />}
                     {currentView === 'teams' && <TeamManagement mode="screen" />}
+                    {currentView === 'documents' && <DocumentsView />}
+                    {currentView === 'onboarding-config' && <OnboardingConfigView />}
+                    {currentView === 'objectives' && <ObjectivesView />}
+                    {currentView === 'retrospectives' && <RetrospectivesView />}
+                    {currentView === 'approvals' && <ApprovalDashboard />}
+                    {currentView === 'webhooks' && <WebhookManagement />}
+                    {currentView === 'automations' && <AutomationRuleBuilder />}
+                    {currentView === 'imports' && <ImportWizard />}
+                    {currentView === 'recurring-tasks' && <RecurringTaskManager />}
+                    {currentView === 'test-plans' && <TestPlanManager />}
+                    {currentView === 'sla' && <SlaDashboard />}
+                    {currentView === 'api-tokens' && <ApiTokenManagement />}
+                    {currentView === 'branding' && <BrandingStudio />}
+                    {currentView === 'acl' && <AclManagement />}
                   </>
                 )}
               </div>
@@ -595,5 +802,6 @@ export default function HomePage() {
 
       <UserProfile open={isProfileOpen} onOpenChange={setIsProfileOpen} />
     </div>
+    </OnboardingProvider>
   )
 }

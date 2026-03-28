@@ -1,12 +1,8 @@
 import { Queue, Worker, type ConnectionOptions } from 'bullmq'
 import { sendEmail } from '@/lib/email'
+import { enqueueEmailWithFallback, type EmailJobPayload } from '@/lib/email-queue-fallback'
 
-type EmailJobData = {
-  to: string
-  subject: string
-  text: string
-  html?: string
-}
+type EmailJobData = EmailJobPayload
 
 const QUEUE_NAME = 'email'
 
@@ -40,14 +36,10 @@ function getQueue(): Queue<EmailJobData> {
 }
 
 export async function enqueueEmail(payload: EmailJobData): Promise<void> {
-  try {
-    await getQueue().add('send', payload)
-  } catch (error) {
-    console.error('Failed to enqueue email, falling back to direct send:', error)
-    sendEmail(payload).catch((sendError) =>
-      console.error('Direct email send also failed:', sendError)
-    )
-  }
+  await enqueueEmailWithFallback(payload, {
+    addToQueue: (nextPayload) => getQueue().add('send', nextPayload),
+    sendDirect: sendEmail,
+  })
 }
 
 let workerInstance: Worker<EmailJobData> | null = null

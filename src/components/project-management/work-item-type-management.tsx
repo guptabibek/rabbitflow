@@ -123,6 +123,10 @@ const SECTION_TYPE_OPTIONS = [
   },
 ] as const
 
+const MAX_TYPE_KEY_LENGTH = 80
+const MAX_TYPE_LABEL_LENGTH = 120
+const MAX_HIERARCHY_LEVEL = 10
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type TypeFieldForm = {
@@ -261,8 +265,21 @@ function validateWorkItemTypeForm(form: WorkItemTypeForm) {
     return 'Type name is required'
   }
 
+  if (form.name.trim().length > MAX_TYPE_LABEL_LENGTH) {
+    return `Type name cannot exceed ${MAX_TYPE_LABEL_LENGTH} characters`
+  }
+
   if (!form.key.trim()) {
     return 'Type key is required'
+  }
+
+  if (form.key.trim().length > MAX_TYPE_KEY_LENGTH) {
+    return `Type key cannot exceed ${MAX_TYPE_KEY_LENGTH} characters`
+  }
+
+  const hierarchyLevel = Number.parseInt(form.hierarchyLevel, 10)
+  if (!Number.isInteger(hierarchyLevel) || hierarchyLevel < 1 || hierarchyLevel > MAX_HIERARCHY_LEVEL) {
+    return `Hierarchy level must be between 1 and ${MAX_HIERARCHY_LEVEL}`
   }
 
   if (form.sections.length === 0) {
@@ -274,8 +291,16 @@ function validateWorkItemTypeForm(form: WorkItemTypeForm) {
       return `Section ${sectionIndex + 1}: key is required`
     }
 
+    if (section.key.trim().length > MAX_TYPE_KEY_LENGTH) {
+      return `Section ${sectionIndex + 1}: key cannot exceed ${MAX_TYPE_KEY_LENGTH} characters`
+    }
+
     if (!section.title.trim()) {
       return `Section ${sectionIndex + 1}: title is required`
+    }
+
+    if (section.title.trim().length > MAX_TYPE_LABEL_LENGTH) {
+      return `Section ${sectionIndex + 1}: title cannot exceed ${MAX_TYPE_LABEL_LENGTH} characters`
     }
 
     for (const [fieldIndex, field] of section.fields.entries()) {
@@ -283,8 +308,16 @@ function validateWorkItemTypeForm(form: WorkItemTypeForm) {
         return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: key is required`
       }
 
+      if (field.key.trim().length > MAX_TYPE_KEY_LENGTH) {
+        return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: key cannot exceed ${MAX_TYPE_KEY_LENGTH} characters`
+      }
+
       if (!field.label.trim()) {
         return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: label is required`
+      }
+
+      if (field.label.trim().length > MAX_TYPE_LABEL_LENGTH) {
+        return `Section ${sectionIndex + 1}, field ${fieldIndex + 1}: label cannot exceed ${MAX_TYPE_LABEL_LENGTH} characters`
       }
     }
   }
@@ -466,6 +499,7 @@ function FieldEditorDialog({
               <Input
                 id="field-label"
                 value={draft.label}
+                maxLength={MAX_TYPE_LABEL_LENGTH}
                 placeholder="e.g. Story Points"
                 onChange={(e) =>
                   setDraft((p) => ({
@@ -483,6 +517,7 @@ function FieldEditorDialog({
               <Input
                 id="field-key"
                 value={draft.key}
+                maxLength={MAX_TYPE_KEY_LENGTH}
                 className="font-mono text-xs"
                 placeholder="story_points"
                 onChange={(e) => setDraft((p) => ({ ...p, key: slugify(e.target.value) }))}
@@ -799,6 +834,7 @@ function SectionCard({
                   </Label>
                   <Input
                     value={section.title}
+                    maxLength={MAX_TYPE_LABEL_LENGTH}
                     placeholder="Section title"
                     onChange={(e) =>
                       onUpdate((s) => ({
@@ -815,6 +851,7 @@ function SectionCard({
                   </Label>
                   <Input
                     value={section.key}
+                    maxLength={MAX_TYPE_KEY_LENGTH}
                     className="font-mono text-xs"
                     placeholder="section_key"
                     onChange={(e) =>
@@ -1029,7 +1066,10 @@ export function WorkItemTypeManagement({
     }
 
     const currentLevel = Number.parseInt(form.hierarchyLevel, 10)
-    const maxLevel = Math.max(5, currentLevel || 1, ...Array.from(namesByLevel.keys()))
+    const maxLevel = Math.min(
+      MAX_HIERARCHY_LEVEL,
+      Math.max(5, currentLevel || 1, ...Array.from(namesByLevel.keys()))
+    )
 
     return Array.from({ length: maxLevel }, (_, index) => {
       const level = index + 1
@@ -1556,6 +1596,7 @@ export function WorkItemTypeManagement({
                         <Input
                           id="type-name"
                           value={form.name}
+                          maxLength={MAX_TYPE_LABEL_LENGTH}
                           placeholder="e.g. User Story, Bug, Task"
                           onChange={(e) =>
                             setForm((p) => {
@@ -1579,6 +1620,7 @@ export function WorkItemTypeManagement({
                         <Input
                           id="type-key"
                           value={form.key}
+                          maxLength={MAX_TYPE_KEY_LENGTH}
                           placeholder="user_story"
                           onChange={(e) =>
                             setForm((p) => ({ ...p, key: slugify(e.target.value) }))

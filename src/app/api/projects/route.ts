@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, isUniqueConstraintError } from '@/lib/db'
 import { requireAuthenticatedUser, requireSystemAdmin } from '@/lib/domain/auth'
 import { setActiveProjectCookie } from '@/lib/domain/project-context'
-import { ensureProjectSystemRecords } from '@/lib/domain/project-bootstrap'
+import { seedOnboardingStepsTx } from '@/lib/domain/onboarding-engine'
+import { ensureProjectSystemRecordsTx } from '@/lib/domain/project-system-records'
 import { z } from 'zod'
 
 const createProjectSchema = z.object({
@@ -69,41 +70,49 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = createProjectSchema.parse(body)
 
-    const project = await db.project.create({
-      data: {
-        key: data.key,
-        name: data.name,
-        description: data.description,
-        color: data.color || '#6366f1',
-        icon: data.icon,
-        members: {
-          create: {
-            userId: auth.user.id,
-            role: 'Admin',
+    const project = await db.$transaction(async (tx) => {
+      const createdProject = await tx.project.create({
+        data: {
+          key: data.key,
+          name: data.name,
+          description: data.description,
+          color: data.color || '#6366f1',
+          icon: data.icon,
+          members: {
+            create: {
+              userId: auth.user.id,
+              role: 'Admin',
+            },
           },
         },
-      },
-      include: {
-        _count: {
-          select: { issues: true, members: true },
-        },
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-                globalRole: true,
+        select: { id: true },
+      })
+
+      await ensureProjectSystemRecordsTx(tx, createdProject.id, auth.user.id)
+      await seedOnboardingStepsTx(tx, createdProject.id)
+
+      return tx.project.findUniqueOrThrow({
+        where: { id: createdProject.id },
+        include: {
+          _count: {
+            select: { issues: true, members: true },
+          },
+          members: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  avatar: true,
+                  globalRole: true,
+                },
               },
             },
           },
         },
-      },
+      })
     })
-
-    await ensureProjectSystemRecords(project.id, auth.user.id)
 
     const response = NextResponse.json(
       { ...project, currentUserRole: 'Admin' },
@@ -114,6 +123,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })
+    }
+    if (isUniqueConstraintError(error, ['key'])) {
+      return NextResponse.json({ error: 'A project with this key already exists' }, { status: 409 })
     }
     console.error('Error creating project:', error)
     return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })

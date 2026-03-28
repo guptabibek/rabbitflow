@@ -23,6 +23,7 @@ import {
   PackageCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 import { getTypeText, getStatusClasses, getPriorityText } from '@/lib/ui-tokens'
 
 type BacklogNode = {
@@ -94,22 +95,26 @@ export function BacklogView() {
       }
 
       const res = await fetch(`/api/backlog?${params.toString()}`)
-      if (res.ok) {
-        const data = await res.json()
-        const nextTree = data.tree || []
-        setTree(nextTree)
-        if (currentProject && !hasPersistedExpansion && nextTree.length > 0) {
-          setHierarchyExpandedIds(
-            currentProject.id,
-            nextTree.map((node: BacklogNode) => node.id)
-          )
-        }
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to load backlog'))
+      }
+
+      const data = await res.json()
+      const nextTree = data.tree || []
+      setTree(nextTree)
+      if (currentProject && !hasPersistedExpansion && nextTree.length > 0) {
+        setHierarchyExpandedIds(
+          currentProject.id,
+          nextTree.map((node: BacklogNode) => node.id)
+        )
       }
     } catch (error) {
       console.error('Failed to load backlog:', error)
-      toast.error('Failed to load backlog')
+      setTree([])
+      toast.error(error instanceof Error ? error.message : 'Failed to load backlog')
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   useEffect(() => {

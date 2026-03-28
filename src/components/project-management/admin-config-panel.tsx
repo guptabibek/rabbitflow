@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 
 type TypeStateMappingRecord = {
   stateId: string
@@ -48,11 +49,17 @@ type TypeStateMappingRecord = {
 }
 
 type TypeTransitionRecord = {
+  id?: string
   fromStateId: string
   toStateId: string
   order: number
   isEnabled: boolean
+  requiresApproval: boolean
+  approverRoles: string[]
+  minApprovals: number
 }
+
+const TRANSITION_APPROVER_ROLES = ['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer'] as const
 
 type TypeFieldMappingRecord = {
   fieldDefinitionId: string
@@ -205,7 +212,7 @@ export function AdminConfigPanel() {
   const [stateConfigLoading, setStateConfigLoading] = useState(false)
   const [stateConfigSaving, setStateConfigSaving] = useState(false)
   const [mappedStates, setMappedStates] = useState<TypeStateMappingRecord[]>([])
-  const [stateTransitions, setStateTransitions] = useState<Set<string>>(new Set())
+  const [stateTransitions, setStateTransitions] = useState<Record<string, TypeTransitionRecord>>({})
 
   const [fieldConfigSaving, setFieldConfigSaving] = useState(false)
   const [fieldMappings, setFieldMappings] = useState<TypeFieldMappingRecord[]>([])
@@ -247,21 +254,39 @@ export function AdminConfigPanel() {
             .sort((a: TypeStateMappingRecord, b: TypeStateMappingRecord) => a.order - b.order)
         : []
 
-      const nextTransitions = new Set<string>(
-        Array.isArray(payload?.transitions)
-          ? payload.transitions
-              .filter((row: TypeTransitionRecord) => row.isEnabled)
-              .map((row: TypeTransitionRecord) => `${row.fromStateId}->${row.toStateId}`)
-          : []
-      )
+      const transitionMap = Array.isArray(payload?.transitions)
+        ? payload.transitions.reduce(
+            (acc: Record<string, TypeTransitionRecord>, row: TypeTransitionRecord) => {
+              if (!row.isEnabled) {
+                return acc
+              }
+
+              const key = `${row.fromStateId}->${row.toStateId}`
+              acc[key] = {
+                id: row.id,
+                fromStateId: row.fromStateId,
+                toStateId: row.toStateId,
+                order: row.order,
+                isEnabled: row.isEnabled,
+                requiresApproval: Boolean(row.requiresApproval),
+                approverRoles: Array.isArray(row.approverRoles)
+                  ? row.approverRoles.filter((value): value is string => typeof value === 'string')
+                  : [],
+                minApprovals: typeof row.minApprovals === 'number' ? row.minApprovals : 1,
+              }
+              return acc
+            },
+            {}
+          )
+        : {}
 
       setMappedStates(nextMappings)
-      setStateTransitions(nextTransitions)
+      setStateTransitions(transitionMap)
     } catch (error) {
       console.error(error)
       toast.error('Failed to load type state configuration')
       setMappedStates([])
-      setStateTransitions(new Set())
+      setStateTransitions({})
     } finally {
       setStateConfigLoading(false)
     }
@@ -349,6 +374,22 @@ export function AdminConfigPanel() {
   const mappedStateIds = useMemo(
     () => new Set(mappedStates.map((mapping) => mapping.stateId)),
     [mappedStates]
+  )
+
+  const transitionEntries = useMemo(
+    () =>
+      Object.values(stateTransitions).sort(
+        (left, right) =>
+          left.order - right.order ||
+          left.fromStateId.localeCompare(right.fromStateId) ||
+          left.toStateId.localeCompare(right.toStateId)
+      ),
+    [stateTransitions]
+  )
+
+  const approvalRequiredTransitionCount = useMemo(
+    () => transitionEntries.filter((transition) => transition.requiresApproval).length,
+    [transitionEntries]
   )
 
   const availableStatesForMapping = useMemo(
@@ -471,7 +512,7 @@ export function AdminConfigPanel() {
     setStateConfigSaving(true)
     try {
       for (const [index, state] of stateDrafts.entries()) {
-        await fetch(`/api/states/${state.id}`, {
+        const updateResponse = await fetch(`/api/states/${state.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -482,20 +523,25 @@ export function AdminConfigPanel() {
             order: index * 10,
           }),
         })
+        if (!updateResponse.ok) {
+          throw new Error(await getApiErrorMessage(updateResponse, `Failed to update state ${state.name}`))
+        }
       }
 
       const response = await fetch(`/api/states?projectId=${currentProject.id}`, {
         cache: 'no-store',
       })
-      if (response.ok) {
-        const payload = await response.json()
-        setStates(payload)
+      if (!response.ok) {
+        throw new Error(await getApiErrorMessage(response, 'Failed to refresh state configuration'))
       }
+
+      const payload = await response.json()
+      setStates(payload)
 
       toast.success('State order saved')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save state order')
+      toast.error(error instanceof Error ? error.message : 'Failed to save state order')
     } finally {
       setStateConfigSaving(false)
     }
@@ -603,10 +649,10 @@ export function AdminConfigPanel() {
       setStates(next)
       setMappedStates((previous) => previous.filter((row) => row.stateId !== stateId))
       setStateTransitions((previous) => {
-        const nextTransitions = new Set<string>()
-        previous.forEach((transition) => {
-          if (!transition.startsWith(`${stateId}->`) && !transition.endsWith(`->${stateId}`)) {
-            nextTransitions.add(transition)
+        const nextTransitions: Record<string, TypeTransitionRecord> = {}
+        Object.entries(previous).forEach(([key, transition]) => {
+          if (!key.startsWith(`${stateId}->`) && !key.endsWith(`->${stateId}`)) {
+            nextTransitions[key] = transition
           }
         })
         return nextTransitions
@@ -644,10 +690,10 @@ export function AdminConfigPanel() {
     })
 
     setStateTransitions((previous) => {
-      const next = new Set<string>()
-      previous.forEach((transition) => {
-        if (!transition.startsWith(`${state.id}->`) && !transition.endsWith(`->${state.id}`)) {
-          next.add(transition)
+      const next: Record<string, TypeTransitionRecord> = {}
+      Object.entries(previous).forEach(([key, transition]) => {
+        if (!key.startsWith(`${state.id}->`) && !key.endsWith(`->${state.id}`)) {
+          next[key] = transition
         }
       })
       return next
@@ -666,10 +712,35 @@ export function AdminConfigPanel() {
   const toggleTransition = (fromStateId: string, toStateId: string, enabled: boolean) => {
     const key = `${fromStateId}->${toStateId}`
     setStateTransitions((previous) => {
-      const next = new Set(previous)
-      if (enabled) next.add(key)
-      else next.delete(key)
+      const next = { ...previous }
+      if (enabled) {
+        next[key] = previous[key] ?? {
+          fromStateId,
+          toStateId,
+          order: Object.keys(previous).length * 10,
+          isEnabled: true,
+          requiresApproval: false,
+          approverRoles: [],
+          minApprovals: 1,
+        }
+      } else {
+        delete next[key]
+      }
       return next
+    })
+  }
+
+  const updateTransitionPolicy = (
+    transitionKey: string,
+    updater: (transition: TypeTransitionRecord) => TypeTransitionRecord
+  ) => {
+    setStateTransitions((previous) => {
+      const current = previous[transitionKey]
+      if (!current) return previous
+      return {
+        ...previous,
+        [transitionKey]: updater(current),
+      }
     })
   }
 
@@ -694,13 +765,15 @@ export function AdminConfigPanel() {
           order: index * 10,
           isInitial: mapping.isInitial,
         })),
-        transitions: Array.from(stateTransitions).map((transition, index) => {
-          const [fromStateId, toStateId] = transition.split('->')
+        transitions: transitionEntries.map((transition, index) => {
           return {
-            fromStateId,
-            toStateId,
+            fromStateId: transition.fromStateId,
+            toStateId: transition.toStateId,
             order: index * 10,
             isEnabled: true,
+            requiresApproval: transition.requiresApproval,
+            approverRoles: transition.approverRoles,
+            minApprovals: transition.minApprovals,
           }
         }),
       }
@@ -865,7 +938,10 @@ export function AdminConfigPanel() {
               <div className="flex items-center justify-between">
                 <Label className="text-xs text-muted-foreground">Workflow</Label>
                 <span className="text-[11px] text-muted-foreground">
-                  {stateTransitions.size} transition{stateTransitions.size === 1 ? '' : 's'}
+                  {transitionEntries.length} transition{transitionEntries.length === 1 ? '' : 's'}
+                  {approvalRequiredTransitionCount > 0
+                    ? ` · ${approvalRequiredTransitionCount} approval-gated`
+                    : ''}
                 </span>
               </div>
               {mappedStates.length === 0 ? (
@@ -1193,7 +1269,7 @@ export function AdminConfigPanel() {
                                     return (
                                       <td key={key} className="px-2 py-2 text-center">
                                         <Checkbox
-                                          checked={stateTransitions.has(key)}
+                                          checked={Boolean(stateTransitions[key])}
                                           onCheckedChange={(checked) =>
                                             toggleTransition(
                                               fromState.stateId,
@@ -1209,6 +1285,100 @@ export function AdminConfigPanel() {
                               ))}
                             </tbody>
                           </table>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {transitionEntries.length > 0 ? (
+                      <div className="space-y-3">
+                        <Label className="text-xs text-muted-foreground">Transition Approval Policies</Label>
+                        <div className="space-y-3">
+                          {transitionEntries.map((transition) => {
+                            const transitionKey = `${transition.fromStateId}->${transition.toStateId}`
+                            const fromState = mappedStates.find(
+                              (mapping) => mapping.stateId === transition.fromStateId
+                            )?.state
+                            const toState = mappedStates.find(
+                              (mapping) => mapping.stateId === transition.toStateId
+                            )?.state
+
+                            return (
+                              <div key={transitionKey} className="rounded-md border p-3 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      {fromState?.name ?? transition.fromStateId}{' -> '}{toState?.name ?? transition.toStateId}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Configure whether this transition needs explicit approval.
+                                    </div>
+                                  </div>
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                      checked={transition.requiresApproval}
+                                      onCheckedChange={(checked) =>
+                                        updateTransitionPolicy(transitionKey, (current) => ({
+                                          ...current,
+                                          requiresApproval: checked === true,
+                                        }))
+                                      }
+                                    />
+                                    Requires approval
+                                  </label>
+                                </div>
+
+                                {transition.requiresApproval ? (
+                                  <>
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs text-muted-foreground">Minimum approvals</Label>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        max={20}
+                                        className="w-28"
+                                        value={String(transition.minApprovals)}
+                                        onChange={(event) => {
+                                          const parsed = Number.parseInt(event.target.value || '1', 10)
+                                          updateTransitionPolicy(transitionKey, (current) => ({
+                                            ...current,
+                                            minApprovals: Number.isNaN(parsed) ? 1 : Math.min(Math.max(parsed, 1), 20),
+                                          }))
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      <Label className="text-xs text-muted-foreground">Eligible approver roles</Label>
+                                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                        {TRANSITION_APPROVER_ROLES.map((role) => {
+                                          const checked = transition.approverRoles.includes(role)
+                                          return (
+                                            <label key={role} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                              <Checkbox
+                                                checked={checked}
+                                                onCheckedChange={(nextChecked) =>
+                                                  updateTransitionPolicy(transitionKey, (current) => ({
+                                                    ...current,
+                                                    approverRoles: nextChecked === true
+                                                      ? [...new Set([...current.approverRoles, role])]
+                                                      : current.approverRoles.filter((value) => value !== role),
+                                                  }))
+                                                }
+                                              />
+                                              {role}
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        Leave all roles unchecked to fall back to Admin, PM, and DevOps approvers.
+                                      </p>
+                                    </div>
+                                  </>
+                                ) : null}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     ) : null}

@@ -8,6 +8,7 @@ export type User = {
   avatar: string | null
   globalRole: string
   projectRole?: string
+  extraPermissions?: string[]
 }
 
 export type Project = {
@@ -348,6 +349,9 @@ interface AppState {
   openWorkItem: (id: string) => void
   closeWorkItem: () => void
 
+  unreadNotificationCount: number
+  setUnreadNotificationCount: (count: number) => void
+
   resetProjectContext: () => void
 }
 
@@ -514,6 +518,9 @@ export const useAppStore = create<AppState>()(
       openWorkItemId: null,
       openWorkItem: (id) => set({ openWorkItemId: id }),
       closeWorkItem: () => set({ openWorkItemId: null }),
+
+      unreadNotificationCount: 0,
+      setUnreadNotificationCount: (count) => set({ unreadNotificationCount: count }),
 
       resetProjectContext: () =>
         set({

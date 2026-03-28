@@ -23,6 +23,7 @@ import {
   Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 import { PRESET_COLORS } from '@/lib/ui-tokens'
 
 export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
@@ -50,20 +51,20 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: currentProject.id, name: name.trim(), color }),
       })
-      if (res.ok) {
-        const label = await res.json()
-        setLabels([...labels, label])
-        setName('')
-        setColor('#6366f1')
-        toast.success('Label created')
-      } else {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to create label')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to create label'))
       }
-    } catch {
-      toast.error('Network error')
+
+      const label = await res.json()
+      setLabels([...labels, label])
+      setName('')
+      setColor('#6366f1')
+      toast.success('Label created')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create label')
+    } finally {
+      setIsCreating(false)
     }
-    setIsCreating(false)
   }
 
   const handleUpdate = async (id: string) => {
@@ -78,13 +79,15 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editName.trim(), color: editColor }),
       })
-      if (res.ok) {
-        setLabels(labels.map((l) => (l.id === id ? { ...l, name: editName.trim(), color: editColor } : l)))
-        setEditingId(null)
-        toast.success('Label updated')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to update label'))
       }
-    } catch {
-      toast.error('Failed to update label')
+
+      setLabels(labels.map((l) => (l.id === id ? { ...l, name: editName.trim(), color: editColor } : l)))
+      setEditingId(null)
+      toast.success('Label updated')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update label')
     }
   }
 
@@ -96,12 +99,14 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
 
     try {
       const res = await fetch(`/api/labels/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        setLabels(labels.filter((l) => l.id !== id))
-        toast.success('Label deleted')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to delete label'))
       }
-    } catch {
-      toast.error('Failed to delete label')
+
+      setLabels(labels.filter((l) => l.id !== id))
+      toast.success('Label deleted')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete label')
     }
   }
 

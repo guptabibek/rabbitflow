@@ -121,7 +121,7 @@ export function DynamicWorkItemFields({
                       onChange={(e) => onChange(field.key, e.target.value)}
                       placeholder={field.placeholder || undefined}
                       rows={6}
-                      className="mt-1 w-full rounded-xl border-muted focus-visible:ring-2"
+                      className="w-full rounded-xl border-muted focus-visible:ring-2"
                     />
                   </div>
                 )
@@ -134,7 +134,7 @@ export function DynamicWorkItemFields({
                       {field.label}
                     </Label>
                     <Input
-                      className="mt-1 rounded-xl w-full"
+                      className="rounded-xl w-full"
                       value={typeof value === 'string' ? value : ''}
                       onChange={(e) => onChange(field.key, e.target.value)}
                       placeholder={field.placeholder || undefined}
@@ -159,7 +159,7 @@ export function DynamicWorkItemFields({
                         )
                       }
                       placeholder={field.placeholder || undefined}
-                      className="mt-1 rounded-xl"
+                      className="rounded-xl"
                     />
                   </div>
                 )
@@ -175,7 +175,7 @@ export function DynamicWorkItemFields({
                       type="date"
                       value={typeof value === 'string' ? value.slice(0, 10) : ''}
                       onChange={(e) => onChange(field.key, e.target.value || null)}
-                      className="mt-1 rounded-xl"
+                      className="rounded-xl"
                     />
                   </div>
                 )
@@ -223,7 +223,7 @@ export function DynamicWorkItemFields({
                         onChange(field.key, next === EMPTY_SELECT ? null : next)
                       }
                     >
-                      <SelectTrigger className="mt-1 w-full">
+                      <SelectTrigger className="w-full">
                         <SelectValue
                           placeholder={field.placeholder || 'Select'}
                         />
@@ -289,7 +289,7 @@ export function DynamicWorkItemFields({
                     onChange(field.key, next === EMPTY_SELECT ? null : next)
                   }
                 >
-                  <SelectTrigger className="mt-1 w-full">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder={placeholder} />
                   </SelectTrigger>
                   <SelectContent>

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { DynamicWorkItemFields } from '@/components/project-management/dynamic-work-item-fields'
+import { GitLinksPanel } from '@/components/project-management/git-links-panel'
+import { ApprovalPanel } from '@/components/project-management/approval-workflow'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,6 +47,7 @@ import {
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
 import { workItemUrl } from '@/lib/domain/work-item-url'
+import { getApiErrorMessage } from '@/lib/utils'
 import {
   AlertCircle,
   CheckCircle2,
@@ -105,6 +108,17 @@ export type WorkItemBootstrapPayload = {
     teams: Team[]
     states: State[]
     workItemTypes: WorkItemTypeDefinition[]
+    stateTransitions: Array<{
+      id: string
+      workItemTypeId: string
+      fromStateId: string
+      toStateId: string
+      order: number
+      isEnabled: boolean
+      requiresApproval: boolean
+      approverRoles: string[] | null
+      minApprovals: number
+    }>
   }
   access: {
     role: string | null
@@ -118,6 +132,13 @@ type WorkItemDetailContentProps = {
   isRefreshing: boolean
   onReload: () => void
   onIssueUpdated: (issue: Issue) => void
+}
+
+type ApprovalRequestPrefill = {
+  token: number
+  transitionId?: string | null
+  requiredApprovals?: number | null
+  reason?: string
 }
 
 const RELATION_LINK_TYPES: Array<{ value: RelationLinkType; label: string }> = [
@@ -139,6 +160,51 @@ const LINK_TYPES: Array<{ value: LinkType; label: string }> = [
   ...HIERARCHY_LINK_TYPES,
 ]
 
+const MAX_STORY_POINTS = 100
+const MAX_HOURS = 10000
+
+function sanitizeIntegerInput(value: string, maxDigits = 3) {
+  return value.replace(/\D/g, '').slice(0, maxDigits)
+}
+
+function sanitizeDecimalInput(value: string, maxIntegerDigits = 5) {
+  const sanitized = value.replace(/[^0-9.]/g, '')
+  const [integerPart = '', ...fractionParts] = sanitized.split('.')
+  const nextIntegerPart = integerPart.slice(0, maxIntegerDigits)
+
+  if (fractionParts.length === 0) {
+    return nextIntegerPart
+  }
+
+  return `${nextIntegerPart}.${fractionParts.join('')}`
+}
+
+function validatePlanningNumber(
+  value: string,
+  label: string,
+  max: number,
+  integerOnly = false
+) {
+  if (!value.trim()) {
+    return null
+  }
+
+  const parsed = integerOnly ? Number.parseInt(value, 10) : Number.parseFloat(value)
+  if (!Number.isFinite(parsed)) {
+    return `${label} must be a valid ${integerOnly ? 'whole number' : 'number'}.`
+  }
+
+  if (integerOnly && !Number.isInteger(parsed)) {
+    return `${label} must be a whole number.`
+  }
+
+  if (parsed < 0 || parsed > max) {
+    return `${label} must be between 0 and ${max}.`
+  }
+
+  return null
+}
+
 function createDraft(issue: Issue): WorkItemDraft {
   return {
     title: issue.title,
@@ -151,6 +217,8 @@ function createDraft(issue: Issue): WorkItemDraft {
     areaId: issue.area?.id ?? UNASSIGNED_VALUE,
     stateId: issue.stateRecord?.id ?? UNASSIGNED_VALUE,
     parentIssueId: issue.parentIssue?.id ?? issue.parentIssueId ?? UNASSIGNED_VALUE,
+    startDate: issue.startDate?.slice(0, 10) ?? '',
+    dueDate: issue.dueDate?.slice(0, 10) ?? '',
     storyPoints: issue.storyPoints?.toString() ?? '',
     estimatedHours: issue.estimatedHours?.toString() ?? '',
     remainingHours: issue.remainingHours?.toString() ?? '',
@@ -236,8 +304,9 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     issue.iteration?.teamId ?? UNASSIGNED_VALUE
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [approvalRequestPrefill, setApprovalRequestPrefill] = useState<ApprovalRequestPrefill | null>(null)
 
-  const [rightTab, setRightTab] = useState<'general' | 'history' | 'attachments'>('general')
+  const [rightTab, setRightTab] = useState<'general' | 'history' | 'attachments' | 'git' | 'approvals'>('general')
 
   const [relations, setRelations] = useState<FlatRelation[] | null>(null)
   const [relationsCursor, setRelationsCursor] = useState<string | null>(null)
@@ -283,6 +352,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   useEffect(() => {
     setDraft(createDraft(issue))
     setSelectedIterationTeamId(issue.iteration?.teamId ?? UNASSIGNED_VALUE)
+    setApprovalRequestPrefill(null)
     setRelations(null)
     setRelationsCursor(null)
     setComments(null)
@@ -437,6 +507,35 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       : []
 
   const canModerateComments = ['Admin', 'PM'].includes(access.role ?? '')
+  const availableApprovalTransitions = useMemo(() => {
+    const activeTypeId = activeTypeDefinition?.id
+    const currentStateId = issue.stateRecord?.id ?? null
+
+    if (!activeTypeId || !currentStateId) {
+      return []
+    }
+
+    return (context.stateTransitions ?? [])
+      .filter(
+        (transition) =>
+          transition.workItemTypeId === activeTypeId &&
+          transition.fromStateId === currentStateId &&
+          transition.isEnabled
+      )
+      .map((transition) => {
+        const targetState = context.states.find((state) => state.id === transition.toStateId)
+        return {
+          ...transition,
+          label: targetState ? `${issue.stateRecord?.name ?? 'Current'} -> ${targetState.name}` : transition.toStateId,
+        }
+      })
+      .sort((left, right) => left.order - right.order)
+  }, [activeTypeDefinition?.id, context.stateTransitions, context.states, issue.stateRecord?.id, issue.stateRecord?.name])
+
+  const nextApprovalRequestToken = useMemo(
+    () => (approvalRequestPrefill?.token ?? 0) + 1,
+    [approvalRequestPrefill?.token]
+  )
 
   const loadRelations = async (cursor?: string | null) => {
     setLoadingRelations(true)
@@ -508,12 +607,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     if (rightTab === 'general' && relations === null) void loadRelations(null)
     if (rightTab === 'history' && history === null) void loadHistory(null)
     if (rightTab === 'attachments' && attachments === null) void loadAttachments()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rightTab])
 
   useEffect(() => {
     if (comments === null) void loadComments(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issue.id, comments])
 
   useEffect(() => {
@@ -532,7 +629,9 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       )}&excludeIssueId=${issue.id}`
     )
       .then(async (response) => {
-        if (!response.ok) throw new Error('search failed')
+        if (!response.ok) {
+          throw new Error(await getApiErrorMessage(response, 'Failed to search work items'))
+        }
         return response.json() as Promise<Array<{ id: string; key: string; title: string }>>
       })
       .then((items) => {
@@ -541,8 +640,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           setLinkCandidates(items.filter((item) => !linkedIssueIds.has(item.id)))
         })
       })
-      .catch(() => {
-        if (!cancelled) toast.error('Failed to search work items')
+      .catch((error) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : 'Failed to search work items')
+        }
       })
       .finally(() => {
         if (!cancelled) setIsSearchingLinks(false)
@@ -579,6 +680,23 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const handleSave = async () => {
     if (!patchPayload || !canUpdate) return
+
+    if (draft.startDate && draft.dueDate && new Date(draft.dueDate).getTime() < new Date(draft.startDate).getTime()) {
+      toast.error('Due date cannot be earlier than start date')
+      return
+    }
+
+    const planningValidationError =
+      validatePlanningNumber(draft.storyPoints, 'Story points', MAX_STORY_POINTS, true) ??
+      validatePlanningNumber(draft.estimatedHours, 'Estimated hours', MAX_HOURS) ??
+      validatePlanningNumber(draft.remainingHours, 'Remaining hours', MAX_HOURS) ??
+      validatePlanningNumber(draft.completedHours, 'Completed hours', MAX_HOURS)
+
+    if (planningValidationError) {
+      toast.error(planningValidationError)
+      return
+    }
+
     setIsSaving(true)
     try {
       const requestPayload: Record<string, unknown> = {
@@ -602,6 +720,41 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
+        if (
+          error?.details?.code === 'approval_required' ||
+          error?.details?.code === 'approval_pending' ||
+          error?.details?.code === 'approval_rejected'
+        ) {
+          setRightTab('approvals')
+
+          if (
+            error?.details?.code === 'approval_required' ||
+            error?.details?.code === 'approval_rejected'
+          ) {
+            const matchingTransition = availableApprovalTransitions.find(
+              (transition) =>
+                transition.id === error?.details?.transitionId ||
+                transition.toStateId === error?.details?.toStateId ||
+                transition.toStateId === draft.stateId
+            )
+
+            const requestReason = matchingTransition
+              ? error?.details?.code === 'approval_rejected'
+                ? `Requesting a new approval for ${matchingTransition.label} after the previous request was rejected.`
+                : `Requesting approval for ${matchingTransition.label}.`
+              : error?.details?.code === 'approval_rejected'
+                ? 'Requesting a new approval after the previous transition approval was rejected.'
+                : 'Requesting approval for this workflow transition.'
+
+            setApprovalRequestPrefill({
+              token: nextApprovalRequestToken,
+              transitionId: matchingTransition?.id ?? error?.details?.transitionId ?? null,
+              requiredApprovals:
+                error?.details?.minApprovals ?? matchingTransition?.minApprovals ?? null,
+              reason: requestReason,
+            })
+          }
+        }
         toast.error(error.error || 'Failed to save work item')
         return
       }
@@ -638,12 +791,14 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     setLoadingAttachments(true)
     try {
       const response = await fetch(`/api/attachments?issueId=${issue.id}`)
-      if (!response.ok) throw new Error('Failed to fetch attachments')
+      if (!response.ok) {
+        throw new Error(await getApiErrorMessage(response, 'Failed to load attachments'))
+      }
       const data = (await response.json()) as Attachment[]
       setAttachments(data)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to load attachments')
+      toast.error(error instanceof Error ? error.message : 'Failed to load attachments')
     } finally {
       setLoadingAttachments(false)
     }
@@ -837,7 +992,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[linear-gradient(to_bottom,_hsl(var(--card)),_hsl(var(--background)))]">
+    <div className="flex h-full flex-col bg-[linear-gradient(to_bottom,_hsl(var(--card)),_hsl(var(--background)))]" data-testid="work-item-detail">
       <header className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:overflow-x-auto">
@@ -853,6 +1008,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 disabled={!canUpdate || isSaving}
                 className="h-10 border-border/70 bg-background text-[15px] font-medium tracking-tight"
                 placeholder="Work item title"
+                data-testid="work-item-title-input"
               />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -861,6 +1017,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 className="h-9 px-4"
                 disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()}
                 onClick={() => void handleSave()}
+                data-testid="work-item-save-button"
               >
                 {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
               </Button>
@@ -871,6 +1028,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     size="icon"
                     className="h-9 w-9"
                     aria-label="More options"
+                    data-testid="work-item-more-options-button"
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
@@ -886,6 +1044,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     disabled={!canDelete}
                     className="text-destructive focus:text-destructive"
                     onClick={() => void handleDelete()}
+                    data-testid="work-item-delete-button"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete work item
@@ -904,7 +1063,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   State
                 </Label>
                 <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
-                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30" data-testid="work-item-state-trigger">
                     <SelectValue placeholder="State" />
                   </SelectTrigger>
                   <SelectContent>
@@ -922,7 +1081,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   Assigned To
                 </Label>
                 <Select value={draft.assigneeId} onValueChange={(value) => setDraft((previous) => ({ ...previous, assigneeId: value }))} disabled={!canAssign || isSaving}>
-                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30">
+                  <SelectTrigger className="h-8 w-full border-transparent bg-transparent px-2 -ml-2 shadow-none transition-colors hover:bg-muted/50 focus:ring-1 focus:ring-primary/30" data-testid="work-item-assignee-trigger">
                     <SelectValue placeholder="Assignee" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1011,6 +1170,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               className="resize-y border-border/70 bg-background"
               disabled={!canUpdate || isSaving}
               placeholder="Describe the work item"
+              data-testid="work-item-description-input"
             />
           </section>
 
@@ -1118,10 +1278,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <aside className="min-h-0 overflow-y-auto border-t border-border/70 bg-muted/10 lg:border-l lg:border-t-0">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="flex h-full flex-col">
             <div className="border-b border-border/60 px-3 pt-3 md:px-4 md:pt-4">
-              <TabsList className="grid h-auto w-full grid-cols-3 rounded-xl bg-muted/25 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-5 rounded-xl bg-muted/25 p-1">
                 <TabsTrigger value="general" className="h-8 rounded-lg text-xs font-medium">General</TabsTrigger>
                 <TabsTrigger value="attachments" className="h-8 rounded-lg text-xs font-medium">Files</TabsTrigger>
                 <TabsTrigger value="history" className="h-8 rounded-lg text-xs font-medium">History</TabsTrigger>
+                <TabsTrigger value="git" className="h-8 rounded-lg text-xs font-medium">Git</TabsTrigger>
+                <TabsTrigger value="approvals" className="h-8 rounded-lg text-xs font-medium">Approvals</TabsTrigger>
               </TabsList>
             </div>
 
@@ -1154,7 +1316,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Priority</span>
                     <Select value={draft.priority} onValueChange={(value) => setDraft((previous) => ({ ...previous, priority: value as Issue['priority'] }))} disabled={!canUpdate || isSaving}>
-                      <SelectTrigger className="h-8 w-28 border-border/70 bg-background text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 w-28 border-border/70 bg-background text-xs" data-testid="work-item-priority-trigger"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="lowest">Lowest</SelectItem>
                         <SelectItem value="low">Low</SelectItem>
@@ -1164,21 +1326,46 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Start Date</span>
+                    <Input
+                      type="date"
+                      className="h-8 w-36 border-border/70 bg-background text-xs"
+                      value={draft.startDate}
+                      onChange={(event) =>
+                        setDraft((previous) => ({ ...previous, startDate: event.target.value }))
+                      }
+                      disabled={!canUpdate || isSaving}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Due Date</span>
+                    <Input
+                      type="date"
+                      className="h-8 w-36 border-border/70 bg-background text-xs"
+                      value={draft.dueDate}
+                      min={draft.startDate || undefined}
+                      onChange={(event) =>
+                        setDraft((previous) => ({ ...previous, dueDate: event.target.value }))
+                      }
+                      disabled={!canUpdate || isSaving}
+                    />
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Story Points</span>
-                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.storyPoints} onChange={(event) => { const v = event.target.value.replace(/[^0-9]/g, ''); setDraft((previous) => ({ ...previous, storyPoints: v })) }} disabled={!canUpdate || isSaving} inputMode="numeric" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" type="number" min={0} max={MAX_STORY_POINTS} value={draft.storyPoints} onChange={(event) => { const v = sanitizeIntegerInput(event.target.value); setDraft((previous) => ({ ...previous, storyPoints: v })) }} disabled={!canUpdate || isSaving} inputMode="numeric" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Estimated Hours</span>
-                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.estimatedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, estimatedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" type="number" min={0} max={MAX_HOURS} step="0.1" value={draft.estimatedHours} onChange={(event) => { const v = sanitizeDecimalInput(event.target.value); setDraft((previous) => ({ ...previous, estimatedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Remaining Hours</span>
-                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.remainingHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, remainingHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" type="number" min={0} max={MAX_HOURS} step="0.1" value={draft.remainingHours} onChange={(event) => { const v = sanitizeDecimalInput(event.target.value); setDraft((previous) => ({ ...previous, remainingHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Completed Hours</span>
-                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" value={draft.completedHours} onChange={(event) => { const v = event.target.value.replace(/[^0-9.]/g, ''); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
+                    <Input className="h-8 w-28 border-border/70 bg-background text-right text-xs" type="number" min={0} max={MAX_HOURS} step="0.1" value={draft.completedHours} onChange={(event) => { const v = sanitizeDecimalInput(event.target.value); setDraft((previous) => ({ ...previous, completedHours: v })) }} disabled={!canUpdate || isSaving} inputMode="decimal" />
                   </div>
                 </div>
               </section>
@@ -1278,6 +1465,18 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   Load more history
                 </Button>
               ) : null}
+            </TabsContent>
+
+            <TabsContent value="git" className="m-0 overflow-y-auto p-3 md:p-4">
+              <GitLinksPanel issueId={issue.id} projectId={issue.project.id} />
+            </TabsContent>
+
+            <TabsContent value="approvals" className="m-0 overflow-y-auto p-3 md:p-4">
+              <ApprovalPanel
+                issueId={issue.id}
+                transitions={availableApprovalTransitions}
+                requestPrefill={approvalRequestPrefill}
+              />
             </TabsContent>
           </Tabs>
         </aside>

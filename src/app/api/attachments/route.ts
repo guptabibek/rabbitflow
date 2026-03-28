@@ -85,19 +85,25 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, safeName)
     await writeFile(filePath, Buffer.from(await file.arrayBuffer()))
 
-    const attachment = await db.attachment.create({
-      data: {
-        issueId,
-        fileName: file.name,
-        filePath: `/uploads/attachments/${safeName}`,
-        fileSize: file.size,
-        mimeType: file.type || 'application/octet-stream',
-        uploadedBy: auth.actor.userId,
-      },
-      include: {
-        user: { select: { id: true, name: true, avatar: true } },
-      },
-    })
+    let attachment
+    try {
+      attachment = await db.attachment.create({
+        data: {
+          issueId,
+          fileName: file.name,
+          filePath: `/uploads/attachments/${safeName}`,
+          fileSize: file.size,
+          mimeType: file.type || 'application/octet-stream',
+          uploadedBy: auth.actor.userId,
+        },
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+        },
+      })
+    } catch (error) {
+      await unlink(filePath).catch(() => {})
+      throw error
+    }
 
     await createAuditLog({
       projectId: issue.projectId,

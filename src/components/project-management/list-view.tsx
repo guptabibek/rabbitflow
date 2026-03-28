@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { BulkActionToolbar } from '@/components/project-management/bulk-action-toolbar'
 import {
   buildWorkItemHierarchy,
   flattenWorkItemHierarchy,
@@ -34,6 +35,8 @@ import {
   Star,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 import { getTypeText, getStatusClasses, PRIORITY_STYLES } from '@/lib/ui-tokens'
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -128,6 +131,7 @@ export function ListView() {
     setHierarchyExpandedIds,
     toggleHierarchyExpanded,
     workItemTypeFilter,
+    setIssues,
   } = useAppStore()
   const [selectedIssues, setSelectedIssues] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>('key')
@@ -280,11 +284,12 @@ export function ListView() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col" data-testid="work-items-list-view">
       <div className="px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
         <Checkbox
           checked={selectedIssues.length === visibleRows.length && visibleRows.length > 0}
           onCheckedChange={toggleSelectAll}
+          data-testid="work-items-select-all"
         />
         <span className="text-xs text-muted-foreground tabular-nums">
           {visibleRows.length} visible
@@ -298,6 +303,28 @@ export function ListView() {
           </Badge>
         )}
       </div>
+
+      {selectedIssues.length > 0 && (
+        <div className="px-4 py-1.5 border-b border-border flex-shrink-0">
+          <BulkActionToolbar
+            selectedIds={selectedIssues}
+            onClearSelection={() => setSelectedIssues([])}
+            onActionComplete={async () => {
+              if (!currentProject) return
+              try {
+                const res = await fetch(`/api/backlog?projectId=${currentProject.id}`)
+                if (!res.ok) {
+                  throw new Error(await getApiErrorMessage(res, 'Failed to refresh backlog'))
+                }
+
+                setIssues(await res.json())
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Failed to refresh backlog')
+              }
+            }}
+          />
+        </div>
+      )}
 
       <ScrollArea className="flex-1">
         <Table>
@@ -355,12 +382,14 @@ export function ListView() {
                   key={issue.id}
                   className="cursor-pointer hover:bg-accent/40 transition-colors border-b border-border/50"
                   onClick={() => openWorkItem(issue.id)}
+                  data-testid={`work-item-row-${issue.id}`}
                 >
                   <TableCell className="py-2">
                     <Checkbox
                       checked={selectedIssues.includes(issue.id)}
                       onCheckedChange={() => toggleSelect(issue.id)}
                       onClick={(event) => event.stopPropagation()}
+                      data-testid={`work-item-select-${issue.id}`}
                     />
                   </TableCell>
                   <TableCell className="font-mono text-[11px] text-muted-foreground py-2">

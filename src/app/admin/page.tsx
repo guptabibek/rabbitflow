@@ -136,13 +136,13 @@ export default function AdminIndexPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
           <Skeleton className="h-28 rounded-3xl" />
           <Skeleton className="h-28 rounded-3xl" />
           <Skeleton className="h-28 rounded-3xl" />
           <Skeleton className="h-28 rounded-3xl" />
         </div>
-        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.95fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.95fr)]">
           <Skeleton className="h-72 rounded-3xl" />
           <Skeleton className="h-72 rounded-3xl" />
         </div>
@@ -168,10 +168,10 @@ export default function AdminIndexPage() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         {statCards.map((item) => (
           <Card key={item.label} className="rounded-3xl border-border/70 bg-card/90 shadow-sm">
-            <CardContent className="flex items-center justify-between p-6">
+            <CardContent className="flex items-center justify-between p-4 sm:p-6">
               <div className="min-w-0 pr-4">
                 <div className="text-sm text-muted-foreground">{item.label}</div>
                 <div
@@ -192,7 +192,7 @@ export default function AdminIndexPage() {
         ))}
       </section>
 
-      <section className="grid gap-4 2xl:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.92fr)]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.92fr)]">
         <Card className="overflow-hidden rounded-[28px] border-border/70 bg-card/92 shadow-sm">
           <CardHeader className="border-b border-border/60 bg-[linear-gradient(135deg,_hsl(var(--primary)/0.15),_transparent_60%)] pb-5">
             <Badge variant="outline" className="w-fit border-primary/30 bg-primary/10 text-primary">
@@ -203,7 +203,7 @@ export default function AdminIndexPage() {
               Use this space for organization-level operations. Project work stays in the workspace. Security and configuration stay here.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 p-6 md:grid-cols-2 2xl:grid-cols-3">
+          <CardContent className="grid gap-4 p-4 sm:p-6 sm:grid-cols-2 lg:grid-cols-3">
             {ACTION_CARDS.map((item) => (
               <button
                 key={item.title}

@@ -40,6 +40,7 @@ import {
   Inbox,
 } from 'lucide-react'
 import { STATUS_STYLES } from '@/lib/ui-tokens'
+import { getApiErrorMessage } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,7 +122,7 @@ function StatCard({ label, value, icon: Icon, trend, description, iconBg, iconCo
   iconColor?: string
 }) {
   return (
-    <Card className="border-border/50 bg-card">
+    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -261,7 +262,7 @@ function EmptyState({ message }: { message: string }) {
 
 function LoadingCards({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {Array.from({ length: count }).map((_, i) => (
         <Skeleton key={i} className="h-24 rounded-xl" />
       ))}
@@ -303,6 +304,7 @@ export function ReportsView() {
   const [selectedSprint, setSelectedSprint] = useState<string>('')
   const [dayRange, setDayRange] = useState('30')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Data states
   const [executive, setExecutive] = useState<Record<string, unknown> | null>(null)
@@ -347,10 +349,17 @@ export function ReportsView() {
     if (!teamId) return true
     return row.teamId === teamId
   })
+  const activeSelectedSprint =
+    selectedSprint && sprints.some((s) => (s as { id: string }).id === selectedSprint)
+      ? selectedSprint
+      : ''
+  const visibleBurndown = activeSelectedSprint ? burndown : null
 
   const fetchApi = useCallback(async (url: string) => {
     const res = await fetch(url)
-    if (!res.ok) return null
+    if (!res.ok) {
+      throw new Error(await getApiErrorMessage(res, 'Failed to load report data'))
+    }
     return res.json()
   }, [])
 
@@ -359,21 +368,13 @@ export function ReportsView() {
     return `${url}&teamId=${teamId}`
   }, [teamId])
 
-  useEffect(() => {
-    if (!selectedSprint) return
-    const exists = sprints.some((s) => (s as { id: string }).id === selectedSprint)
-    if (!exists) {
-      setSelectedSprint('')
-      setBurndown(null)
-    }
-  }, [selectedTeam, selectedSprint, sprints])
-
   // Load data per tab
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
     const load = async () => {
       setIsLoading(true)
+      setLoadError(null)
       try {
         switch (activeTab) {
           case 'overview': {
@@ -396,15 +397,15 @@ export function ReportsView() {
               fetchApi(withTeam(`/api/reports/agile?projectId=${projectId}&report=cumulative-flow&days=${dayRange}`)),
               fetchApi(withTeam(`/api/reports/agile?projectId=${projectId}&report=lead-cycle-time`)),
             ]
-            if (selectedSprint) {
-              promises.push(fetchApi(withTeam(`/api/reports/agile?projectId=${projectId}&report=burndown&sprintId=${selectedSprint}`)))
+            if (activeSelectedSprint) {
+              promises.push(fetchApi(withTeam(`/api/reports/agile?projectId=${projectId}&report=burndown&sprintId=${activeSelectedSprint}`)))
             }
             const [vel, flow, lct, bd] = await Promise.all(promises) as [unknown[], unknown[], Record<string, unknown>, Record<string, unknown> | undefined]
             if (cancelled) return
             setVelocity(vel as unknown[])
             setCfd(flow as unknown[])
             setLeadCycle(lct)
-            if (bd) setBurndown(bd)
+            setBurndown(bd ?? null)
             break
           }
           case 'productivity': {
@@ -466,12 +467,15 @@ export function ReportsView() {
         }
       } catch (error) {
         console.error('Failed to load report data:', error)
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : 'Failed to load report data')
+        }
       }
       if (!cancelled) setIsLoading(false)
     }
     load()
     return () => { cancelled = true }
-  }, [projectId, activeTab, selectedSprint, dayRange, fetchApi, withTeam])
+  }, [projectId, activeTab, activeSelectedSprint, dayRange, fetchApi, withTeam])
 
   const handleExport = () => {
     if (!projectId) return
@@ -548,6 +552,14 @@ export function ReportsView() {
               <span>{activeScopeLabel}</span>
             </div>
 
+            {loadError ? (
+              <Card className="border-destructive/30 bg-destructive/5">
+                <CardContent className="px-4 py-3 text-sm text-destructive">
+                  {loadError}
+                </CardContent>
+              </Card>
+            ) : null}
+
             {/* ---------------------------------------------------------------- */}
             {/* OVERVIEW TAB                                                      */}
             {/* ---------------------------------------------------------------- */}
@@ -556,7 +568,7 @@ export function ReportsView() {
                 <>
                   {/* Executive KPIs */}
                   {executive && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard
                         label="Total Issues"
                         value={(executive as { totals?: { totalIssues?: number } }).totals?.totalIssues ?? 0}
@@ -590,8 +602,8 @@ export function ReportsView() {
                   )}
 
                   {/* Status Distribution + Velocity side by side */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <Card className="border-border/50 bg-card">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Status Distribution</CardTitle>
                       </CardHeader>
@@ -608,7 +620,7 @@ export function ReportsView() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Sprint Velocity</CardTitle>
                       </CardHeader>
@@ -624,7 +636,7 @@ export function ReportsView() {
 
                   {/* Project health cards */}
                   {executive && (executive as { projects?: unknown[] }).projects && ((executive as { projects: unknown[] }).projects.length > 0) && (
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Project Health</CardTitle>
                       </CardHeader>
@@ -668,7 +680,7 @@ export function ReportsView() {
 
                   {/* Bug trend */}
                   {bugMetrics && (
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Bug Trend (Last {dayRange} days)</CardTitle>
                       </CardHeader>
@@ -690,7 +702,7 @@ export function ReportsView() {
             <TabsContent value="agile" className="space-y-4 mt-0">
               {/* Sprint picker */}
               <div className="flex items-center gap-2">
-                <Select value={selectedSprint} onValueChange={setSelectedSprint}>
+                <Select value={activeSelectedSprint} onValueChange={setSelectedSprint}>
                   <SelectTrigger className="h-7 w-[200px] text-xs">
                     <SelectValue placeholder="Select sprint for burndown" />
                   </SelectTrigger>
@@ -705,25 +717,25 @@ export function ReportsView() {
               </div>
 
               {isLoading ? <LoadingCards count={2} /> : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Burndown */}
-                  <Card className="border-border/50 bg-card">
+                  <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-medium">Sprint Burndown</CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4">
-                      {burndown && (burndown as { burndown?: unknown[] }).burndown ? (
-                        <BurndownChart data={(burndown as { burndown: Array<{ date: string; remaining: number; ideal: number; completed: number; scope: number }> }).burndown} />
+                      {visibleBurndown && (visibleBurndown as { burndown?: unknown[] }).burndown ? (
+                        <BurndownChart data={(visibleBurndown as { burndown: Array<{ date: string; remaining: number; ideal: number; completed: number; scope: number }> }).burndown} />
                       ) : (
-                        <EmptyState message={selectedSprint ? 'Loading…' : 'Select a sprint'} />
+                        <EmptyState message={activeSelectedSprint ? 'Loading…' : 'Select a sprint'} />
                       )}
-                      {burndown && (
+                      {visibleBurndown && (
                         <div className="mt-3 flex gap-4 text-[11px]">
                           <span className="text-muted-foreground">
-                            Total: <span className="font-medium text-foreground">{(burndown as { totalPoints?: number }).totalPoints ?? 0} pts</span>
+                            Total: <span className="font-medium text-foreground">{(visibleBurndown as { totalPoints?: number }).totalPoints ?? 0} pts</span>
                           </span>
                           <span className="text-muted-foreground">
-                            Items: <span className="font-medium text-foreground">{(burndown as { totalItems?: number }).totalItems ?? 0}</span>
+                            Items: <span className="font-medium text-foreground">{(visibleBurndown as { totalItems?: number }).totalItems ?? 0}</span>
                           </span>
                         </div>
                       )}
@@ -731,7 +743,7 @@ export function ReportsView() {
                   </Card>
 
                   {/* Velocity */}
-                  <Card className="border-border/50 bg-card">
+                  <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-medium">Velocity</CardTitle>
                     </CardHeader>
@@ -745,7 +757,7 @@ export function ReportsView() {
                   </Card>
 
                   {/* Cumulative Flow */}
-                  <Card className="border-border/50 bg-card">
+                  <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-medium">Cumulative Flow</CardTitle>
                     </CardHeader>
@@ -784,7 +796,7 @@ export function ReportsView() {
                   </Card>
 
                   {/* Lead & Cycle Time */}
-                  <Card className="border-border/50 bg-card">
+                  <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm font-medium">Lead & Cycle Time</CardTitle>
                     </CardHeader>
@@ -877,7 +889,7 @@ export function ReportsView() {
 
                   {/* Created vs Completed trend */}
                   {completion && (completion as { daily?: unknown[] }).daily && (
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Created vs Completed</CardTitle>
                       </CardHeader>
@@ -919,9 +931,9 @@ export function ReportsView() {
                     </Card>
                   )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Workload distribution */}
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Workload Distribution</CardTitle>
                       </CardHeader>
@@ -965,7 +977,7 @@ export function ReportsView() {
                     </Card>
 
                     {/* Time vs Estimates */}
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Time vs Estimates</CardTitle>
                       </CardHeader>
@@ -1015,8 +1027,8 @@ export function ReportsView() {
               {isLoading ? <LoadingCards count={4} /> : (
                 <>
                   {/* Status + Priority distribution */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <Card className="border-border/50 bg-card">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">By Status</CardTitle>
                       </CardHeader>
@@ -1033,7 +1045,7 @@ export function ReportsView() {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">By Priority</CardTitle>
                       </CardHeader>
@@ -1053,7 +1065,7 @@ export function ReportsView() {
 
                   {/* Backlog aging */}
                   {aging && (
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Backlog Aging</CardTitle>
                       </CardHeader>
@@ -1083,9 +1095,9 @@ export function ReportsView() {
                     </Card>
                   )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Blocked items */}
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
                           <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
@@ -1120,7 +1132,7 @@ export function ReportsView() {
                     </Card>
 
                     {/* Reopened items */}
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
                           <GitBranch className="h-3.5 w-3.5 text-orange-500" />
@@ -1171,15 +1183,15 @@ export function ReportsView() {
                 }
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard label="Total Bugs" value={bm.summary.totalBugs} icon={Bug} iconBg="bg-red-500/10" iconColor="text-red-500" />
                       <StatCard label="Open Bugs" value={bm.summary.openBugs} icon={AlertTriangle} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
                       <StatCard label="Resolved" value={bm.summary.resolvedBugs} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
                       <StatCard label="Avg Resolution" value={`${bm.summary.avgResolutionDays}d`} icon={Timer} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <Card className="border-border/50 bg-card">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">Bug Trend</CardTitle>
                         </CardHeader>
@@ -1188,7 +1200,7 @@ export function ReportsView() {
                         </CardContent>
                       </Card>
 
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">By Severity</CardTitle>
                         </CardHeader>
@@ -1207,7 +1219,7 @@ export function ReportsView() {
                       </Card>
                     </div>
 
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">By Priority</CardTitle>
                       </CardHeader>
@@ -1236,7 +1248,7 @@ export function ReportsView() {
                 }
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard
                         label="Deployment Freq"
                         value={`${d.deploymentFrequency.perWeek}/wk`}
@@ -1272,7 +1284,7 @@ export function ReportsView() {
                     </div>
 
                     {d.deploymentFrequency.deployments.length > 0 && (
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">Recent Deployments / Releases</CardTitle>
                         </CardHeader>
@@ -1294,7 +1306,7 @@ export function ReportsView() {
                       </Card>
                     )}
 
-                    <Card className="border-border/50 bg-card">
+                    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">DORA Performance Rating</CardTitle>
                       </CardHeader>
@@ -1350,11 +1362,11 @@ export function ReportsView() {
                 }
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard label="Avg Velocity" value={`${f.avgVelocity} pts`} icon={TrendingUp} iconBg="bg-primary/10" iconColor="text-primary" />
                       <StatCard label="Remaining Work" value={`${f.totalRemainingPoints} pts`} icon={Layers} iconBg="bg-amber-500/10" iconColor="text-amber-500" description={`${f.totalRemainingItems} items`} />
                       <StatCard label="Predicted Sprints" value={f.predictedSprints ?? '—'} icon={Target} iconBg="bg-blue-500/10" iconColor="text-blue-500" description="To complete backlog" />
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="space-y-1">
@@ -1373,7 +1385,7 @@ export function ReportsView() {
                     </div>
 
                     {f.velocityHistory && f.velocityHistory.length > 0 && (
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">Velocity History</CardTitle>
                         </CardHeader>
@@ -1407,15 +1419,15 @@ export function ReportsView() {
                 }
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard label="Estimated" value={`${tt.summary.totalEstimated}h`} icon={Clock} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
                       <StatCard label="Completed" value={`${tt.summary.totalCompleted}h`} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
                       <StatCard label="Remaining" value={`${tt.summary.totalRemaining}h`} icon={Timer} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
                       <StatCard label="Items Tracked" value={tt.summary.itemCount} icon={Layers} iconBg="bg-primary/10" iconColor="text-primary" />
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <Card className="border-border/50 bg-card">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">By Assignee</CardTitle>
                         </CardHeader>
@@ -1439,7 +1451,7 @@ export function ReportsView() {
                         </CardContent>
                       </Card>
 
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">By Work Item Type</CardTitle>
                         </CardHeader>
@@ -1482,7 +1494,7 @@ export function ReportsView() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       {/* Action breakdown */}
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">By Action</CardTitle>
                         </CardHeader>
@@ -1501,7 +1513,7 @@ export function ReportsView() {
                       </Card>
 
                       {/* Top users */}
-                      <Card className="border-border/50 bg-card">
+                      <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-medium">Top Users</CardTitle>
                         </CardHeader>

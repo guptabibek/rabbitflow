@@ -11,8 +11,10 @@ import {
 } from '@/components/ui/dialog'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -45,10 +47,12 @@ import {
   Plus,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { getApiErrorMessage } from '@/lib/utils'
 
 type MemberWithUser = {
   id: string
   role: string
+  extraPermissions?: string[]
   joinedAt: string
   user: User
 }
@@ -64,9 +68,20 @@ type GlobalUser = {
 const ROLE_OPTIONS = [
   { value: 'Admin', label: 'Admin', icon: Shield, tone: 'bg-role-admin-bg text-role-admin' },
   { value: 'PM', label: 'PM', icon: Briefcase, tone: 'bg-role-pm-bg text-role-pm' },
+  { value: 'DevOps', label: 'DevOps', icon: Shield, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300' },
   { value: 'Dev', label: 'Developer', icon: Wrench, tone: 'bg-role-dev-bg text-role-dev' },
   { value: 'QA', label: 'QA', icon: Bug, tone: 'bg-role-qa-bg text-role-qa' },
   { value: 'Viewer', label: 'Viewer', icon: Eye, tone: 'bg-role-viewer-bg text-role-viewer' },
+] as const
+
+const FEATURE_GRANT_OPTIONS = [
+  { value: 'operations:manage', label: 'Operations' },
+  { value: 'branding:manage', label: 'Branding' },
+  { value: 'test:manage', label: 'Test Management' },
+  { value: 'onboarding:manage', label: 'Onboarding' },
+  { value: 'project:members:manage', label: 'Member Admin' },
+  { value: 'masterdata:manage', label: 'Master Data' },
+  { value: 'acl:manage', label: 'ACL Rules' },
 ] as const
 
 export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
@@ -74,6 +89,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [open, setOpen] = useState(false)
   const [members, setMembers] = useState<MemberWithUser[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [addMemberOpen, setAddMemberOpen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -82,6 +98,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [userSearchQuery, setUserSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<GlobalUser[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [addRole, setAddRole] = useState<(typeof ROLE_OPTIONS)[number]['value']>('Dev')
   const [isAdding, setIsAdding] = useState(false)
@@ -103,12 +120,17 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       setLoading(true)
       try {
         const res = await fetch(`/api/projects/${currentProject.id}/members`)
-        if (res.ok) {
-          const data = await res.json()
-          setMembers(data)
+        if (!res.ok) {
+          throw new Error(await getApiErrorMessage(res, 'Failed to fetch members'))
         }
+
+        const data = await res.json()
+        setMembers(data)
+        setLoadError(null)
       } catch (error) {
         console.error('Failed to fetch members:', error)
+        setMembers([])
+        setLoadError(error instanceof Error ? error.message : 'Failed to fetch members')
       } finally {
         setLoading(false)
       }
@@ -126,6 +148,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
     async (query: string) => {
       if (!currentProject || query.trim().length < 2) {
         setSearchResults([])
+        setSearchError(null)
         return
       }
       setIsSearching(true)
@@ -133,11 +156,15 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
         const res = await fetch(
           `/api/users?excludeProjectId=${currentProject.id}&search=${encodeURIComponent(query.trim())}`
         )
-        if (res.ok) {
-          setSearchResults(await res.json())
+        if (!res.ok) {
+          throw new Error(await getApiErrorMessage(res, 'Failed to search users'))
         }
-      } catch {
-        // ignore
+
+        setSearchResults(await res.json())
+        setSearchError(null)
+      } catch (error) {
+        setSearchResults([])
+        setSearchError(error instanceof Error ? error.message : 'Failed to search users')
       } finally {
         setIsSearching(false)
       }
@@ -159,8 +186,20 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       // Fetch all non-members initially
       setIsSearching(true)
       fetch(`/api/users?excludeProjectId=${currentProject.id}`)
-        .then((res) => (res.ok ? res.json() : []))
-        .then(setSearchResults)
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(await getApiErrorMessage(res, 'Failed to load users'))
+          }
+          return res.json()
+        })
+        .then((results) => {
+          setSearchResults(results)
+          setSearchError(null)
+        })
+        .catch((error) => {
+          setSearchResults([])
+          setSearchError(error instanceof Error ? error.message : 'Failed to load users')
+        })
         .finally(() => setIsSearching(false))
     }
   }, [addMemberOpen, showCreateForm, currentProject, searchGlobalUsers])
@@ -256,15 +295,14 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
         method: 'DELETE',
       })
 
-      if (res.ok) {
-        toast.success('Member removed')
-        refreshMembers()
-      } else {
-        const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to remove member')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to remove member'))
       }
-    } catch {
-      toast.error('Failed to remove member')
+
+      toast.success('Member removed')
+      refreshMembers()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove member')
     }
   }
 
@@ -278,15 +316,35 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
         body: JSON.stringify({ role: newRole }),
       })
 
-      if (res.ok) {
-        toast.success('Role updated')
-        refreshMembers()
-      } else {
-        const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to update role')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to update role'))
       }
-    } catch {
-      toast.error('Failed to update role')
+
+      toast.success('Role updated')
+      refreshMembers()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update role')
+    }
+  }
+
+  const handleUpdateFeatureGrants = async (memberId: string, nextPermissions: string[]) => {
+    if (!currentProject) return
+
+    try {
+      const res = await fetch(`/api/projects/${currentProject.id}/members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extraPermissions: nextPermissions }),
+      })
+
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to update feature access'))
+      }
+
+      toast.success('Feature access updated')
+      refreshMembers()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update feature access')
     }
   }
 
@@ -302,7 +360,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" data-testid="member-management-trigger">
             <Users className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Members</span>
             {members.length > 0 && (
@@ -313,7 +371,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0" data-testid="member-management-dialog">
         <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -335,6 +393,8 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
           </DialogTitle>
         </DialogHeader>
 
+        {loadError ? <div className="border-b px-4 py-3 text-sm text-destructive md:px-5">{loadError}</div> : null}
+
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-4 py-3 md:px-5">
             <div className="relative flex-1">
@@ -344,6 +404,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search members..."
                 className="h-9 pl-8 text-xs"
+                data-testid="member-management-search-input"
               />
             </div>
 
@@ -356,12 +417,12 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="sm" className="h-9 gap-1.5 text-xs">
+                  <Button size="sm" className="h-9 gap-1.5 text-xs" data-testid="member-management-add-button">
                     <UserPlus className="h-3.5 w-3.5" />
                     Add
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+                <DialogContent className="max-w-md gap-0 overflow-hidden p-0" data-testid="member-management-add-dialog">
                   <DialogHeader className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
                     <DialogTitle className="text-base font-semibold tracking-tight">
                       {showCreateForm ? 'Create New User' : 'Add Member to Project'}
@@ -385,9 +446,12 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             }}
                             placeholder="Search by name or email..."
                             className="h-9 pl-8 text-sm"
+                            data-testid="member-management-user-search-input"
                           />
                         </div>
                       </div>
+
+                      {searchError ? <p className="text-xs text-destructive">{searchError}</p> : null}
 
                       <ScrollArea className="max-h-[200px]">
                         {isSearching ? (
@@ -417,6 +481,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               <button
                                 key={user.id}
                                 onClick={() => setSelectedUserId(user.id)}
+                                data-testid={`member-search-result-${user.id}`}
                                 className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
                                   selectedUserId === user.id
                                     ? 'bg-primary/10 ring-1 ring-primary/30'
@@ -459,7 +524,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               setAddRole(v as (typeof ROLE_OPTIONS)[number]['value'])
                             }
                           >
-                            <SelectTrigger className="h-9 text-xs">
+                            <SelectTrigger className="h-9 text-xs" data-testid="member-management-role-trigger">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -480,6 +545,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         className="h-9 w-full text-xs"
                         onClick={handleAddExistingUser}
                         disabled={!selectedUserId || isAdding}
+                        data-testid="member-management-add-existing-submit"
                       >
                         {isAdding ? 'Adding...' : `Add ${selectedUser?.name ?? 'User'} to Project`}
                       </Button>
@@ -500,6 +566,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             variant="outline"
                             className="h-9 w-full gap-1.5 border-dashed text-xs"
                             onClick={() => setShowCreateForm(true)}
+                            data-testid="member-management-create-user-toggle"
                           >
                             <Plus className="h-3.5 w-3.5" />
                             Create New User Account
@@ -519,6 +586,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           onChange={(e) => setNewUserName(e.target.value)}
                           placeholder="John Doe"
                           className="h-9 text-sm"
+                          data-testid="member-management-create-name-input"
                         />
                       </div>
                       <div>
@@ -531,6 +599,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           onChange={(e) => setNewUserEmail(e.target.value)}
                           placeholder="john@example.com"
                           className="h-9 text-sm"
+                          data-testid="member-management-create-email-input"
                         />
                       </div>
                       <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
@@ -538,6 +607,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           type="checkbox"
                           checked={assignNewUserToProject}
                           onChange={(event) => setAssignNewUserToProject(event.target.checked)}
+                          data-testid="member-management-create-assign-checkbox"
                         />
                         Add this user to current project immediately
                       </label>
@@ -552,7 +622,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                               setNewUserRole(v as (typeof ROLE_OPTIONS)[number]['value'])
                             }
                           >
-                            <SelectTrigger className="h-9 text-xs">
+                            <SelectTrigger className="h-9 text-xs" data-testid="member-management-create-role-trigger">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -575,6 +645,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           onChange={(e) => setNewUserPassword(e.target.value)}
                           placeholder="Minimum 8 characters"
                           className="h-9 text-sm"
+                          data-testid="member-management-create-password-input"
                         />
                       </div>
                       <div className="flex gap-2">
@@ -591,6 +662,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                           disabled={
                             !newUserEmail || !newUserName || newUserPassword.length < 8 || isAdding
                           }
+                          data-testid="member-management-create-submit"
                         >
                           {isAdding
                             ? 'Creating...'
@@ -634,10 +706,14 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       ROLE_OPTIONS.find((option) => option.value === member.role) ??
                       ROLE_OPTIONS.find((option) => option.value === 'Viewer')!
                     const RoleIcon = role.icon
+                    const grantedFeatures = Array.isArray(member.extraPermissions)
+                      ? member.extraPermissions
+                      : []
 
                     return (
                       <div
                         key={member.id}
+                        data-testid={`member-row-${member.id}`}
                         className="group flex items-center justify-between rounded-md px-2.5 py-2 transition-colors hover:bg-accent/50"
                       >
                         <div className="flex items-center gap-2.5">
@@ -661,6 +737,25 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             <div className="text-[11px] text-muted-foreground">
                               {member.user.email}
                             </div>
+                            {grantedFeatures.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {grantedFeatures.map((permission) => {
+                                  const feature = FEATURE_GRANT_OPTIONS.find(
+                                    (option) => option.value === permission
+                                  )
+
+                                  return (
+                                    <Badge
+                                      key={permission}
+                                      variant="secondary"
+                                      className="h-4 px-1.5 text-[10px] font-medium"
+                                    >
+                                      {feature?.label ?? permission}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -677,11 +772,13 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                                   size="icon"
                                   aria-label="Member options"
                                   className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                                  data-testid={`member-options-${member.id}`}
                                 >
                                   <MoreHorizontal className="h-3.5 w-3.5" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuLabel>Role</DropdownMenuLabel>
                                 {ROLE_OPTIONS.filter((option) => option.value !== member.role).map(
                                   (option) => (
                                     <DropdownMenuItem
@@ -693,6 +790,22 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                                     </DropdownMenuItem>
                                   )
                                 )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel>Feature Access</DropdownMenuLabel>
+                                {FEATURE_GRANT_OPTIONS.map((option) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={option.value}
+                                    checked={grantedFeatures.includes(option.value)}
+                                    onCheckedChange={(checked) => {
+                                      const nextPermissions = checked
+                                        ? [...new Set([...grantedFeatures, option.value])]
+                                        : grantedFeatures.filter((permission) => permission !== option.value)
+                                      handleUpdateFeatureGrants(member.id, nextPermissions)
+                                    }}
+                                  >
+                                    {option.label}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"

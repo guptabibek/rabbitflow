@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
 import { listPermissions, normalizeProjectRole } from '@/lib/domain/rbac'
+import { getProjectPermissionRules } from '@/lib/domain/access-control'
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
       },
       select: {
         role: true,
+        extraPermissions: true,
         project: { select: { id: true, name: true, key: true } },
         user: { select: { id: true, name: true, email: true, globalRole: true } },
       },
@@ -43,13 +45,25 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedRole = normalizeProjectRole(membership.role)
+    const rules = await getProjectPermissionRules(projectId)
 
     return NextResponse.json({
       projectId,
       userId: auth.user.id,
       role: normalizedRole,
       rawRole: membership.role,
-      permissions: listPermissions(normalizedRole),
+      permissions: listPermissions(normalizedRole, {
+        rules: rules.map((rule) => ({
+          role: rule.role,
+          permission: rule.permission,
+          effect: rule.effect,
+          areaId: rule.areaId,
+        })),
+        extraPermissions: Array.isArray(membership.extraPermissions)
+          ? membership.extraPermissions.filter((value): value is string => typeof value === 'string')
+          : [],
+      }),
+      rules,
       membership,
     })
   } catch (error) {

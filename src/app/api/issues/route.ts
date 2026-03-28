@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
 import { sanitizeRichText } from '@/lib/domain/content'
+import { formatProjectIssueKey } from '@/lib/domain/issue-key-format'
+import { getMaxProjectIssueNumber, lockProjectIssueSequence } from '@/lib/domain/issue-key-sequence'
 import { ensureProjectSystemRecords } from '@/lib/domain/project-bootstrap'
 import {
   prepareCustomFieldWrites,
@@ -14,12 +17,53 @@ import {
   statusFromStateCategory,
 } from '@/lib/domain/state-machine'
 import { sendWorkItemAssignmentEmail } from '@/lib/domain/notifications'
+import { evaluateAutomationRules } from '@/lib/domain/automation-service'
+import { attachSlaTimers } from '@/lib/domain/sla-engine'
+import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
 import {
   issueMutationInclude,
   serializeIssueRecord,
   validateSprintAssignmentTeamContext,
   validateIssueReferences,
 } from '@/lib/domain/issues'
+
+function toAutomationIssueSnapshot(issue: {
+  id: string
+  key?: string
+  title?: string
+  status: string
+  priority: string
+  assigneeId: string | null
+  workItemType: string
+  storyPoints: number | null
+  iterationId?: string | null
+  areaId?: string | null
+  stateId?: string | null
+  labels?: Array<{ label?: { id: string; name: string } | null; labelId?: string }>
+}) {
+  return {
+    id: issue.id,
+    key: issue.key,
+    title: issue.title,
+    status: issue.status,
+    priority: issue.priority,
+    assigneeId: issue.assigneeId,
+    workItemType: issue.workItemType,
+    storyPoints: issue.storyPoints,
+    iterationId: issue.iterationId ?? null,
+    areaId: issue.areaId ?? null,
+    stateId: issue.stateId ?? null,
+    labels: (issue.labels ?? [])
+      .map((entry) =>
+        entry.label
+          ? { id: entry.label.id, name: entry.label.name }
+          : entry.labelId
+            ? { id: entry.labelId, name: entry.labelId }
+            : null
+      )
+      .filter((label): label is { id: string; name: string } => label !== null),
+  }
+}
 
 const nonEmptyStringSchema = z.string().trim().min(1)
 const nullableReferenceIdSchema = z.union([nonEmptyStringSchema, z.null()]).optional()
@@ -30,6 +74,18 @@ const nullableDateStringSchema = z
     (value) => value === undefined || value === null || !Number.isNaN(new Date(value).getTime()),
     { message: 'Invalid date value' }
   )
+
+function validateIssueSchedule(startDate: string | Date | null | undefined, dueDate: string | Date | null | undefined) {
+  if (!startDate || !dueDate) {
+    return null
+  }
+
+  if (new Date(dueDate).getTime() < new Date(startDate).getTime()) {
+    return 'Due date cannot be earlier than start date'
+  }
+
+  return null
+}
 
 const createIssueSchema = z.object({
   projectId: nonEmptyStringSchema,
@@ -45,6 +101,7 @@ const createIssueSchema = z.object({
   estimatedHours: z.number().min(0).max(10000).nullable().optional(),
   remainingHours: z.number().min(0).max(10000).nullable().optional(),
   completedHours: z.number().min(0).max(10000).nullable().optional(),
+  startDate: nullableDateStringSchema,
   dueDate: nullableDateStringSchema,
   assigneeId: nullableReferenceIdSchema,
   iterationId: nullableReferenceIdSchema,
@@ -90,12 +147,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
 
-    const auth = await requireProjectPermission(request, projectId, 'workitem:read')
+    const auth = await requireProjectPermission(request, projectId, 'workitem:read', undefined, {
+      allowScoped: true,
+    })
     if (!auth.ok) return auth.response
 
     await ensureProjectSystemRecords(projectId, auth.actor.userId)
+    const areaScope = await getAreaAccessScope(projectId, auth.actor.projectRole, 'workitem:read', auth.actor.extraPermissions)
 
-    const where: Record<string, unknown> = { projectId }
+    let where: Record<string, unknown> = { projectId }
     if (status) where.status = status
     if (assigneeId) where.assigneeId = assigneeId
     if (priority) where.priority = priority
@@ -121,6 +181,8 @@ export async function GET(request: NextRequest) {
         ...(minimal ? [] : [{ description: { contains: search, mode: 'insensitive' } }]),
       ]
     }
+
+    where = applyAreaScopeFilter(where, areaScope)
 
     if (minimal) {
       const [issues, total] = await Promise.all([
@@ -198,11 +260,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = createIssueSchema.parse(body)
 
-    const auth = await requireProjectPermission(request, data.projectId, 'workitem:create')
+    const scheduleValidationError = validateIssueSchedule(data.startDate, data.dueDate)
+    if (scheduleValidationError) {
+      return NextResponse.json({ error: scheduleValidationError }, { status: 400 })
+    }
+
+    const auth = await requireProjectPermission(request, data.projectId, 'workitem:create', undefined, {
+      areaId: data.areaId ?? null,
+    })
     if (!auth.ok) return auth.response
 
     if (data.assigneeId) {
-      const assignPermission = await requireProjectPermission(request, data.projectId, 'workitem:assign')
+      const assignPermission = await requireProjectPermission(
+        request,
+        data.projectId,
+        'workitem:assign',
+        undefined,
+        { areaId: data.areaId ?? null }
+      )
       if (!assignPermission.ok) return assignPermission.response
     }
 
@@ -210,7 +285,9 @@ export async function POST(request: NextRequest) {
       const transitionPermission = await requireProjectPermission(
         request,
         data.projectId,
-        'workitem:transition'
+        'workitem:transition',
+        undefined,
+        { areaId: data.areaId ?? null }
       )
       if (!transitionPermission.ok) return transitionPermission.response
     }
@@ -263,17 +340,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const lastIssue = await db.issue.findFirst({
-      where: { projectId: data.projectId },
-      orderBy: { createdAt: 'desc' },
-      select: { key: true },
-    })
-
-    let issueNumber = 1
-    if (lastIssue) {
-      issueNumber = parseInt(lastIssue.key.split('-')[1] || '0', 10) + 1
-    }
-
     const selectedState = data.stateId
       ? await db.state.findUnique({
           where: { id: data.stateId },
@@ -287,54 +353,62 @@ export async function POST(request: NextRequest) {
         ? statusFromStateCategory(selectedState.category)
         : 'backlog'
 
-    const lastIssueInStatus = await db.issue.findFirst({
-      where: { projectId: data.projectId, status: effectiveStatus },
-      orderBy: { columnOrder: 'desc' },
-      select: { columnOrder: true },
-    })
+    const issue = await db.$transaction(async (tx) => {
+      await lockProjectIssueSequence(tx, data.projectId)
 
-    const issue = await db.issue.create({
-      data: {
-        key: `${project.key}-${issueNumber}`,
-        title: data.title.trim(),
-        description: sanitizeRichText(data.description),
-        workItemType: preparedFields.typeDefinition.key,
-        status: effectiveStatus,
-        priority: data.priority || 'medium',
-        severity: data.severity ?? null,
-        storyPoints: data.storyPoints ?? null,
-        estimatedHours: data.estimatedHours ?? null,
-        remainingHours: data.remainingHours ?? null,
-        completedHours: data.completedHours ?? null,
-        dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        assigneeId: data.assigneeId ?? null,
-        reporterId: auth.actor.userId,
-        iterationId: data.iterationId ?? null,
-        areaId: data.areaId ?? null,
-        stateId: selectedState?.id ?? null,
-        parentIssueId: data.parentIssueId ?? null,
-        projectId: data.projectId,
-        completedDate:
-          effectiveStatus === 'done' || selectedState?.isFinal ? new Date() : null,
-        columnOrder: (lastIssueInStatus?.columnOrder || 0) + 1000,
-        labels: data.labelIds?.length
-          ? { create: data.labelIds.map((labelId) => ({ labelId })) }
-          : undefined,
-        fieldValues: preparedFields.writes.length
-          ? {
-              create: preparedFields.writes.map((write) => ({
-                fieldDefinitionId: write.fieldDefinitionId,
-                projectId: write.projectId,
-                stringValue: write.stringValue,
-                numberValue: write.numberValue,
-                booleanValue: write.booleanValue,
-                dateValue: write.dateValue,
-                jsonValue: write.jsonValue,
-              })),
-            }
-          : undefined,
-      },
-      include: issueMutationInclude,
+      const issueNumber =
+        (await getMaxProjectIssueNumber(tx, data.projectId, project.key)) + 1
+
+      const lastIssueInStatus = await tx.issue.findFirst({
+        where: { projectId: data.projectId, status: effectiveStatus },
+        orderBy: { columnOrder: 'desc' },
+        select: { columnOrder: true },
+      })
+
+      return tx.issue.create({
+        data: {
+          key: formatProjectIssueKey(project.key, issueNumber),
+          title: data.title.trim(),
+          description: sanitizeRichText(data.description),
+          workItemType: preparedFields.typeDefinition.key,
+          status: effectiveStatus,
+          priority: data.priority || 'medium',
+          severity: data.severity ?? null,
+          storyPoints: data.storyPoints ?? null,
+          estimatedHours: data.estimatedHours ?? null,
+          remainingHours: data.remainingHours ?? null,
+          completedHours: data.completedHours ?? null,
+          startDate: data.startDate ? new Date(data.startDate) : null,
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          assigneeId: data.assigneeId ?? null,
+          reporterId: auth.actor.userId,
+          iterationId: data.iterationId ?? null,
+          areaId: data.areaId ?? null,
+          stateId: selectedState?.id ?? null,
+          parentIssueId: data.parentIssueId ?? null,
+          projectId: data.projectId,
+          completedDate:
+            effectiveStatus === 'done' || selectedState?.isFinal ? new Date() : null,
+          columnOrder: (lastIssueInStatus?.columnOrder || 0) + 1000,
+          labels: data.labelIds?.length
+            ? { create: data.labelIds.map((labelId) => ({ labelId })) }
+            : undefined,
+          fieldValues: preparedFields.writes.length
+            ? {
+                create: preparedFields.writes.map((write) => ({
+                  fieldDefinitionId: write.fieldDefinitionId,
+                  projectId: write.projectId,
+                  stringValue: write.stringValue,
+                  numberValue: write.numberValue,
+                  booleanValue: write.booleanValue,
+                  dateValue: write.dateValue,
+                  jsonValue: write.jsonValue,
+                })),
+              }
+            : undefined,
+        },
+        include: issueMutationInclude,
+      })
     })
 
     await createAuditLog({
@@ -349,6 +423,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Attach SLA timers based on matching policies
+    void attachSlaTimers(
+      issue.id,
+      data.projectId,
+      issue.priority,
+      issue.workItemType
+    )
+
     if (issue.assignee?.id) {
       void sendWorkItemAssignmentEmail({
         issueId: issue.id,
@@ -357,9 +439,37 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    await evaluateAutomationRules({
+      type: 'issue:created',
+      projectId: data.projectId,
+      issueId: issue.id,
+      userId: auth.actor.userId,
+      issue: toAutomationIssueSnapshot(issue),
+    })
+
+    const finalIssue =
+      (await db.issue.findUnique({
+        where: { id: issue.id },
+        include: issueMutationInclude,
+      })) ?? issue
+
+    void dispatchWebhookEvent(data.projectId, 'issue.created', {
+      issue: {
+        id: finalIssue.id,
+        key: finalIssue.key,
+        title: finalIssue.title,
+        status: finalIssue.status,
+        priority: finalIssue.priority,
+        workItemType: finalIssue.workItemType,
+        assigneeId: finalIssue.assigneeId,
+        iterationId: finalIssue.iterationId,
+      },
+      actorUserId: auth.actor.userId,
+    })
+
     await invalidateSprintCaches(data.projectId, data.iterationId)
 
-    return NextResponse.json(serializeIssueRecord(issue), { status: 201 })
+    return NextResponse.json(serializeIssueRecord(finalIssue), { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

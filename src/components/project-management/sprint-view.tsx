@@ -68,6 +68,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
+import { getApiErrorMessage } from '@/lib/utils'
 import { format, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
 import { PIE_COLORS as PIE_COLORS_TOKENS } from '@/lib/ui-tokens'
@@ -813,16 +814,20 @@ export function SprintView() {
     if (!issue) return
     try {
       const res = await fetch(`/api/issues/${issueId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iterationId: null, version: issue.version }) })
-      if (res.ok) {
-        const updated = await res.json()
-        setSprintIssues((prev) => prev.filter((i) => i.id !== issueId))
-        updateIssue(issueId, updated)
-        if (resolvedSelectedSprintId) {
-          void fetchSprintIssues(resolvedSelectedSprintId)
-        }
-        toast.success(`${issue.key} removed from sprint`)
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to remove from sprint'))
       }
-    } catch { toast.error('Failed to remove from sprint') }
+
+      const updated = await res.json()
+      setSprintIssues((prev) => prev.filter((i) => i.id !== issueId))
+      updateIssue(issueId, updated)
+      if (resolvedSelectedSprintId) {
+        void fetchSprintIssues(resolvedSelectedSprintId)
+      }
+      toast.success(`${issue.key} removed from sprint`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove from sprint')
+    }
   }
 
   const handleRemoveParentLink = async (issueId: string) => {
@@ -858,21 +863,21 @@ export function SprintView() {
     if (!resolvedSelectedSprintId) return
     try {
       const res = await fetch(`/api/sprints/${resolvedSelectedSprintId}/capacity`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacities: entries }) })
-      if (res.ok) {
-        toast.success('Capacity updated')
-        capacityLoadedRef.current = null
-        analyticsLoadedRef.current = null
-        capacityRequestRef.current = null
-        analyticsRequestRef.current = null
-        setCapacitySprintId(null)
-        setAnalyticsSprintId(null)
-        void fetchSprintCapacity(resolvedSelectedSprintId)
-        void fetchSprintAnalytics(resolvedSelectedSprintId)
-      } else {
-        toast.error('Failed to update capacity')
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to update capacity'))
       }
-    } catch {
-      toast.error('Network error')
+
+      toast.success('Capacity updated')
+      capacityLoadedRef.current = null
+      analyticsLoadedRef.current = null
+      capacityRequestRef.current = null
+      analyticsRequestRef.current = null
+      setCapacitySprintId(null)
+      setAnalyticsSprintId(null)
+      void fetchSprintCapacity(resolvedSelectedSprintId)
+      void fetchSprintAnalytics(resolvedSelectedSprintId)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update capacity')
     }
   }, [fetchSprintAnalytics, fetchSprintCapacity, resolvedSelectedSprintId])
 
@@ -1027,7 +1032,7 @@ export function SprintView() {
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 border-r border-border/60">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex h-full min-h-0 flex-col overflow-hidden">
             <div className="border-b border-border/70 bg-background/65 px-4 md:px-6">
@@ -1082,7 +1087,7 @@ export function SprintView() {
               </div>
             ) : showLoadingSkeleton ? (
               <div className="flex-1 p-4 md:p-6">
-                <div className="grid gap-4 xl:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
                       <Skeleton className="mb-4 h-8 w-32 rounded-xl" />

@@ -193,25 +193,16 @@ npm run dev
 
 Open: `http://localhost:3000`
 
-## 5) Seed Demo Data
+## 5) Bootstrap Admin Access
 
-Use one of these options:
+For Docker deployments, bootstrap seeding is controlled through `.env.docker`:
 
-- Click "Setup Demo Data" on login page
-- Or call endpoint:
+- `RUN_BOOTSTRAP_SEED=true`
+- `SEED_ADMIN_EMAIL`
+- `SEED_ADMIN_NAME`
+- `SEED_ADMIN_PASSWORD`
 
-```bash
-curl -X POST http://localhost:3000/api/seed
-```
-
-## Demo Login Credentials
-
-After seeding:
-
-- `admin@example.com` / `password123`
-- `john@example.com` / `password123`
-- `sarah@example.com` / `password123`
-- `mike@example.com` / `password123`
+On first startup, the stack creates the configured admin account if it does not already exist.
 
 ## Available Scripts
 
@@ -293,7 +284,7 @@ Required updates:
 - `POSTGRES_PASSWORD`
 - `JWT_SECRET`
 - `SEED_ADMIN_PASSWORD`
-- `APP_URL` (for email links, e.g. `http://localhost:3999`)
+- `APP_URL` (for email links, e.g. `http://localhost:4080`)
 
 Bootstrap seed variables:
 
@@ -314,11 +305,11 @@ What happens on startup:
 - Postgres and Redis start first and report healthy status.
 - App container waits for dependencies.
 - App runs `prisma migrate deploy` automatically.
-- Nginx exposes the app on `NGINX_PORT` (default `3999`).
+- Nginx exposes the app on `NGINX_PORT` (default `4080`).
 
 ### 4) Open the Application
 
-- `http://localhost:3999`
+- `http://localhost:4080`
 
 ### 5) Redeploy Without Data Loss
 
@@ -378,20 +369,20 @@ After reset, the first app startup runs `db:seed:bootstrap` automatically and cr
 ### Core Domain
 
 - `/api/projects`
-- `/api/projects/[id]`
-- `/api/projects/[id]/members`
-- `/api/projects/[id]/members/[memberId]`
+- `/api/projects/[projectId]`
+- `/api/projects/[projectId]/members`
+- `/api/projects/[projectId]/members/[memberId]`
 - `/api/users`
-- `/api/users/[id]`
+- `/api/users/[userId]`
 - `/api/issues`
-- `/api/issues/[id]`
+- `/api/issues/[issueId]`
 - `/api/comments`
-- `/api/comments/[id]`
+- `/api/comments/[commentId]`
 - `/api/labels`
-- `/api/labels/[id]`
+- `/api/labels/[labelId]`
 - `/api/states`
 - `/api/iterations`
-- `/api/iterations/[id]`
+- `/api/iterations/[iterationId]`
 - `/api/attachments`
 - `/api/relations`
 
@@ -400,8 +391,8 @@ After reset, the first app startup runs `db:seed:bootstrap` automatically and cr
 - `/api/backlog`
 - `/api/board`
 - `/api/sprints`
-- `/api/sprints/[id]`
-- `/api/sprints/[id]/analytics`
+- `/api/sprints/[sprintId]`
+- `/api/sprints/[sprintId]/analytics`
 - `/api/dashboard`
 - `/api/rbac`
 

@@ -3,6 +3,7 @@ import Redis from 'ioredis'
 let redis: Redis | null = null
 let connectionFailed = false
 let lastFailureAt = 0
+const localEphemeralStore = new Map<string, { value: string; expiresAt: number }>()
 
 const FAILURE_RETRY_MS = 30_000
 
@@ -142,4 +143,79 @@ export async function withCache<T>(
   const data = await fetcher()
   await cacheSet(key, data, ttl)
   return data
+}
+
+function pruneEphemeralStore(now = Date.now()) {
+  for (const [key, entry] of localEphemeralStore.entries()) {
+    if (entry.expiresAt <= now) {
+      localEphemeralStore.delete(key)
+    }
+  }
+}
+
+export async function ephemeralSet(
+  key: string,
+  data: unknown,
+  ttlSeconds = 60
+): Promise<void> {
+  const client = getRedis()
+  if (client) {
+    try {
+      await client.set(key, JSON.stringify(data), 'EX', ttlSeconds)
+      return
+    } catch {
+      // Fall through to local store
+    }
+  }
+
+  localEphemeralStore.set(key, {
+    value: JSON.stringify(data),
+    expiresAt: Date.now() + ttlSeconds * 1000,
+  })
+}
+
+export async function ephemeralScan<T>(pattern: string): Promise<Array<{ key: string; value: T }>> {
+  const client = getRedis()
+  if (client) {
+    try {
+      const items: Array<{ key: string; value: T }> = []
+      let cursor = '0'
+
+      do {
+        const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+        cursor = nextCursor
+        if (keys.length === 0) continue
+
+        const values = await client.mget(keys)
+        keys.forEach((key, index) => {
+          const raw = values[index]
+          if (!raw) return
+          try {
+            items.push({ key, value: JSON.parse(raw) as T })
+          } catch {
+            // Ignore malformed entries
+          }
+        })
+      } while (cursor !== '0')
+
+      return items
+    } catch {
+      // Fall through to local store
+    }
+  }
+
+  pruneEphemeralStore()
+  const prefix = pattern.endsWith('*') ? pattern.slice(0, -1) : pattern
+  const items: Array<{ key: string; value: T }> = []
+
+  for (const [key, entry] of localEphemeralStore.entries()) {
+    if (!key.startsWith(prefix)) continue
+    try {
+      items.push({ key, value: JSON.parse(entry.value) as T })
+    } catch {
+      // Ignore malformed entries
+    }
+  }
+
+  return items
 }

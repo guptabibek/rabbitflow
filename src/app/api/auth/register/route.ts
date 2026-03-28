@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, isUniqueConstraintError } from '@/lib/db'
 import { hashPassword, signToken, AUTH_COOKIE, COOKIE_OPTIONS } from '@/lib/auth'
-import { createAuthSession } from '@/lib/auth-session'
+import { createAuthSessionRecordTx } from '@/lib/auth-session'
 import { z } from 'zod'
 
 const registerSchema = z.object({
@@ -30,29 +30,37 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await hashPassword(data.password)
 
-    const user = await db.user.create({
-      data: {
-        email: normalizedEmail,
-        name: data.name.trim(),
-        passwordHash,
-        globalRole: 'member',
-        mustResetPassword: false,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        globalRole: true,
-      },
+    const { user, session } = await db.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          name: data.name.trim(),
+          passwordHash,
+          globalRole: 'member',
+          mustResetPassword: false,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar: true,
+          globalRole: true,
+        },
+      })
+
+      const createdSession = await createAuthSessionRecordTx(tx, {
+        request,
+        userId: createdUser.id,
+        mfaVerified: false,
+        mfaBypassed: false,
+      })
+
+      return {
+        user: createdUser,
+        session: createdSession,
+      }
     })
 
-    const session = await createAuthSession({
-      request,
-      userId: user.id,
-      mfaVerified: false,
-      mfaBypassed: false,
-    })
     const token = await signToken(user.id, session.id, user.globalRole)
 
     const response = NextResponse.json({ user }, { status: 201 })
@@ -61,6 +69,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0]?.message || 'Validation failed' }, { status: 400 })
+    }
+    if (isUniqueConstraintError(error, ['email'])) {
+      return NextResponse.json(
+        { error: 'An account with this email already exists' },
+        { status: 409 }
+      )
     }
     console.error('Register error:', error)
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 })

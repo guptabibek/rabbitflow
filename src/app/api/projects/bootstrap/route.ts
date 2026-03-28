@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, runWithDbRetry } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { issueMutationInclude, serializeIssueRecord } from '@/lib/domain/issues'
 import { ensureProjectSystemRecords } from '@/lib/domain/project-bootstrap'
@@ -20,12 +20,13 @@ export async function GET(request: NextRequest) {
     const auth = await requireProjectPermission(request, projectId, 'project:read')
     if (!auth.ok) return auth.response
 
-    await ensureProjectSystemRecords(projectId, auth.actor.userId)
+    await runWithDbRetry(() => ensureProjectSystemRecords(projectId, auth.actor.userId))
 
     const data = await withCache(
       `project:${projectId}:bootstrap:user:${auth.actor.userId}:pageSize:${pageSize}`,
       30,
-      async () => {
+      () =>
+        runWithDbRetry(async () => {
         const [
           issues,
           labels,
@@ -83,6 +84,7 @@ export async function GET(request: NextRequest) {
             orderBy: { user: { name: 'asc' } },
             select: {
               role: true,
+              extraPermissions: true,
               user: {
                 select: {
                   id: true,
@@ -167,6 +169,9 @@ export async function GET(request: NextRequest) {
           users: users.map((member) => ({
             ...member.user,
             projectRole: member.role,
+            extraPermissions: Array.isArray(member.extraPermissions)
+              ? member.extraPermissions.filter((value): value is string => typeof value === 'string')
+              : [],
           })),
           areas,
           teams,
@@ -175,10 +180,12 @@ export async function GET(request: NextRequest) {
           stateTransitions,
           rbac: {
             role: normalizedRole,
-            permissions: listPermissions(normalizedRole),
+            permissions: listPermissions(normalizedRole, {
+              extraPermissions: auth.actor.extraPermissions,
+            }),
           },
         }
-      }
+        })
     )
 
     return NextResponse.json(data)

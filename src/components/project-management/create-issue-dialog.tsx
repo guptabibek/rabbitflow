@@ -76,6 +76,66 @@ const HIERARCHY_LINK_TYPES = [
 const LINK_TYPES = [...RELATION_LINK_TYPES, ...HIERARCHY_LINK_TYPES]
 
 const UNASSIGNED_VALUE = '__none__'
+const MAX_STORY_POINTS = 100
+const MAX_HOURS = 10000
+
+function sanitizeIntegerInput(value: string, maxDigits = 3) {
+  return value.replace(/\D/g, '').slice(0, maxDigits)
+}
+
+function sanitizeDecimalInput(value: string, maxIntegerDigits = 5) {
+  const sanitized = value.replace(/[^0-9.]/g, '')
+  const [integerPart = '', ...fractionParts] = sanitized.split('.')
+  const nextIntegerPart = integerPart.slice(0, maxIntegerDigits)
+
+  if (fractionParts.length === 0) {
+    return nextIntegerPart
+  }
+
+  return `${nextIntegerPart}.${fractionParts.join('')}`
+}
+
+function parseOptionalIntegerInput(
+  value: string,
+  label: string,
+  max: number
+): { value?: number; error?: string } {
+  if (!value.trim()) {
+    return {}
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isInteger(parsed)) {
+    return { error: `${label} must be a whole number.` }
+  }
+
+  if (parsed < 0 || parsed > max) {
+    return { error: `${label} must be between 0 and ${max}.` }
+  }
+
+  return { value: parsed }
+}
+
+function parseOptionalDecimalInput(
+  value: string,
+  label: string,
+  max: number
+): { value?: number; error?: string } {
+  if (!value.trim()) {
+    return {}
+  }
+
+  const parsed = Number.parseFloat(value)
+  if (!Number.isFinite(parsed)) {
+    return { error: `${label} must be a valid number.` }
+  }
+
+  if (parsed < 0 || parsed > max) {
+    return { error: `${label} must be between 0 and ${max}.` }
+  }
+
+  return { value: parsed }
+}
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   epic: Layers,
@@ -156,6 +216,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [stateId, setStateId] = useState(UNASSIGNED_VALUE)
   const [selectedLabels, setSelectedLabels] = useState<string[]>([])
   const [parentIssueId, setParentIssueId] = useState<string | null>(null)
+  const [startDate, setStartDate] = useState('')
+  const [dueDate, setDueDate] = useState('')
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({})
   const [linkedItems, setLinkedItems] = useState<LinkedItem[]>([])
   const [childIssueIds, setChildIssueIds] = useState<string[]>([])
@@ -381,6 +443,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setStateId(UNASSIGNED_VALUE)
     setSelectedLabels([])
     setParentIssueId(null)
+    setStartDate('')
+    setDueDate('')
     setCustomFields({})
     setLinkedItems([])
     setChildIssueIds([])
@@ -479,6 +543,47 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
       return
     }
 
+    if (startDate && dueDate && new Date(dueDate).getTime() < new Date(startDate).getTime()) {
+      toast.error('Due date cannot be earlier than start date')
+      return
+    }
+
+    const storyPointsResult = parseOptionalIntegerInput(storyPoints, 'Story points', MAX_STORY_POINTS)
+    if (storyPointsResult.error) {
+      toast.error(storyPointsResult.error)
+      return
+    }
+
+    const estimatedHoursResult = parseOptionalDecimalInput(
+      estimatedHours,
+      'Estimated hours',
+      MAX_HOURS
+    )
+    if (estimatedHoursResult.error) {
+      toast.error(estimatedHoursResult.error)
+      return
+    }
+
+    const remainingHoursResult = parseOptionalDecimalInput(
+      remainingHours,
+      'Remaining hours',
+      MAX_HOURS
+    )
+    if (remainingHoursResult.error) {
+      toast.error(remainingHoursResult.error)
+      return
+    }
+
+    const completedHoursResult = parseOptionalDecimalInput(
+      completedHours,
+      'Completed hours',
+      MAX_HOURS
+    )
+    if (completedHoursResult.error) {
+      toast.error(completedHoursResult.error)
+      return
+    }
+
     setIsLoading(true)
     try {
       const response = await fetch('/api/issues', {
@@ -492,10 +597,12 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           status,
           priority,
           severity: severity === UNASSIGNED_VALUE ? undefined : severity,
-          storyPoints: storyPoints ? parseInt(storyPoints, 10) : undefined,
-          estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
-          remainingHours: remainingHours ? parseFloat(remainingHours) : undefined,
-          completedHours: completedHours ? parseFloat(completedHours) : undefined,
+          storyPoints: storyPointsResult.value,
+          estimatedHours: estimatedHoursResult.value,
+          remainingHours: remainingHoursResult.value,
+          completedHours: completedHoursResult.value,
+          startDate: startDate || undefined,
+          dueDate: dueDate || undefined,
           assigneeId: assigneeId === UNASSIGNED_VALUE ? undefined : assigneeId,
           iterationId: iterationId === UNASSIGNED_VALUE ? undefined : iterationId,
           iterationTeamId:
@@ -591,7 +698,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   }
 
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+    <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col" data-testid="create-work-item-form">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <div className="px-5 pt-3">
           <TabsList className="h-8 w-full justify-start bg-muted/30 rounded-md">
@@ -614,7 +721,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
         </div>
 
         <ScrollArea className="flex-1">
-          <div className="px-5 py-4 space-y-4">
+          <div className="px-4 py-4 sm:px-5 space-y-4">
             <TabsContent value="basic" className="space-y-4 mt-0">
               {typeOptions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
@@ -625,7 +732,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
                   Work Item Type
                 </Label>
-                <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                   {typeOptions.map((type) => {
                     const Icon = TYPE_ICONS[type.key] || CircleDot
                     const iconColor = TYPE_COLORS[type.key] || 'text-muted-foreground'
@@ -635,6 +742,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                       <button
                         key={type.key}
                         type="button"
+                        data-testid={`create-work-item-type-${type.key}`}
                         className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-all ${
                           workItemType === type.key
                             ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
@@ -652,35 +760,37 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 </div>
               </div>
 
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="title" className="text-xs">Title *</Label>
                 <Input
                   id="title"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder={`Enter ${selectedType?.name.toLowerCase() || 'work item'} title`}
-                  className="h-9 text-sm mt-1"
+                  className="h-9 text-sm"
                   required
+                  data-testid="create-work-item-title-input"
                 />
               </div>
 
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="description" className="text-xs">Description</Label>
                 <Textarea
                   id="description"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Add a detailed description..."
-                  rows={5}
-                  className="text-sm mt-1 bg-muted/20 border-border/50"
+                  rows={4}
+                  className="text-sm bg-muted/20 border-border/50"
+                  data-testid="create-work-item-description-input"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
                   <Label className="text-xs">Status</Label>
                   <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs" data-testid="create-work-item-status-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -692,10 +802,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Priority</Label>
                   <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs" data-testid="create-work-item-priority-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -711,11 +821,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
             </TabsContent>
 
             <TabsContent value="metadata" className="space-y-4 mt-0">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
                   <Label className="text-xs">State</Label>
                   <Select value={stateId} onValueChange={setStateId}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="No state" />
                     </SelectTrigger>
                     <SelectContent>
@@ -728,10 +838,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Severity</Label>
                   <Select value={severity} onValueChange={setSeverity}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="No severity" />
                     </SelectTrigger>
                     <SelectContent>
@@ -744,10 +854,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Assignee</Label>
                   <Select value={assigneeId} onValueChange={setAssigneeId}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs" data-testid="create-work-item-assignee-trigger">
                       <SelectValue placeholder="Unassigned" />
                     </SelectTrigger>
                     <SelectContent>
@@ -760,10 +870,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Sprint Team</Label>
                   <Select value={selectedIterationTeamId} onValueChange={setSelectedIterationTeamId}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="All teams" />
                     </SelectTrigger>
                     <SelectContent>
@@ -776,10 +886,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Iteration Path</Label>
                   <Select value={iterationId} onValueChange={setIterationId}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="No iteration" />
                     </SelectTrigger>
                     <SelectContent>
@@ -797,10 +907,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </p>
                   ) : null}
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Area Path</Label>
                   <Select value={areaId} onValueChange={setAreaId}>
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="No area" />
                     </SelectTrigger>
                     <SelectContent>
@@ -813,9 +923,9 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Story Points</Label>
-                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                  <div className="flex gap-1.5 mt-1 flex-wrap">
                     {[1, 2, 3, 5, 8, 13, 21].map((points) => (
                       <Button
                         key={points}
@@ -833,50 +943,66 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                       </Button>
                     ))}
                   </div>
+                  <Input
+                    className="h-8 text-xs"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={MAX_STORY_POINTS}
+                    placeholder="Custom value 0-100"
+                    value={storyPoints}
+                    onChange={(event) => setStoryPoints(sanitizeIntegerInput(event.target.value))}
+                  />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Estimated Hours</Label>
                   <Input
-                    className="h-8 text-xs mt-1"
+                    className="h-8 text-xs"
+                    type="number"
                     inputMode="decimal"
+                    min={0}
+                    max={MAX_HOURS}
+                    step="0.1"
                     placeholder="e.g. 16"
                     value={estimatedHours}
-                    onChange={(event) =>
-                      setEstimatedHours(event.target.value.replace(/[^0-9.]/g, ''))
-                    }
+                    onChange={(event) => setEstimatedHours(sanitizeDecimalInput(event.target.value))}
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Remaining Hours</Label>
                   <Input
-                    className="h-8 text-xs mt-1"
+                    className="h-8 text-xs"
+                    type="number"
                     inputMode="decimal"
+                    min={0}
+                    max={MAX_HOURS}
+                    step="0.1"
                     placeholder="e.g. 10"
                     value={remainingHours}
-                    onChange={(event) =>
-                      setRemainingHours(event.target.value.replace(/[^0-9.]/g, ''))
-                    }
+                    onChange={(event) => setRemainingHours(sanitizeDecimalInput(event.target.value))}
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Completed Hours</Label>
                   <Input
-                    className="h-8 text-xs mt-1"
+                    className="h-8 text-xs"
+                    type="number"
                     inputMode="decimal"
+                    min={0}
+                    max={MAX_HOURS}
+                    step="0.1"
                     placeholder="e.g. 6"
                     value={completedHours}
-                    onChange={(event) =>
-                      setCompletedHours(event.target.value.replace(/[^0-9.]/g, ''))
-                    }
+                    onChange={(event) => setCompletedHours(sanitizeDecimalInput(event.target.value))}
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label className="text-xs">Parent</Label>
                   <Select
                     value={parentIssueId ?? UNASSIGNED_VALUE}
                     onValueChange={handleParentSelection}
                   >
-                    <SelectTrigger className="h-8 text-xs mt-1">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="No parent" />
                     </SelectTrigger>
                     <SelectContent>
@@ -888,6 +1014,27 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Start Date</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    data-testid="create-work-item-start-date-input"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Due Date</Label>
+                  <Input
+                    type="date"
+                    className="h-8 text-xs"
+                    value={dueDate}
+                    min={startDate || undefined}
+                    onChange={(event) => setDueDate(event.target.value)}
+                    data-testid="create-work-item-due-date-input"
+                  />
                 </div>
               </div>
             </TabsContent>
@@ -1112,13 +1259,14 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
         </ScrollArea>
       </Tabs>
 
-      <div className="flex justify-end gap-2 px-5 py-3 border-t border-border flex-shrink-0">
+      <div className="flex justify-end gap-2 px-4 py-3 border-t border-border flex-shrink-0 sm:px-5">
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="h-8 text-xs"
           onClick={() => handleOpenChange(false)}
+          data-testid="create-work-item-cancel-button"
         >
           Cancel
         </Button>
@@ -1127,6 +1275,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           size="sm"
           className="h-8 text-xs"
           disabled={isLoading || !title.trim() || !selectedType || !canCreateWorkItems}
+          data-testid="create-work-item-submit-button"
         >
           {isLoading ? 'Creating...' : `Create ${selectedType?.name || 'Work Item'}`}
         </Button>
@@ -1137,7 +1286,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   if (isScreenMode) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-5 py-4">
+        <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-4 py-4 sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2 text-base font-semibold">
               <div className={`h-8 w-8 rounded-md ${typeBackground} flex items-center justify-center`}>
@@ -1161,8 +1310,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   return (
     <Dialog open={isCreateIssueOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[88vh] overflow-hidden flex flex-col p-0 gap-0">
-        <DialogHeader className="px-5 py-3.5 border-b border-border flex-shrink-0">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[88vh] overflow-hidden flex flex-col p-0 gap-0" data-testid="create-work-item-dialog">
+        <DialogHeader className="px-4 py-3.5 border-b border-border flex-shrink-0 sm:px-5">
           <DialogTitle className="flex items-center gap-2 text-base">
             <div className={`h-7 w-7 rounded-md ${typeBackground} flex items-center justify-center`}>
               <TypeIcon className={`h-4 w-4 ${typeColor}`} />

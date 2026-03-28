@@ -127,7 +127,7 @@ export function FilterBar({
   }
 
   return (
-    <div className="flex-shrink-0 border-b border-border bg-background px-4 py-2.5">
+    <div className="flex-shrink-0 border-b border-border bg-background px-4 py-2.5" data-testid="work-items-filter-bar">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-56">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -137,6 +137,7 @@ export function FilterBar({
             placeholder="Search issues..."
             className="h-8 pl-8 text-sm"
             aria-label="Search work items"
+            data-testid="work-items-search-input"
           />
         </div>
 
@@ -281,6 +282,7 @@ export function FilterBar({
               size="sm"
               onClick={() => handleViewModeChange('board')}
               className="h-7 gap-1 rounded-sm px-2 text-xs"
+              data-testid="work-items-view-board-button"
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Board</span>
@@ -290,6 +292,7 @@ export function FilterBar({
               size="sm"
               onClick={() => handleViewModeChange('list')}
               className="h-7 gap-1 rounded-sm px-2 text-xs"
+              data-testid="work-items-view-list-button"
             >
               <List className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">List</span>
@@ -310,7 +313,7 @@ export function FilterBar({
         )}
 
         {currentProject && canCreateWorkItems && (
-          <Button size="sm" className="h-8 text-sm" onClick={() => setCreateIssueOpen(true)}>
+          <Button size="sm" className="h-8 text-sm" onClick={() => setCreateIssueOpen(true)} data-testid="work-items-new-button">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             New Work Item
           </Button>

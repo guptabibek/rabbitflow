@@ -15,6 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -29,17 +35,20 @@ import {
   FileText,
   FolderKanban,
   LogOut,
+  MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   Settings,
   Shield,
+  Trash2,
   UserPlus,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PROJECT_COLORS } from '@/lib/ui-tokens'
 
-const PROJECT_ROLE_OPTIONS = ['Admin', 'PM', 'Dev', 'QA', 'Viewer'] as const
+const PROJECT_ROLE_OPTIONS = ['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer'] as const
 
 export function WorkspaceDashboardPage() {
   const router = useRouter()
@@ -55,10 +64,17 @@ export function WorkspaceDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showEditProject, setShowEditProject] = useState(false)
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [createForm, setCreateForm] = useState({
     name: '',
     key: '',
+    description: '',
+    color: '#6366f1',
+  })
+  const [editProjectId, setEditProjectId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '',
     description: '',
     color: '#6366f1',
   })
@@ -71,8 +87,13 @@ export function WorkspaceDashboardPage() {
     projectRole: 'Dev' as (typeof PROJECT_ROLE_OPTIONS)[number],
   })
   const [isCreating, setIsCreating] = useState(false)
+  const [isUpdatingProject, setIsUpdatingProject] = useState(false)
+  const [isDeletingProject, setIsDeletingProject] = useState(false)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
   const canCreateProject = currentUser?.globalRole === 'admin'
+
+  const canManageProject = (project: Project) =>
+    currentUser?.globalRole === 'admin' || project.currentUserRole === 'Admin'
 
   const openAdminPanel = async () => {
     const targetProject = projects.find((project) => !project.isArchived) ?? null
@@ -194,6 +215,91 @@ export function WorkspaceDashboardPage() {
       toast.error('Network error')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const openEditProject = (project: Project) => {
+    setEditProjectId(project.id)
+    setEditForm({
+      name: project.name,
+      description: project.description || '',
+      color: project.color,
+    })
+    setShowEditProject(true)
+  }
+
+  const handleUpdateProject = async () => {
+    if (!editProjectId || !editForm.name.trim()) {
+      return
+    }
+
+    setIsUpdatingProject(true)
+    try {
+      const response = await fetch(`/api/projects/${editProjectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          description: editForm.description.trim(),
+          color: editForm.color,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        toast.error(error.error || 'Failed to update project')
+        return
+      }
+
+      const updatedProject = await response.json()
+      const nextProjects = projects.map((project) =>
+        project.id === editProjectId ? { ...project, ...updatedProject } : project
+      )
+
+      setLocalProjects(nextProjects)
+      setProjects(nextProjects)
+      setShowEditProject(false)
+      setEditProjectId(null)
+      toast.success('Project updated successfully')
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setIsUpdatingProject(false)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!editProjectId) {
+      return
+    }
+
+    const targetProject = projects.find((project) => project.id === editProjectId)
+    if (!targetProject || !confirm(`Delete project "${targetProject.name}"?`)) {
+      return
+    }
+
+    setIsDeletingProject(true)
+    try {
+      const response = await fetch(`/api/projects/${editProjectId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        toast.error(error.error || 'Failed to delete project')
+        return
+      }
+
+      const nextProjects = projects.filter((project) => project.id !== editProjectId)
+      setLocalProjects(nextProjects)
+      setProjects(nextProjects)
+      setShowEditProject(false)
+      setEditProjectId(null)
+      toast.success('Project deleted successfully')
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setIsDeletingProject(false)
     }
   }
 
@@ -327,6 +433,7 @@ export function WorkspaceDashboardPage() {
               size="sm"
               onClick={handleLogout}
               className="text-muted-foreground"
+              data-testid="dashboard-logout-button"
             >
               <LogOut className="mr-1.5 h-4 w-4" />
               Logout
@@ -351,6 +458,7 @@ export function WorkspaceDashboardPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="h-11 pl-10"
+              data-testid="dashboard-project-search-input"
             />
           </div>
           {canCreateProject ? (
@@ -375,11 +483,16 @@ export function WorkspaceDashboardPage() {
                 variant="outline"
                 onClick={() => setShowCreateUser(true)}
                 className="h-11 gap-2 px-5"
+                data-testid="dashboard-new-user-button"
               >
                 <UserPlus className="h-4 w-4" />
                 New User
               </Button>
-              <Button onClick={() => setShowCreate(true)} className="h-11 gap-2 px-5">
+              <Button
+                onClick={() => setShowCreate(true)}
+                className="h-11 gap-2 px-5"
+                data-testid="dashboard-new-project-button"
+              >
                 <Plus className="h-4 w-4" />
                 New Project
               </Button>
@@ -394,6 +507,7 @@ export function WorkspaceDashboardPage() {
                 key={project.id}
                 className="group cursor-pointer border-border/50 transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
                 onClick={() => handleSelectProject(project)}
+                data-testid={`dashboard-project-card-${project.id}`}
               >
                 <CardContent className="p-5">
                   <div className="mb-4 flex items-start justify-between">
@@ -403,7 +517,46 @@ export function WorkspaceDashboardPage() {
                     >
                       {project.key.slice(0, 2)}
                     </div>
-                    <ArrowRight className="h-5 w-5 text-muted-foreground/0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
+                    <div className="flex items-center gap-1">
+                      {canManageProject(project) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`dashboard-project-actions-${project.id}`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openEditProject(project)
+                              }}
+                              data-testid={`dashboard-project-edit-${project.id}`}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit project
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openEditProject(project)
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete project
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
+                      <ArrowRight className="h-5 w-5 text-muted-foreground/0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
+                    </div>
                   </div>
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
@@ -451,7 +604,11 @@ export function WorkspaceDashboardPage() {
                 : 'Create your first project to start tracking work items, sprints, and team delivery.'}
             </p>
             {!search && canCreateProject && (
-              <Button onClick={() => setShowCreate(true)} className="gap-2">
+              <Button
+                onClick={() => setShowCreate(true)}
+                className="gap-2"
+                data-testid="dashboard-empty-create-project-button"
+              >
                 <Plus className="h-4 w-4" />
                 Create Your First Project
               </Button>
@@ -462,6 +619,7 @@ export function WorkspaceDashboardPage() {
 
       <Dialog open={canCreateProject && showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md">
+          <div data-testid="dashboard-create-project-dialog" />
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
           </DialogHeader>
@@ -475,6 +633,7 @@ export function WorkspaceDashboardPage() {
                 }
                 placeholder="My Awesome Project"
                 className="mt-1.5"
+                data-testid="dashboard-create-project-name-input"
               />
             </div>
             <div>
@@ -493,6 +652,7 @@ export function WorkspaceDashboardPage() {
                 placeholder="MAP"
                 maxLength={10}
                 className="mt-1.5 font-mono uppercase"
+                data-testid="dashboard-create-project-key-input"
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 2-10 uppercase letters, used in work item keys like `MAP-123`.
@@ -508,6 +668,7 @@ export function WorkspaceDashboardPage() {
                 placeholder="Brief project description..."
                 rows={3}
                 className="mt-1.5"
+                data-testid="dashboard-create-project-description-input"
               />
             </div>
             <div>
@@ -524,6 +685,7 @@ export function WorkspaceDashboardPage() {
                     }`}
                     style={{ backgroundColor: color }}
                     onClick={() => setCreateForm((state) => ({ ...state, color }))}
+                    data-testid={`dashboard-create-project-color-${color.replace('#', '')}`}
                   />
                 ))}
               </div>
@@ -532,9 +694,92 @@ export function WorkspaceDashboardPage() {
               className="w-full"
               onClick={handleCreateProject}
               disabled={isCreating || !createForm.name.trim() || createForm.key.length < 2}
+              data-testid="dashboard-create-project-submit-button"
             >
               {isCreating ? 'Creating...' : 'Create Project'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEditProject}
+        onOpenChange={(open) => {
+          setShowEditProject(open)
+          if (!open && !isUpdatingProject && !isDeletingProject) {
+            setEditProjectId(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <div data-testid="dashboard-edit-project-dialog" />
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <Label>Project Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={(event) =>
+                  setEditForm((state) => ({ ...state, name: event.target.value }))
+                }
+                placeholder="Project name"
+                className="mt-1.5"
+                data-testid="dashboard-edit-project-name-input"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(event) =>
+                  setEditForm((state) => ({ ...state, description: event.target.value }))
+                }
+                placeholder="Brief project description..."
+                rows={3}
+                className="mt-1.5"
+                data-testid="dashboard-edit-project-description-input"
+              />
+            </div>
+            <div>
+              <Label>Color</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PROJECT_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`h-7 w-7 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      editForm.color === color
+                        ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-background'
+                        : 'hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setEditForm((state) => ({ ...state, color }))}
+                    data-testid={`dashboard-edit-project-color-${color.replace('#', '')}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={handleDeleteProject}
+                disabled={isUpdatingProject || isDeletingProject}
+                data-testid="dashboard-delete-project-button"
+              >
+                {isDeletingProject ? 'Deleting...' : 'Delete Project'}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleUpdateProject}
+                disabled={isUpdatingProject || isDeletingProject || !editForm.name.trim()}
+                data-testid="dashboard-edit-project-submit-button"
+              >
+                {isUpdatingProject ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

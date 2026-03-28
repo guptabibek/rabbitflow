@@ -315,7 +315,7 @@ export function SprintManagement() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-5 py-4">
+      <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-4 py-4 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-base font-semibold">
@@ -364,7 +364,7 @@ export function SprintManagement() {
                   value={form.name}
                   onChange={(event) => handleFormChange('name', event.target.value)}
                   placeholder="Sprint 24"
-                  className="h-8 text-sm mt-1"
+                  className="h-8 text-sm"
                 />
               </div>
 
@@ -374,7 +374,7 @@ export function SprintManagement() {
                   value={form.goal}
                   onChange={(event) => handleFormChange('goal', event.target.value)}
                   rows={3}
-                  className="mt-1"
+                  
                 />
               </div>
 
@@ -384,7 +384,7 @@ export function SprintManagement() {
                   value={form.iterationType}
                   onValueChange={(value) => handleFormChange('iterationType', value)}
                 >
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -406,7 +406,7 @@ export function SprintManagement() {
               <div>
                 <Label className="text-xs">Status</Label>
                 <Select value={form.status} onValueChange={(value) => handleFormChange('status', value)}>
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -425,7 +425,7 @@ export function SprintManagement() {
                   value={form.teamId}
                   onValueChange={(value) => handleFormChange('teamId', value)}
                 >
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select team" />
                   </SelectTrigger>
                   <SelectContent>
@@ -446,7 +446,7 @@ export function SprintManagement() {
                     type="date"
                     value={form.startDate}
                     onChange={(event) => handleFormChange('startDate', event.target.value)}
-                    className="h-8 text-xs mt-1"
+                    className="h-8 text-xs"
                   />
                 </div>
                 <div>
@@ -455,7 +455,7 @@ export function SprintManagement() {
                     type="date"
                     value={form.endDate}
                     onChange={(event) => handleFormChange('endDate', event.target.value)}
-                    className="h-8 text-xs mt-1"
+                    className="h-8 text-xs"
                   />
                 </div>
               </div>
