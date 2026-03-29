@@ -39,9 +39,11 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN mkdir -p /app/public/uploads/attachments /app/public/uploads/avatars \
-  && chmod +x /entrypoint.sh \
-  && chown -R nextjs:nextjs /app /entrypoint.sh /home/nextjs
+RUN install -d -o nextjs -g nextjs \
+    /app/public/uploads \
+    /app/public/uploads/attachments \
+    /app/public/uploads/avatars \
+  && chmod +x /entrypoint.sh
 
 EXPOSE 3000
 
