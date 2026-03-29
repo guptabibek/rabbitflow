@@ -139,27 +139,27 @@
 The repository now includes a dedicated production stack in `docker-compose.production.yml`.
 
 ### What changed
-- Postgres and Redis are no longer published on host ports in the production compose file.
+- Postgres and Redis are published on the host ports configured by `POSTGRES_PORT` and `REDIS_PORT`.
 - The app exposes a readiness endpoint at `/api/health` for container health checks.
 - User uploads persist through the named `app_uploads` volume mounted at `/app/public/uploads`.
 - The app container runs as a non-root `nextjs` user.
 - Bootstrap seeding defaults to `false` in production.
-- Nginx production config terminates TLS, redirects HTTP to HTTPS, and adds baseline security headers.
+- Nginx production config is HTTP-only and is intended to sit behind your VPS nginx or another edge proxy that handles TLS.
 
 ### Production deployment steps
 1. Copy `.env.production.example` to `.env.production` and fill in real values.
-2. Place your TLS certificate and key at `docker/certs/fullchain.pem` and `docker/certs/privkey.pem`.
-3. Set `APP_DOMAIN`, `APP_URL`, and `NEXT_PUBLIC_APP_URL` to your real production hostname.
+2. Set `APP_DOMAIN` and `APP_URL` to your real production hostname.
+3. Point your VPS nginx upstream at the Docker nginx HTTP port from `NGINX_PORT`.
 4. If this is the first deployment and you want bootstrap admin creation, temporarily set `RUN_BOOTSTRAP_SEED=true` with the seed admin fields populated.
 5. Start the stack with `npm run docker:prod:up`.
-6. Verify readiness through `https://<your-domain>/healthz`.
+6. Verify readiness through your public URL, or directly at `http://<server>:<NGINX_PORT>/healthz`.
 
 ### Post-deploy expectations
-- Only nginx is publicly reachable.
+- The Docker nginx HTTP port is intended to be reachable from your VPS nginx layer.
 - Postgres, Redis, cron, and app remain on an internal Docker network.
 - Attachments and avatars survive app container recreation via the uploads volume.
 
 ### Still recommended outside Compose
 - Automated PostgreSQL backups.
 - External log aggregation and monitoring.
-- Managed certificate rotation, unless you already automate `docker/certs` replacement.
+- Managed certificate rotation at the VPS nginx or edge proxy layer.

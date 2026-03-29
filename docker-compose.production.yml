@@ -95,10 +95,8 @@ services:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN must be set}
     ports:
       - "${NGINX_PORT:-3999}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
       - ./docker/nginx.production.conf.template:/etc/nginx/templates/default.conf.template:ro
-      - ./docker/certs:/etc/nginx/certs:ro
     read_only: true
     tmpfs:
       - /var/cache/nginx
