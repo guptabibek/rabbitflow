@@ -91,6 +91,18 @@ export function isRedisConfigured() {
   return Boolean(getRedisUrl() || getRedisOptions())
 }
 
+export async function pingRedis(): Promise<boolean> {
+  const client = getRedis()
+  if (!client) return false
+
+  try {
+    const result = await client.ping()
+    return result === 'PONG'
+  } catch {
+    return false
+  }
+}
+
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const client = getRedis()
   if (!client) return null

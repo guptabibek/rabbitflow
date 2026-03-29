@@ -10,9 +10,11 @@ export default async function proxy(request: NextRequest) {
   const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApiRoute = pathname.startsWith('/api/admin')
   const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
+  const isPublicHealthRoute = pathname === '/api/health'
 
   // Public auth APIs, no auth required.
   if (
+    isPublicHealthRoute ||
     pathname === '/api/auth/login' ||
     pathname === '/api/auth/register' ||
     pathname === '/api/auth/logout' ||

@@ -133,3 +133,33 @@
 - Role-based restrictions for member management, sprint management, and work-item creation.
 - Label create/edit/delete and label-based filtering.
 - Avatar upload and password change for the authenticated user.
+
+## 8. Hardened Docker Production Stack
+
+The repository now includes a dedicated production stack in `docker-compose.production.yml`.
+
+### What changed
+- Postgres and Redis are no longer published on host ports in the production compose file.
+- The app exposes a readiness endpoint at `/api/health` for container health checks.
+- User uploads persist through the named `app_uploads` volume mounted at `/app/public/uploads`.
+- The app container runs as a non-root `nextjs` user.
+- Bootstrap seeding defaults to `false` in production.
+- Nginx production config terminates TLS, redirects HTTP to HTTPS, and adds baseline security headers.
+
+### Production deployment steps
+1. Copy `.env.production.example` to `.env.production` and fill in real values.
+2. Place your TLS certificate and key at `docker/certs/fullchain.pem` and `docker/certs/privkey.pem`.
+3. Set `APP_DOMAIN`, `APP_URL`, and `NEXT_PUBLIC_APP_URL` to your real production hostname.
+4. If this is the first deployment and you want bootstrap admin creation, temporarily set `RUN_BOOTSTRAP_SEED=true` with the seed admin fields populated.
+5. Start the stack with `npm run docker:prod:up`.
+6. Verify readiness through `https://<your-domain>/healthz`.
+
+### Post-deploy expectations
+- Only nginx is publicly reachable.
+- Postgres, Redis, cron, and app remain on an internal Docker network.
+- Attachments and avatars survive app container recreation via the uploads volume.
+
+### Still recommended outside Compose
+- Automated PostgreSQL backups.
+- External log aggregation and monitoring.
+- Managed certificate rotation, unless you already automate `docker/certs` replacement.

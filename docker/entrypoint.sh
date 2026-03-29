@@ -4,7 +4,7 @@ set -eu
 echo "Running Prisma migrations..."
 npx prisma migrate deploy
 
-if [ "${RUN_BOOTSTRAP_SEED:-true}" = "true" ]; then
+if [ "${RUN_BOOTSTRAP_SEED:-false}" = "true" ]; then
 	echo "Running bootstrap seed..."
 	npm run db:seed:bootstrap
 fi

@@ -5,6 +5,8 @@ WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && groupadd --system nextjs \
+  && useradd --system --gid nextjs --create-home --home-dir /home/nextjs nextjs \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
@@ -37,8 +39,12 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh
+RUN mkdir -p /app/public/uploads/attachments /app/public/uploads/avatars \
+  && chmod +x /entrypoint.sh \
+  && chown -R nextjs:nextjs /app /entrypoint.sh /home/nextjs
 
 EXPOSE 3000
+
+USER nextjs
 
 ENTRYPOINT ["/entrypoint.sh"]
