@@ -26,9 +26,17 @@ import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
 import { PRESET_COLORS } from '@/lib/ui-tokens'
 
-export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}) {
+export function LabelsManagement({
+  trigger,
+  open,
+  onOpenChange,
+}: {
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+} = {}) {
   const { currentProject, currentProjectPermissions, labels, setLabels } = useAppStore()
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState('#6366f1')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -36,6 +44,8 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [editColor, setEditColor] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const canManageLabels = currentProjectPermissions.includes('masterdata:manage')
+  const isOpen = open ?? internalOpen
+  const setIsOpen = onOpenChange ?? setInternalOpen
 
   const handleCreate = async () => {
     if (!canManageLabels) {
@@ -114,14 +124,16 @@ export function LabelsManagement({ trigger }: { trigger?: React.ReactNode } = {}
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
+      {trigger ? (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      ) : (
+        <DialogTrigger asChild>
           <Button variant="ghost" size="sm" className="gap-1.5 h-8 text-xs">
             <Tags className="h-3.5 w-3.5" />
             Labels
           </Button>
-        )}
-      </DialogTrigger>
+        </DialogTrigger>
+      )}
       <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">

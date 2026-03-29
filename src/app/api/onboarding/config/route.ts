@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { requireOnboardingManager } from '@/lib/domain/onboarding-access'
 import { seedOnboardingSteps } from '@/lib/domain/onboarding-engine'
 import { COMPLETION_RULE_DESCRIPTIONS } from '@/lib/domain/onboarding-steps'
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
 
-    const auth = await requireProjectPermission(request, projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, projectId)
     if (!auth.ok) return auth.response
 
     // Seed defaults if none exist yet
@@ -59,7 +59,7 @@ export async function PUT(request: NextRequest) {
       })
       .parse(body)
 
-    const auth = await requireProjectPermission(request, projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, projectId)
     if (!auth.ok) return auth.response
 
     // Validate unique keys

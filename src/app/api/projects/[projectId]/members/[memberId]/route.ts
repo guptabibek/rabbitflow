@@ -18,7 +18,6 @@ const permissionGrantSchema = z.array(
     'operations:manage',
     'branding:manage',
     'test:manage',
-    'onboarding:manage',
     'project:members:manage',
     'masterdata:manage',
     'acl:manage',

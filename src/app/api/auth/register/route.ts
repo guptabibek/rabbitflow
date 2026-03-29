@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { db, isUniqueConstraintError } from '@/lib/db'
-import { hashPassword, signToken, AUTH_COOKIE, COOKIE_OPTIONS } from '@/lib/auth'
+import { hashPassword, signToken, AUTH_COOKIE, getAuthCookieOptions } from '@/lib/auth'
 import { createAuthSessionRecordTx } from '@/lib/auth-session'
 import { z } from 'zod'
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     const token = await signToken(user.id, session.id, user.globalRole)
 
     const response = NextResponse.json({ user }, { status: 201 })
-    response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)
+    response.cookies.set(AUTH_COOKIE, token, getAuthCookieOptions(request))
     return response
   } catch (error) {
     if (error instanceof z.ZodError) {

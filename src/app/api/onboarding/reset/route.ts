@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { resetOnboardingState } from '@/lib/domain/onboarding-engine'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { requireOnboardingManager } from '@/lib/domain/onboarding-access'
 
 const resetSchema = z.object({
   projectId: z.string().trim().min(1),
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = resetSchema.parse(body)
 
-    const auth = await requireProjectPermission(request, data.projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, data.projectId)
     if (!auth.ok) return auth.response
 
     const targetUserId = data.userId ?? auth.actor.userId

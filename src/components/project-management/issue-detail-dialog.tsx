@@ -46,8 +46,8 @@ import {
   getWorkItemTypeDefinition,
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
-import { workItemUrl } from '@/lib/domain/work-item-url'
-import { getApiErrorMessage } from '@/lib/utils'
+import { workItemPath, workItemUrl } from '@/lib/domain/work-item-url'
+import { cn, getApiErrorMessage } from '@/lib/utils'
 import {
   AlertCircle,
   CheckCircle2,
@@ -296,6 +296,7 @@ function getRelativeTime(value: string | Date | null | undefined) {
 export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const router = useRouter()
   const openWorkItem = useAppStore((s) => s.openWorkItem)
+  const closeWorkItem = useAppStore((s) => s.closeWorkItem)
   const { payload, isRefreshing, onReload, onIssueUpdated } = props
   const { issue, context, access, viewer } = payload
 
@@ -304,6 +305,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     issue.iteration?.teamId ?? UNASSIGNED_VALUE
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [approvalRequestPrefill, setApprovalRequestPrefill] = useState<ApprovalRequestPrefill | null>(null)
 
   const [rightTab, setRightTab] = useState<'general' | 'history' | 'attachments' | 'git' | 'approvals'>('general')
@@ -366,6 +369,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }, [issue])
 
   const canUpdate = access.permissions.includes('workitem:update')
+  const canCreate = access.permissions.includes('workitem:create')
   const canAssign = access.permissions.includes('workitem:assign')
   const canComment = access.permissions.includes('workitem:comment')
   const canLink = access.permissions.includes('workitem:link')
@@ -679,7 +683,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   const handleSave = async () => {
-    if (!patchPayload || !canUpdate) return
+    if (!patchPayload || !canUpdate || isDeleting) return
 
     if (draft.startDate && draft.dueDate && new Date(draft.dueDate).getTime() < new Date(draft.startDate).getTime()) {
       toast.error('Due date cannot be earlier than start date')
@@ -771,19 +775,62 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   const handleDelete = async () => {
-    if (!canDelete || !confirm('Delete this work item?')) return
+    if (!canDelete || isDeleting || !confirm('Delete this work item?')) return
+    setIsDeleting(true)
     try {
       const response = await fetch(`/api/issues/${issue.id}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
         toast.error(error.error || 'Failed to delete work item')
+        setIsDeleting(false)
         return
       }
+
+      closeWorkItem()
       toast.success('Work item deleted')
-      router.push('/')
+      router.replace('/')
     } catch (error) {
       console.error(error)
       toast.error('Failed to delete work item')
+      setIsDeleting(false)
+    }
+  }
+
+  const handleCreateCopy = async () => {
+    if (!canCreate || isCopying) return
+
+    setIsCopying(true)
+    try {
+      const response = await fetch(`/api/issues/${issue.id}/copy`, { method: 'POST' })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        toast.error(error.error || 'Failed to create work item copy')
+        return
+      }
+
+      const payload = (await response.json()) as {
+        issue?: Issue
+        warnings?: string[]
+      }
+
+      if (!payload.issue) {
+        toast.error('Copy response returned malformed data')
+        return
+      }
+
+      if (payload.warnings?.length) {
+        toast.warning(`Work item copy created. ${payload.warnings[0]}`)
+      } else {
+        toast.success('Work item copy created')
+      }
+
+      openWorkItem(payload.issue.id)
+      router.push(workItemPath(payload.issue.id))
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to create work item copy')
+    } finally {
+      setIsCopying(false)
     }
   }
 
@@ -992,7 +1039,13 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[linear-gradient(to_bottom,_hsl(var(--card)),_hsl(var(--background)))]" data-testid="work-item-detail">
+    <div
+      className={cn(
+        'flex h-full flex-col bg-[linear-gradient(to_bottom,_hsl(var(--card)),_hsl(var(--background)))]',
+        isDeleting && 'pointer-events-none opacity-70'
+      )}
+      data-testid="work-item-detail"
+    >
       <header className="border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:overflow-x-auto">
@@ -1005,7 +1058,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 onChange={(event) =>
                   setDraft((previous) => ({ ...previous, title: event.target.value }))
                 }
-                disabled={!canUpdate || isSaving}
+                disabled={!canUpdate || isSaving || isDeleting}
                 className="h-10 border-border/70 bg-background text-[15px] font-medium tracking-tight"
                 placeholder="Work item title"
                 data-testid="work-item-title-input"
@@ -1015,7 +1068,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               <Button
                 size="sm"
                 className="h-9 px-4"
-                disabled={!hasChanges || isSaving || !canUpdate || !draft.title.trim()}
+                disabled={!hasChanges || isSaving || isDeleting || !canUpdate || !draft.title.trim()}
                 onClick={() => void handleSave()}
                 data-testid="work-item-save-button"
               >
@@ -1035,19 +1088,28 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
+                    disabled={!canCreate || isCopying}
+                    onClick={() => void handleCreateCopy()}
+                    data-testid="work-item-create-copy-button"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    {isCopying ? 'Creating copy...' : 'Create copy'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={isDeleting}
                     onClick={() => void handleCopyLink()}
                   >
                     <Copy className="mr-2 h-4 w-4" />
                     Copy link
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={!canDelete}
+                    disabled={!canDelete || isDeleting}
                     className="text-destructive focus:text-destructive"
                     onClick={() => void handleDelete()}
                     data-testid="work-item-delete-button"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete work item
+                    {isDeleting ? 'Deleting...' : 'Delete work item'}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

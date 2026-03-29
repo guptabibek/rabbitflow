@@ -9,11 +9,10 @@ export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApiRoute = pathname.startsWith('/api/admin')
+  const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
 
-  // Public paths, no auth required.
+  // Public auth APIs, no auth required.
   if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/register') ||
     pathname === '/api/auth/login' ||
     pathname === '/api/auth/register' ||
     pathname === '/api/auth/logout' ||
@@ -27,6 +26,10 @@ export default async function proxy(request: NextRequest) {
   const token = request.cookies.get('auth-token')?.value
 
   if (!token) {
+    if (isPublicAuthRoute) {
+      return NextResponse.next()
+    }
+
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -36,6 +39,10 @@ export default async function proxy(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, secret)
     const role = (payload as { role?: unknown }).role
+
+    if (isPublicAuthRoute) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
 
     if ((isAdminPageRoute || isAdminApiRoute) && role === 'member') {
       if (isAdminApiRoute) {
@@ -53,6 +60,12 @@ export default async function proxy(request: NextRequest) {
     }
     return NextResponse.next({ request: { headers } })
   } catch {
+    if (isPublicAuthRoute) {
+      const response = NextResponse.next()
+      response.cookies.delete('auth-token')
+      return response
+    }
+
     if (pathname.startsWith('/api/')) {
       const res = NextResponse.json({ error: 'Invalid token' }, { status: 401 })
       res.cookies.delete('auth-token')

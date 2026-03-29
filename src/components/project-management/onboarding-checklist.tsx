@@ -46,6 +46,42 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
 }
 
+const LEGACY_STEP_ACTIONS: Record<string, string> = {
+  create_project: 'dashboard',
+  invite_member: 'teams',
+  create_issue: '__create_issue',
+  setup_board: 'board',
+  create_sprint: 'sprints',
+  assign_issue: 'backlog',
+  setup_team: 'teams',
+  create_label: '__manage_labels',
+  complete_issue: 'board',
+  explore_reports: 'reports',
+}
+
+const COMPLETION_RULE_ACTIONS: Record<string, string> = {
+  has_project: 'dashboard',
+  has_team_member: 'teams',
+  has_issue: '__create_issue',
+  viewed_board: 'board',
+  has_sprint: 'sprints',
+  has_assigned_issue: 'backlog',
+  has_team: 'teams',
+  has_label: '__manage_labels',
+  has_completed_issue: 'board',
+  viewed_reports: 'reports',
+}
+
+function resolveStepActionTarget(step: OnboardingStep): string | null {
+  return (
+    step.ctaRoute ??
+    step.targetRoute ??
+    LEGACY_STEP_ACTIONS[step.key] ??
+    COMPLETION_RULE_ACTIONS[step.completionRule] ??
+    null
+  )
+}
+
 function StepIcon({ name, className }: { name: string; className?: string }) {
   const Icon = ICON_MAP[name] ?? Circle
   return <Icon className={className} />
@@ -170,9 +206,10 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
     if (step.completionRule.startsWith('viewed_')) {
       void recordEvent(step.key)
     }
-    // Navigate to the target view if ctaRoute is set
-    if (step.ctaRoute && onNavigate) {
-      onNavigate(step.ctaRoute)
+
+    const actionTarget = resolveStepActionTarget(step)
+    if (actionTarget && onNavigate) {
+      onNavigate(actionTarget)
     }
   }
 

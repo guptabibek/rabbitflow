@@ -78,7 +78,6 @@ const FEATURE_GRANT_OPTIONS = [
   { value: 'operations:manage', label: 'Operations' },
   { value: 'branding:manage', label: 'Branding' },
   { value: 'test:manage', label: 'Test Management' },
-  { value: 'onboarding:manage', label: 'Onboarding' },
   { value: 'project:members:manage', label: 'Member Admin' },
   { value: 'masterdata:manage', label: 'Master Data' },
   { value: 'acl:manage', label: 'ACL Rules' },

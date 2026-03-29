@@ -8,6 +8,7 @@ import { sanitizeRichText, toPlainTextPreview } from '@/lib/domain/content'
 import { parseCommentMentions } from '@/lib/domain/mentions'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
 import { sendMentionNotificationEmails } from '@/lib/domain/notifications'
+import { createNotifications } from '@/lib/domain/notification-service'
 import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
 
 const updateCommentSchema = z.object({
@@ -35,6 +36,8 @@ export async function PUT(
           select: {
             projectId: true,
             iterationId: true,
+            key: true,
+            title: true,
           },
         },
       },
@@ -133,6 +136,23 @@ export async function PUT(
       .filter((userId) => !previousMentionUserIds.has(userId))
 
     if (newlyMentionedUserIds.length > 0) {
+      await createNotifications(newlyMentionedUserIds, {
+        projectId: existing.issue.projectId,
+        issueId: existing.issueId,
+        actorId: auth.actor.userId,
+        type: 'mention',
+        title: `${comment.author.name} mentioned you in ${existing.issue.key}`,
+        body: toPlainTextPreview(sanitizedContent, 160),
+        entityType: 'issue',
+        entityId: existing.issueId,
+        actionUrl: `/work-items/${existing.issueId}`,
+        metadata: {
+          issueKey: existing.issue.key,
+          issueTitle: existing.issue.title,
+          commentId: comment.id,
+        },
+      })
+
       void sendMentionNotificationEmails({
         issueId: existing.issueId,
         mentionUserIds: newlyMentionedUserIds,

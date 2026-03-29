@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { normalizeProjectRole } from '@/lib/domain/rbac'
 import {
   LabelsManagement,
   MemberManagement,
@@ -118,6 +119,7 @@ const NAV_SECTIONS = [
 export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   const {
     currentProject,
+    currentProjectRole,
     currentProjectPermissions,
     setCreateIssueOpen,
   } = useAppStore()
@@ -136,6 +138,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
   const brandingName = activeBranding?.name ?? 'RabbitFlow'
   const brandAccent = activeBranding?.accent ?? null
   const canManageOperations = can('operations:manage')
+  const canManageOnboarding = normalizeProjectRole(currentProjectRole) === 'Admin'
 
   useEffect(() => {
     if (!currentProject) return
@@ -334,7 +337,7 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
                     ACL Rules
                   </button>
                 )}
-                {can('onboarding:manage') && (
+                {canManageOnboarding && (
                   <button onClick={() => onViewChange('onboarding-config')} className={settingsItemClass(currentView === 'onboarding-config')}>
                     <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
                     Onboarding

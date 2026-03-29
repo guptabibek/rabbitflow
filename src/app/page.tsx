@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import type { Project, User as AppUser } from '@/store/app-store'
 import {
@@ -38,6 +39,7 @@ import {
   ActivityFeedView,
   BrandingStudio,
   AclManagement,
+  LabelsManagement,
 } from '@/components/project-management'
 import { OnboardingChecklist } from '@/components/project-management/onboarding-checklist'
 import { OnboardingConfigView } from '@/components/project-management/onboarding-config-view'
@@ -97,6 +99,74 @@ type ViewType =
   | 'acl'
   | 'onboarding-config'
 
+type OnboardingActionTarget = ViewType | '__create_issue' | '__manage_labels'
+
+const ONBOARDING_TARGET_ALIASES: Record<string, OnboardingActionTarget> = {
+  dashboard: 'dashboard',
+  home: 'dashboard',
+  backlog: 'backlog',
+  board: 'board',
+  kanban: 'board',
+  'kanban-board': 'board',
+  sprints: 'sprints',
+  sprint: 'sprints',
+  iterations: 'sprints',
+  list: 'list',
+  reports: 'reports',
+  report: 'reports',
+  roadmap: 'roadmap',
+  portfolio: 'portfolio',
+  calendar: 'calendar',
+  'dependency-graph': 'dependency-graph',
+  dependencies: 'dependency-graph',
+  activity: 'activity',
+  teams: 'teams',
+  team: 'teams',
+  members: 'teams',
+  documents: 'documents',
+  objectives: 'objectives',
+  retrospectives: 'retrospectives',
+  retros: 'retrospectives',
+  approvals: 'approvals',
+  webhooks: 'webhooks',
+  automations: 'automations',
+  imports: 'imports',
+  'recurring-tasks': 'recurring-tasks',
+  'test-plans': 'test-plans',
+  sla: 'sla',
+  branding: 'branding',
+  acl: 'acl',
+  '__create_issue': '__create_issue',
+  'create-issue': '__create_issue',
+  create_issue: '__create_issue',
+  'new-issue': '__create_issue',
+  new_issue: '__create_issue',
+  'new-work-item': '__create_issue',
+  new_work_item: '__create_issue',
+  '__manage_labels': '__manage_labels',
+  labels: '__manage_labels',
+  'manage-labels': '__manage_labels',
+  manage_labels: '__manage_labels',
+  'label-management': '__manage_labels',
+  label_management: '__manage_labels',
+}
+
+function resolveOnboardingTarget(target: string | null | undefined): OnboardingActionTarget | null {
+  if (!target) return null
+
+  const baseTarget = target.trim().toLowerCase().split(/[?#]/)[0]?.replace(/^\/+|\/+$/g, '')
+  if (!baseTarget) return null
+
+  const directMatch = ONBOARDING_TARGET_ALIASES[baseTarget]
+  if (directMatch) return directMatch
+
+  const segments = baseTarget.split('/').filter(Boolean)
+  if (segments.length === 0) return null
+
+  const lastSegment = segments[segments.length - 1]
+  return ONBOARDING_TARGET_ALIASES[lastSegment] ?? null
+}
+
 export default function HomePage() {
   const router = useRouter()
   const {
@@ -138,6 +208,7 @@ export default function HomePage() {
   const [appLoadError, setAppLoadError] = useState<string | null>(null)
   const [projectDataError, setProjectDataError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [isLabelsManagementOpen, setLabelsManagementOpen] = useState(false)
 
   useEffect(() => {
     const handleResize = () => {
@@ -452,6 +523,7 @@ export default function HomePage() {
     closeWorkItem()
     setCreateIssueOpen(false)
     setSprintModalOpen(false)
+    setLabelsManagementOpen(false)
     setCurrentView(view)
     if (view === 'board') {
       setViewMode('board')
@@ -463,11 +535,30 @@ export default function HomePage() {
   }
 
   const handleOnboardingNavigate = (viewOrAction: string) => {
-    if (viewOrAction === '__create_issue') {
-      setCreateIssueOpen(true)
-    } else {
-      handleViewChange(viewOrAction as ViewType)
+    const target = resolveOnboardingTarget(viewOrAction)
+
+    if (!target) {
+      toast.error('This onboarding action is not configured for the current workspace view.')
+      return
     }
+
+    if (target === '__create_issue') {
+      closeWorkItem()
+      setSprintModalOpen(false)
+      setLabelsManagementOpen(false)
+      setCreateIssueOpen(true)
+      return
+    }
+
+    if (target === '__manage_labels') {
+      closeWorkItem()
+      setCreateIssueOpen(false)
+      setSprintModalOpen(false)
+      setLabelsManagementOpen(true)
+      return
+    }
+
+    handleViewChange(target)
   }
 
   const handleViewModeChange = (mode: 'board' | 'list') => {
@@ -801,6 +892,7 @@ export default function HomePage() {
       </div>
 
       <UserProfile open={isProfileOpen} onOpenChange={setIsProfileOpen} />
+      <LabelsManagement open={isLabelsManagementOpen} onOpenChange={setLabelsManagementOpen} />
     </div>
     </OnboardingProvider>
   )

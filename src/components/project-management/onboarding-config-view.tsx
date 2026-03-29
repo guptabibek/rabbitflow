@@ -38,6 +38,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { normalizeProjectRole } from '@/lib/domain/rbac'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -279,11 +280,11 @@ function StepEditorDialog({
               <Label>CTA View Target</Label>
               <Input
                 value={draft.ctaRoute ?? ''}
-                placeholder="board, sprints, teams, backlog, __create_issue"
+                placeholder="board, /backlog, teams, __create_issue, __manage_labels"
                 maxLength={200}
                 onChange={(e) => setDraft({ ...draft, ctaRoute: e.target.value || null })}
               />
-              <p className="text-xs text-muted-foreground">Use a view name (e.g. board, sprints, teams) or __create_issue to open the create dialog.</p>
+              <p className="text-xs text-muted-foreground">Use a SPA target like backlog or /backlog, or action tokens like __create_issue and __manage_labels.</p>
             </div>
           </div>
 
@@ -341,8 +342,8 @@ function StepEditorDialog({
 
 export function OnboardingConfigView() {
   const currentProject = useAppStore((s) => s.currentProject)
-  const permissions = useAppStore((s) => s.currentProjectPermissions)
-  const canManage = permissions.includes('onboarding:manage')
+  const currentProjectRole = useAppStore((s) => s.currentProjectRole)
+  const canManage = normalizeProjectRole(currentProjectRole) === 'Admin'
 
   const [steps, setSteps] = useState<StepConfig[]>([])
   const [availableRules, setAvailableRules] = useState<Record<string, string>>({})
@@ -367,8 +368,13 @@ export function OnboardingConfigView() {
   }
 
   useEffect(() => {
+    if (!currentProject || !canManage) {
+      setLoading(false)
+      return
+    }
+
     void fetchConfig()
-  }, [currentProject?.id])
+  }, [canManage, currentProject?.id])
 
   const saveAll = async (updatedSteps: StepConfig[]) => {
     if (!currentProject) return
@@ -448,7 +454,7 @@ export function OnboardingConfigView() {
   if (!currentProject || !canManage) {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        You need the <Badge variant="outline">onboarding:manage</Badge> permission to configure onboarding.
+        Only project admins can configure onboarding. Steps remain role-targeted for each audience.
       </div>
     )
   }
@@ -472,6 +478,10 @@ export function OnboardingConfigView() {
               Add Step
             </Button>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+          Onboarding is managed centrally by project admins, while each step can still target specific roles.
         </div>
 
         <TabsContent value="config" className="mt-4">

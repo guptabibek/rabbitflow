@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
+import { isOnboardingManagerRole, requireOnboardingManager } from '@/lib/domain/onboarding-access'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
 
 const guideSchema = z.object({
@@ -38,12 +39,12 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return auth.response
 
     const role = normalizeProjectRole(auth.actor.projectRole)
-    const canManage = await requireProjectPermission(request, projectId, 'onboarding:manage')
+    const canManage = isOnboardingManagerRole(auth.actor.projectRole)
 
     const guides = await db.onboardingGuide.findMany({
       where: {
         projectId,
-        ...(canManage.ok
+        ...(canManage
           ? {}
           : {
               isPublished: true,
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = guideSchema.parse(body)
 
-    const auth = await requireProjectPermission(request, data.projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, data.projectId)
     if (!auth.ok) return auth.response
 
     const guide = await db.onboardingGuide.create({

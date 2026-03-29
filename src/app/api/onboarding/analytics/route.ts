@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOnboardingAnalytics } from '@/lib/domain/onboarding-engine'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { requireOnboardingManager } from '@/lib/domain/onboarding-access'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
 
-    const auth = await requireProjectPermission(request, projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, projectId)
     if (!auth.ok) return auth.response
 
     const analytics = await getOnboardingAnalytics(projectId)

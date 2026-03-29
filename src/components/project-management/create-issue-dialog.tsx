@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   ArrowLeft,
   Bug,
@@ -698,8 +697,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   }
 
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col" data-testid="create-work-item-form">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="create-work-item-form">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="px-5 pt-3">
           <TabsList className="h-8 w-full justify-start bg-muted/30 rounded-md">
             <TabsTrigger value="basic" className="text-xs h-7 data-[state=active]:bg-background">
@@ -720,8 +719,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           </TabsList>
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="px-4 py-4 sm:px-5 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="space-y-4">
             <TabsContent value="basic" className="space-y-4 mt-0">
               {typeOptions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
@@ -732,32 +731,30 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
                   Work Item Type
                 </Label>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                  {typeOptions.map((type) => {
-                    const Icon = TYPE_ICONS[type.key] || CircleDot
-                    const iconColor = TYPE_COLORS[type.key] || 'text-muted-foreground'
-                    const iconBackground = TYPE_BACKGROUNDS[type.key] || 'bg-muted'
-
-                    return (
-                      <button
+                <Select value={workItemType} onValueChange={setWorkItemType}>
+                  <SelectTrigger className="h-9 text-sm" data-testid="create-work-item-type-trigger">
+                    <SelectValue placeholder="Select work item type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {typeOptions.map((type) => (
+                      <SelectItem
                         key={type.key}
-                        type="button"
+                        value={type.key}
                         data-testid={`create-work-item-type-${type.key}`}
-                        className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-all ${
-                          workItemType === type.key
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                            : 'border-border/50 hover:bg-accent/50'
-                        }`}
-                        onClick={() => setWorkItemType(type.key)}
                       >
-                        <div className={`h-8 w-8 rounded-md flex items-center justify-center ${iconBackground}`}>
-                          <Icon className={`h-4 w-4 ${iconColor}`} />
-                        </div>
-                        <span className="text-[11px] font-medium">{type.name}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedType ? (
+                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    <div className={`flex h-7 w-7 items-center justify-center rounded-md ${typeBackground}`}>
+                      <TypeIcon className={`h-4 w-4 ${typeColor}`} />
+                    </div>
+                    <span>{selectedType.name}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
@@ -1256,7 +1253,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
               ) : null}
             </TabsContent>
           </div>
-        </ScrollArea>
+        </div>
       </Tabs>
 
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-border flex-shrink-0 sm:px-5">

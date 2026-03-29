@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { AUTH_COOKIE, COOKIE_OPTIONS, signToken, verifyPassword } from '@/lib/auth'
+import { AUTH_COOKIE, getAuthCookieOptions, signToken, verifyPassword } from '@/lib/auth'
 import { createAuthSession } from '@/lib/auth-session'
 import {
   createMfaChallenge,
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)
+      response.cookies.set(AUTH_COOKIE, token, getAuthCookieOptions(request))
       return response
     }
 
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)
+    response.cookies.set(AUTH_COOKIE, token, getAuthCookieOptions(request))
     return response
   } catch (error) {
     if (error instanceof z.ZodError) {

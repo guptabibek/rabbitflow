@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { AUTH_COOKIE, COOKIE_OPTIONS, signToken } from '@/lib/auth'
+import { AUTH_COOKIE, getAuthCookieOptions, signToken } from '@/lib/auth'
 import { createAuthSession } from '@/lib/auth-session'
 import {
   deleteMfaChallenge,
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    response.cookies.set(AUTH_COOKIE, token, COOKIE_OPTIONS)
+    response.cookies.set(AUTH_COOKIE, token, getAuthCookieOptions(request))
     return response
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -74,7 +74,6 @@ export const ROLE_PERMISSIONS: Record<AgileProjectRole, Set<Permission>> = {
     'activity:read',
     'collaboration:read',
     'test:manage',
-    'onboarding:manage',
     'workitem:read',
     'workitem:create',
     'workitem:update',

@@ -26,6 +26,7 @@ import {
   statusFromStateCategory,
 } from '@/lib/domain/state-machine'
 import { sendWorkItemAssignmentEmail } from '@/lib/domain/notifications'
+import { createNotification } from '@/lib/domain/notification-service'
 import { evaluateAutomationRules } from '@/lib/domain/automation-service'
 import { handleSlaStatusChange } from '@/lib/domain/sla-engine'
 import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
@@ -881,6 +882,24 @@ export async function PUT(
       data.assigneeId !== currentIssue.assigneeId &&
       issue.assignee?.id
     ) {
+      await createNotification({
+        userId: issue.assignee.id,
+        projectId: currentIssue.projectId,
+        issueId: issue.id,
+        actorId: updatePermission.actor.userId,
+        type: 'assignment',
+        title: `Assigned to ${issue.key}`,
+        body: issue.title,
+        entityType: 'issue',
+        entityId: issue.id,
+        actionUrl: `/work-items/${issue.id}`,
+        metadata: {
+          issueKey: issue.key,
+          issueTitle: issue.title,
+          previousAssigneeId: currentIssue.assigneeId,
+        },
+      })
+
       void sendWorkItemAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
@@ -1052,14 +1071,19 @@ export async function DELETE(
     const auth = await requireProjectPermission(request, issue.projectId, 'workitem:delete')
     if (!auth.ok) return auth.response
 
-    await db.issue.delete({ where: { id } })
+    await db.$transaction(async (tx) => {
+      await createAuditLog(
+        {
+          projectId: issue.projectId,
+          issueId: id,
+          userId: auth.actor.userId,
+          action: 'work_item_deleted',
+          details: { key: issue.key, title: issue.title },
+        },
+        tx
+      )
 
-    await createAuditLog({
-      projectId: issue.projectId,
-      issueId: id,
-      userId: auth.actor.userId,
-      action: 'work_item_deleted',
-      details: { key: issue.key, title: issue.title },
+      await tx.issue.delete({ where: { id } })
     })
 
     void dispatchWebhookEvent(issue.projectId, 'issue.deleted', {
@@ -1071,7 +1095,11 @@ export async function DELETE(
       actorUserId: auth.actor.userId,
     })
 
-    await invalidateSprintCaches(issue.projectId, issue.iterationId)
+    try {
+      await invalidateSprintCaches(issue.projectId, issue.iterationId)
+    } catch (cacheError) {
+      console.error('Error invalidating caches after issue deletion:', cacheError)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

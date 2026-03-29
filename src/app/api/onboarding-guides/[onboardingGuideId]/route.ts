@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { requireOnboardingManager } from '@/lib/domain/onboarding-access'
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(140).optional(),
@@ -35,7 +35,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Guide not found' }, { status: 404 })
     }
 
-    const auth = await requireProjectPermission(request, existing.projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, existing.projectId)
     if (!auth.ok) return auth.response
 
     const body = await request.json()
@@ -83,7 +83,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Guide not found' }, { status: 404 })
     }
 
-    const auth = await requireProjectPermission(request, existing.projectId, 'onboarding:manage')
+    const auth = await requireOnboardingManager(request, existing.projectId)
     if (!auth.ok) return auth.response
 
     await db.onboardingGuide.delete({ where: { id } })

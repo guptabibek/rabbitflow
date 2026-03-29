@@ -162,23 +162,28 @@ export async function evaluateOnboardingStatus(
   })
 
   const normalizedRole = (userRole ?? 'Dev') as OnboardingRole
+  const defaultStepByKey = new Map(DEFAULT_ONBOARDING_STEPS.map((step) => [step.key, step]))
   const stepConfigs = dbSteps.length > 0
     ? dbSteps
         .filter((s) => {
           const roles = parseJsonStringArray(s.roles)
           return roles.length === 0 || roles.includes(normalizedRole)
         })
-        .map((s) => ({
-          key: s.key,
-          title: s.title,
-          description: s.description ?? '',
-          icon: s.icon ?? 'Circle',
-          targetRoute: s.targetRoute,
-          ctaLabel: s.ctaLabel ?? 'Go',
-          ctaRoute: s.ctaRoute,
-          completionRule: s.completionRule,
-          order: s.order,
-        }))
+        .map((s) => {
+          const defaultStep = defaultStepByKey.get(s.key)
+
+          return {
+            key: s.key,
+            title: s.title,
+            description: s.description ?? defaultStep?.description ?? '',
+            icon: s.icon ?? defaultStep?.icon ?? 'Circle',
+            targetRoute: s.targetRoute ?? defaultStep?.targetRoute ?? null,
+            ctaLabel: s.ctaLabel ?? defaultStep?.ctaLabel ?? 'Go',
+            ctaRoute: s.ctaRoute ?? defaultStep?.ctaRoute ?? null,
+            completionRule: s.completionRule,
+            order: s.order,
+          }
+        })
     : DEFAULT_ONBOARDING_STEPS
         .filter((s) => s.roles.length === 0 || s.roles.includes(normalizedRole))
         .map((s) => ({

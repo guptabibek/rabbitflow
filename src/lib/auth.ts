@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
+import type { NextRequest } from 'next/server'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET
@@ -59,10 +60,28 @@ export async function verifyPassword(
 
 export const AUTH_COOKIE = 'auth-token'
 
-export const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-  maxAge: AUTH_SESSION_TTL_SECONDS,
+function requestUsesHttps(request: Pick<NextRequest, 'nextUrl' | 'headers'>) {
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  if (forwardedProto) {
+    return forwardedProto.split(',')[0]?.trim().toLowerCase() === 'https'
+  }
+
+  return request.nextUrl.protocol === 'https:'
+}
+
+export function getAuthCookieOptions(request: Pick<NextRequest, 'nextUrl' | 'headers'>) {
+  return {
+    httpOnly: true,
+    secure: requestUsesHttps(request),
+    sameSite: 'lax' as const,
+    path: '/',
+    maxAge: AUTH_SESSION_TTL_SECONDS,
+  }
+}
+
+export function getExpiredAuthCookieOptions(request: Pick<NextRequest, 'nextUrl' | 'headers'>) {
+  return {
+    ...getAuthCookieOptions(request),
+    maxAge: 0,
+  }
 }

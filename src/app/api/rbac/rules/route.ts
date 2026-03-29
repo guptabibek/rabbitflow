@@ -5,6 +5,10 @@ import { invalidateProjectPermissionRuleCache } from '@/lib/domain/access-contro
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { ALL_PERMISSIONS } from '@/lib/domain/rbac'
 
+const CONFIGURABLE_RBAC_PERMISSIONS = ALL_PERMISSIONS.filter(
+  (permission) => permission !== 'onboarding:manage'
+)
+
 const permissionRuleSchema = z.object({
   projectId: z.string().trim().min(1),
   areaId: z.string().trim().min(1).nullable().optional(),
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
       db.area.findMany({ where: { projectId }, orderBy: [{ path: 'asc' }, { name: 'asc' }] }),
     ])
 
-    return NextResponse.json({ rules, areas, permissions: ALL_PERMISSIONS })
+    return NextResponse.json({ rules, areas, permissions: CONFIGURABLE_RBAC_PERMISSIONS })
   } catch (error) {
     console.error('Error fetching ACL rules:', error)
     return NextResponse.json({ error: 'Failed to fetch ACL rules' }, { status: 500 })
@@ -47,6 +51,13 @@ export async function POST(request: NextRequest) {
 
     const auth = await requireProjectPermission(request, data.projectId, 'acl:manage')
     if (!auth.ok) return auth.response
+
+    if (data.permission === 'onboarding:manage') {
+      return NextResponse.json(
+        { error: 'Onboarding management is reserved for project admins' },
+        { status: 400 }
+      )
+    }
 
     if (data.areaId) {
       const area = await db.area.findFirst({

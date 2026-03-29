@@ -116,7 +116,7 @@ export const DEFAULT_ONBOARDING_STEPS: StepDefinition[] = [
     icon: 'Tag',
     targetRoute: null,
     ctaLabel: 'Manage Labels',
-    ctaRoute: null,
+    ctaRoute: '__manage_labels',
     completionRule: 'has_label',
     roles: ['Admin', 'PM'],
     order: 70,

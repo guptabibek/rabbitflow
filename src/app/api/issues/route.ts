@@ -17,6 +17,7 @@ import {
   statusFromStateCategory,
 } from '@/lib/domain/state-machine'
 import { sendWorkItemAssignmentEmail } from '@/lib/domain/notifications'
+import { createNotification } from '@/lib/domain/notification-service'
 import { evaluateAutomationRules } from '@/lib/domain/automation-service'
 import { attachSlaTimers } from '@/lib/domain/sla-engine'
 import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
@@ -432,6 +433,23 @@ export async function POST(request: NextRequest) {
     )
 
     if (issue.assignee?.id) {
+      await createNotification({
+        userId: issue.assignee.id,
+        projectId: data.projectId,
+        issueId: issue.id,
+        actorId: auth.actor.userId,
+        type: 'assignment',
+        title: `Assigned to ${issue.key}`,
+        body: issue.title,
+        entityType: 'issue',
+        entityId: issue.id,
+        actionUrl: `/work-items/${issue.id}`,
+        metadata: {
+          issueKey: issue.key,
+          issueTitle: issue.title,
+        },
+      })
+
       void sendWorkItemAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,

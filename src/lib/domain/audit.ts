@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from '@prisma/client'
 import { db } from '@/lib/db'
 
 type AuditPayload = {
@@ -8,8 +9,10 @@ type AuditPayload = {
   details?: Record<string, unknown> | null
 }
 
-export async function createAuditLog(payload: AuditPayload) {
-  await db.activity.create({
+type AuditClient = Prisma.TransactionClient | PrismaClient
+
+export async function createAuditLog(payload: AuditPayload, client: AuditClient = db) {
+  await client.activity.create({
     data: {
       projectId: payload.projectId,
       issueId: payload.issueId ?? undefined,

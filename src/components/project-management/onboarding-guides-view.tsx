@@ -18,6 +18,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { getApiErrorMessage } from '@/lib/utils'
+import { normalizeProjectRole } from '@/lib/domain/rbac'
 
 const GUIDE_ROLE_OPTIONS = ['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer'] as const
 const GUIDE_MAX_TITLE_LENGTH = 140
@@ -61,13 +62,13 @@ function toSlug(value: string) {
 
 export function OnboardingGuidesView() {
   const currentProject = useAppStore((state) => state.currentProject)
-  const currentProjectPermissions = useAppStore((state) => state.currentProjectPermissions)
+  const currentProjectRole = useAppStore((state) => state.currentProjectRole)
   const [guides, setGuides] = useState<Guide[]>([])
   const [draft, setDraft] = useState<GuideDraft>(EMPTY_DRAFT)
   const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const canManage = currentProjectPermissions.includes('onboarding:manage')
+  const canManage = normalizeProjectRole(currentProjectRole) === 'Admin'
 
   const fetchGuides = () => {
     if (!currentProject) return

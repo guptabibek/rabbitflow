@@ -7,6 +7,7 @@ import { sanitizeRichText, toPlainTextPreview } from '@/lib/domain/content'
 import { parseCommentMentions } from '@/lib/domain/mentions'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { sendMentionNotificationEmails } from '@/lib/domain/notifications'
+import { createNotifications } from '@/lib/domain/notification-service'
 import { evaluateAutomationRules } from '@/lib/domain/automation-service'
 import { dispatchWebhookEvent } from '@/lib/domain/webhook-service'
 
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     const issue = await db.issue.findUnique({
       where: { id: data.issueId },
-      select: { projectId: true, iterationId: true },
+      select: { projectId: true, iterationId: true, key: true, title: true },
     })
 
     if (!issue) {
@@ -171,19 +172,38 @@ export async function POST(request: NextRequest) {
     })
 
     if (comment.mentions.length > 0) {
+      const mentionUserIds = comment.mentions.map((mention) => mention.userId)
+
       await createAuditLog({
         projectId: issue.projectId,
         issueId: data.issueId,
         userId: auth.actor.userId,
         action: 'work_item_mentioned_users',
         details: {
-          userIds: comment.mentions.map((mention) => mention.userId),
+          userIds: mentionUserIds,
+        },
+      })
+
+      await createNotifications(mentionUserIds, {
+        projectId: issue.projectId,
+        issueId: data.issueId,
+        actorId: auth.actor.userId,
+        type: 'mention',
+        title: `${comment.author.name} mentioned you in ${issue.key}`,
+        body: toPlainTextPreview(sanitizedContent, 160),
+        entityType: 'issue',
+        entityId: data.issueId,
+        actionUrl: `/work-items/${data.issueId}`,
+        metadata: {
+          issueKey: issue.key,
+          issueTitle: issue.title,
+          commentId: comment.id,
         },
       })
 
       void sendMentionNotificationEmails({
         issueId: data.issueId,
-        mentionUserIds: comment.mentions.map((mention) => mention.userId),
+        mentionUserIds,
         actorUserId: auth.actor.userId,
         commentContent: sanitizedContent,
       })
