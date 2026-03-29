@@ -204,6 +204,76 @@ export const DEFAULT_WORK_ITEM_TYPES: DefaultWorkItemType[] = [
     ],
   },
   {
+    key: 'dev_task',
+    name: 'Dev Task',
+    description: 'Engineering implementation work tied to a story or feature.',
+    icon: 'Code2',
+    color: '#0284c7',
+    hierarchyLevel: 4,
+    order: 45,
+    sections: [
+      {
+        key: 'implementation',
+        title: 'Implementation',
+        fields: [
+          {
+            key: 'technical_plan',
+            label: 'Technical Plan',
+            dataType: 'markdown',
+            placeholder: 'Outline the implementation approach, touched systems, and dependencies.',
+          },
+          {
+            key: 'definition_of_done',
+            label: 'Definition of Done',
+            dataType: 'markdown',
+            placeholder: 'List the code-complete, review, and deployment conditions for this task.',
+          },
+          {
+            key: 'handoff_notes',
+            label: 'Handoff Notes',
+            dataType: 'markdown',
+            placeholder: 'Capture QA handoff notes, flags, and validation guidance.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'qc_task',
+    name: 'QC Task',
+    description: 'Quality-control validation work for release readiness.',
+    icon: 'ClipboardCheck',
+    color: '#7c2d12',
+    hierarchyLevel: 4,
+    order: 47,
+    sections: [
+      {
+        key: 'validation',
+        title: 'Validation',
+        fields: [
+          {
+            key: 'test_scope',
+            label: 'Test Scope',
+            dataType: 'markdown',
+            placeholder: 'Describe the flows, devices, browsers, or environments covered by QC.',
+          },
+          {
+            key: 'test_evidence',
+            label: 'Test Evidence',
+            dataType: 'markdown',
+            placeholder: 'Link screenshots, recordings, logs, or supporting evidence.',
+          },
+          {
+            key: 'exit_criteria',
+            label: 'Exit Criteria',
+            dataType: 'markdown',
+            placeholder: 'Capture the pass/fail bar required before this item can be closed.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     key: 'bug',
     name: 'Bug',
     description: 'A defect affecting product quality.',
@@ -233,6 +303,41 @@ export const DEFAULT_WORK_ITEM_TYPES: DefaultWorkItemType[] = [
             label: 'Observed Behavior',
             dataType: 'markdown',
             placeholder: 'Describe the incorrect behavior or system impact.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'prod_bug',
+    name: 'Prod Bug',
+    description: 'A production defect requiring operational mitigation and root-cause follow-up.',
+    icon: 'ShieldAlert',
+    color: '#b91c1c',
+    hierarchyLevel: 4,
+    order: 55,
+    sections: [
+      {
+        key: 'incident',
+        title: 'Incident Response',
+        fields: [
+          {
+            key: 'customer_impact',
+            label: 'Customer Impact',
+            dataType: 'markdown',
+            placeholder: 'Describe the affected customers, scope, and business impact.',
+          },
+          {
+            key: 'mitigation',
+            label: 'Mitigation',
+            dataType: 'markdown',
+            placeholder: 'Capture immediate remediation, rollback, or workaround steps.',
+          },
+          {
+            key: 'root_cause',
+            label: 'Root Cause',
+            dataType: 'markdown',
+            placeholder: 'Document the root cause and the prevention plan once confirmed.',
           },
         ],
       },

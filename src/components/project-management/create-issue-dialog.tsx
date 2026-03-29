@@ -141,7 +141,10 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   feature: Flag,
   story: Star,
   task: CheckCircle2,
+  dev_task: CheckCircle2,
+  qc_task: CircleDot,
   bug: Bug,
+  prod_bug: Bug,
   design_doc: Rocket,
   release_item: CircleDot,
 }
@@ -151,7 +154,10 @@ const TYPE_COLORS: Record<string, string> = {
   feature: 'text-type-feature',
   story: 'text-type-story',
   task: 'text-type-task',
+  dev_task: 'text-type-dev-task',
+  qc_task: 'text-type-qc-task',
   bug: 'text-type-bug',
+  prod_bug: 'text-type-prod-bug',
   design_doc: 'text-type-design-doc',
   release_item: 'text-type-release-item',
 }
@@ -161,7 +167,10 @@ const TYPE_BACKGROUNDS: Record<string, string> = {
   feature: 'bg-type-feature-bg',
   story: 'bg-type-story-bg',
   task: 'bg-type-task-bg',
+  dev_task: 'bg-type-dev-task-bg',
+  qc_task: 'bg-type-qc-task-bg',
   bug: 'bg-type-bug-bg',
+  prod_bug: 'bg-type-prod-bug-bg',
   design_doc: 'bg-type-design-doc-bg',
   release_item: 'bg-type-release-item-bg',
 }

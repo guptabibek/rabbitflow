@@ -72,7 +72,10 @@
   --color-type-feature: var(--type-feature);
   --color-type-story: var(--type-story);
   --color-type-task: var(--type-task);
+  --color-type-dev-task: var(--type-dev-task);
+  --color-type-qc-task: var(--type-qc-task);
   --color-type-bug: var(--type-bug);
+  --color-type-prod-bug: var(--type-prod-bug);
   --color-type-issue: var(--type-issue);
   --color-type-design-doc: var(--type-design-doc);
   --color-type-release-item: var(--type-release-item);
@@ -81,7 +84,10 @@
   --color-type-feature-bg: var(--type-feature-bg);
   --color-type-story-bg: var(--type-story-bg);
   --color-type-task-bg: var(--type-task-bg);
+  --color-type-dev-task-bg: var(--type-dev-task-bg);
+  --color-type-qc-task-bg: var(--type-qc-task-bg);
   --color-type-bug-bg: var(--type-bug-bg);
+  --color-type-prod-bug-bg: var(--type-prod-bug-bg);
   --color-type-issue-bg: var(--type-issue-bg);
   --color-type-design-doc-bg: var(--type-design-doc-bg);
   --color-type-release-item-bg: var(--type-release-item-bg);
@@ -188,7 +194,10 @@
   --type-feature: #0891b2;
   --type-story: #7c3aed;
   --type-task: #059669;
+  --type-dev-task: #0284c7;
+  --type-qc-task: #7c2d12;
   --type-bug: #dc2626;
+  --type-prod-bug: #b91c1c;
   --type-issue: #ea580c;
   --type-design-doc: #0d9488;
   --type-release-item: #ea580c;
@@ -197,7 +206,10 @@
   --type-feature-bg: rgba(8, 145, 178, 0.1);
   --type-story-bg: rgba(124, 58, 237, 0.1);
   --type-task-bg: rgba(5, 150, 105, 0.1);
+  --type-dev-task-bg: rgba(2, 132, 199, 0.1);
+  --type-qc-task-bg: rgba(124, 45, 18, 0.1);
   --type-bug-bg: rgba(220, 38, 38, 0.1);
+  --type-prod-bug-bg: rgba(185, 28, 28, 0.1);
   --type-issue-bg: rgba(234, 88, 12, 0.1);
   --type-design-doc-bg: rgba(13, 148, 136, 0.1);
   --type-release-item-bg: rgba(234, 88, 12, 0.1);
@@ -302,7 +314,10 @@
   --type-feature: #22d3ee;
   --type-story: #a78bfa;
   --type-task: #34d399;
+  --type-dev-task: #38bdf8;
+  --type-qc-task: #fdba74;
   --type-bug: #f87171;
+  --type-prod-bug: #fb7185;
   --type-issue: #fb923c;
   --type-design-doc: #2dd4bf;
   --type-release-item: #fb923c;
@@ -311,7 +326,10 @@
   --type-feature-bg: rgba(34, 211, 238, 0.15);
   --type-story-bg: rgba(167, 139, 250, 0.15);
   --type-task-bg: rgba(52, 211, 153, 0.15);
+  --type-dev-task-bg: rgba(56, 189, 248, 0.15);
+  --type-qc-task-bg: rgba(253, 186, 116, 0.15);
   --type-bug-bg: rgba(248, 113, 113, 0.15);
+  --type-prod-bug-bg: rgba(251, 113, 133, 0.15);
   --type-issue-bg: rgba(251, 146, 60, 0.15);
   --type-design-doc-bg: rgba(45, 212, 191, 0.15);
   --type-release-item-bg: rgba(251, 146, 60, 0.15);

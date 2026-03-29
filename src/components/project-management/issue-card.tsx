@@ -36,6 +36,9 @@ const typeIcons: Record<string, React.ElementType> = {
   issue: CircleDot,
   design_doc: Rocket,
   release_item: PackageCheck,
+  dev_task: CheckCircle2,
+  qc_task: CircleDot,
+  prod_bug: Bug,
 }
 
 const typeColors: Record<string, string> = {
@@ -47,6 +50,9 @@ const typeColors: Record<string, string> = {
   issue: 'text-type-issue',
   design_doc: 'text-type-design-doc',
   release_item: 'text-type-release-item',
+  dev_task: 'text-type-dev-task',
+  qc_task: 'text-type-qc-task',
+  prod_bug: 'text-type-prod-bug',
 }
 
 interface IssueCardProps {

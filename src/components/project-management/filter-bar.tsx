@@ -37,7 +37,10 @@ const WORK_ITEM_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: st
   feature: { icon: Flag, color: 'text-type-feature' },
   story: { icon: Star, color: 'text-type-story' },
   task: { icon: CheckCircle2, color: 'text-type-task' },
+  dev_task: { icon: CheckCircle2, color: 'text-type-dev-task' },
+  qc_task: { icon: CircleDot, color: 'text-type-qc-task' },
   bug: { icon: Bug, color: 'text-type-bug' },
+  prod_bug: { icon: Bug, color: 'text-type-prod-bug' },
   design_doc: { icon: Rocket, color: 'text-type-design-doc' },
   release_item: { icon: PackageCheck, color: 'text-type-release-item' },
 }
@@ -82,10 +85,13 @@ export function FilterBar({
       { key: 'all', name: 'All Types' },
       { key: 'epic', name: 'Epic' },
       { key: 'feature', name: 'Feature' },
+      { key: 'design_doc', name: 'Design Doc' },
       { key: 'story', name: 'User Story' },
+      { key: 'dev_task', name: 'Dev Task' },
+      { key: 'qc_task', name: 'QC Task' },
       { key: 'task', name: 'Task' },
       { key: 'bug', name: 'Bug' },
-      { key: 'design_doc', name: 'Design Doc' },
+      { key: 'prod_bug', name: 'Prod Bug' },
       { key: 'release_item', name: 'Release Item' },
     ]
   }, [workItemTypes])

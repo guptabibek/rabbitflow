@@ -269,8 +269,12 @@ export function RecurringTaskManager() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="task">Task</SelectItem>
+              <SelectItem value="dev_task">Dev Task</SelectItem>
+              <SelectItem value="qc_task">QC Task</SelectItem>
               <SelectItem value="bug">Bug</SelectItem>
+              <SelectItem value="prod_bug">Prod Bug</SelectItem>
               <SelectItem value="story">Story</SelectItem>
+              <SelectItem value="design_doc">Design Doc</SelectItem>
             </SelectContent>
           </Select>
         </div>
