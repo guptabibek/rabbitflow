@@ -101,9 +101,16 @@ services:
     ports:
       - "${NGINX_PORT:-3999}:80"
     volumes:
-      - ./docker/nginx.production.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./docker/nginx.production.conf.template:/etc/nginx/nginx.conf.template:ro
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        envsubst '$$APP_DOMAIN' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
+        exec nginx -c /tmp/nginx.conf -g 'daemon off;'
     read_only: true
     tmpfs:
+      - /tmp
       - /etc/nginx/conf.d
       - /var/cache/nginx
       - /var/run
