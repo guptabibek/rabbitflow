@@ -168,11 +168,11 @@ services:
 
 volumes:
   postgres_data:
-    name: rabbitflow_prod_postgres_data
+    name: ${POSTGRES_VOLUME_NAME:-rabbitflow_prod_postgres_data}
   redis_data:
-    name: rabbitflow_prod_redis_data
+    name: ${REDIS_VOLUME_NAME:-rabbitflow_prod_redis_data}
   app_uploads:
-    name: rabbitflow_prod_uploads
+    name: ${UPLOADS_VOLUME_NAME:-rabbitflow_prod_uploads}
 
 networks:
   edge:
