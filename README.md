@@ -204,6 +204,17 @@ For Docker deployments, bootstrap seeding is controlled through `.env.docker`:
 
 On first startup, the stack creates the configured admin account if it does not already exist.
 
+Optional first-project bootstrap variables:
+
+- `SEED_CREATE_PROJECT=true`
+- `SEED_PROJECT_KEY`
+- `SEED_PROJECT_NAME`
+- `SEED_PROJECT_DESCRIPTION`
+- `SEED_PROJECT_COLOR`
+- `SEED_PROJECT_ICON`
+
+When enabled, bootstrap seeding also creates or repairs a starter project, makes the bootstrap admin a project admin, and initializes the default workflow/work-item metadata for that project.
+
 ## Available Scripts
 
 - `npm run dev` - Start dev server on port 3000

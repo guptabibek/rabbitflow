@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, Loader2 } from 'lucide-react'
 import { AdminConfigPanel } from '@/components/project-management'
@@ -13,27 +13,27 @@ import { useAppStore, type Project } from '@/store/app-store'
 
 export default function AdminPanelPage() {
   const router = useRouter()
-  const {
-    projects,
-    currentProject,
-    activeProjectId,
-    setCurrentProject,
-    setActiveProjectId,
-    setProjects,
-    setUsers,
-    setIssues,
-    setLabels,
-    setIterations,
-    setStates,
-    setAreas,
-    setTeams,
-    setWorkItemTypes,
-    setProjectAccess,
-    setCurrentUser,
-  } = useAppStore()
+  const projects = useAppStore((state) => state.projects)
+  const currentProject = useAppStore((state) => state.currentProject)
+  const activeProjectId = useAppStore((state) => state.activeProjectId)
+  const setCurrentProject = useAppStore((state) => state.setCurrentProject)
+  const setActiveProjectId = useAppStore((state) => state.setActiveProjectId)
+  const setProjects = useAppStore((state) => state.setProjects)
+  const setUsers = useAppStore((state) => state.setUsers)
+  const setIssues = useAppStore((state) => state.setIssues)
+  const setLabels = useAppStore((state) => state.setLabels)
+  const setIterations = useAppStore((state) => state.setIterations)
+  const setStates = useAppStore((state) => state.setStates)
+  const setAreas = useAppStore((state) => state.setAreas)
+  const setTeams = useAppStore((state) => state.setTeams)
+  const setWorkItemTypes = useAppStore((state) => state.setWorkItemTypes)
+  const setProjectAccess = useAppStore((state) => state.setProjectAccess)
+  const setCurrentUser = useAppStore((state) => state.setCurrentUser)
 
   const [isLoading, setIsLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
+  const initializedRef = useRef(false)
+  const latestProjectDataRequest = useRef(0)
 
   const availableProjects = useMemo(
     () => projects.filter((project) => !project.isArchived),
@@ -95,10 +95,15 @@ export default function AdminPanelPage() {
 
   const fetchProjectData = useCallback(
     async (projectId: string) => {
+      const requestId = latestProjectDataRequest.current + 1
+      latestProjectDataRequest.current = requestId
       const bootstrapRes = await fetch(`/api/projects/bootstrap?projectId=${projectId}&pageSize=200`)
 
       if (bootstrapRes.ok) {
         const payload = await bootstrapRes.json()
+        if (latestProjectDataRequest.current !== requestId) {
+          return
+        }
         setIssues(payload.issues ?? [])
         setLabels(payload.labels ?? [])
         setIterations(payload.iterations ?? [])
@@ -111,6 +116,10 @@ export default function AdminPanelPage() {
           role: payload.rbac?.role ?? null,
           permissions: payload.rbac?.permissions ?? [],
         })
+        return
+      }
+
+      if (latestProjectDataRequest.current !== requestId) {
         return
       }
 
@@ -154,9 +163,20 @@ export default function AdminPanelPage() {
   )
 
   useEffect(() => {
+    if (initializedRef.current) {
+      return
+    }
+
+    initializedRef.current = true
+    let isCancelled = false
+
     const initialize = async () => {
       try {
         const [meRes, projectsRes] = await Promise.all([fetch('/api/auth/me'), fetch('/api/projects')])
+
+        if (isCancelled) {
+          return
+        }
 
         if (!meRes.ok) {
           router.replace('/login')
@@ -164,6 +184,9 @@ export default function AdminPanelPage() {
         }
 
         const me = await meRes.json()
+        if (isCancelled) {
+          return
+        }
         setCurrentUser(me)
 
         if (me?.globalRole !== 'admin') {
@@ -176,10 +199,16 @@ export default function AdminPanelPage() {
         }
 
         const nextProjects: Project[] = await projectsRes.json()
+        if (isCancelled) {
+          return
+        }
         setProjects(nextProjects)
 
         const activeRes = await fetch('/api/projects/active')
         const activePayload = activeRes.ok ? await activeRes.json() : { project: null }
+        if (isCancelled) {
+          return
+        }
         const nextProject =
           nextProjects.find(
             (project) =>
@@ -195,32 +224,40 @@ export default function AdminPanelPage() {
         setActiveProjectId(nextProject.id)
 
         if (nextProject.id !== activePayload.project?.id) {
-          await activateProject(nextProject.id)
+          const response = await fetch('/api/projects/active', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: nextProject.id }),
+          })
+
+          if (!response.ok) {
+            throw new Error('Failed to switch project')
+          }
         }
       } catch (error) {
         console.error('Failed to initialize admin panel:', error)
-        router.replace('/login')
+        if (!isCancelled) {
+          router.replace('/login')
+        }
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
     void initialize()
-  }, [
-    activateProject,
-    activeProjectId,
-    router,
-    setActiveProjectId,
-    setCurrentProject,
-    setCurrentUser,
-    setProjects,
-  ])
+
+    return () => {
+      isCancelled = true
+    }
+  }, [activeProjectId, router, setActiveProjectId, setCurrentProject, setCurrentUser, setProjects])
 
   useEffect(() => {
-    if (!currentProject) return
+    if (!currentProject?.id) return
 
     void fetchProjectData(currentProject.id)
-  }, [currentProject, fetchProjectData])
+  }, [currentProject?.id, fetchProjectData])
 
   if (isLoading) {
     return (

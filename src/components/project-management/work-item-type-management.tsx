@@ -43,7 +43,6 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -1024,7 +1023,10 @@ export function WorkItemTypeManagement({
   mode = 'dialog',
   onClose,
 }: WorkItemTypeManagementProps = {}) {
-  const { currentProject, currentProjectPermissions, setWorkItemTypes, workItemTypes } = useAppStore()
+  const currentProject = useAppStore((state) => state.currentProject)
+  const currentProjectPermissions = useAppStore((state) => state.currentProjectPermissions)
+  const setWorkItemTypes = useAppStore((state) => state.setWorkItemTypes)
+  const workItemTypes = useAppStore((state) => state.workItemTypes)
   const [open, setOpen] = useState(false)
   const isScreenMode = mode === 'screen'
   const isVisible = isScreenMode || open
@@ -1098,37 +1100,51 @@ export function WorkItemTypeManagement({
     setIsDirty(false)
   }, [])
 
-  const loadTypes = async () => {
-    if (!currentProject) return
+  const loadTypes = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!currentProject) return
 
-    setIsLoading(true)
-    try {
-      const response = await fetch(
-        `/api/work-item-types?projectId=${currentProject.id}&includeDisabled=true`
-      )
+      setIsLoading(true)
+      try {
+        const response = await fetch(
+          `/api/work-item-types?projectId=${currentProject.id}&includeDisabled=true`,
+          { signal }
+        )
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to load work item types')
-        return
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}))
+          toast.error(error.error || 'Failed to load work item types')
+          return
+        }
+
+        const payload = await response.json()
+        if (signal?.aborted) {
+          return
+        }
+
+        setTypeDefinitions(payload)
+
+        if (!selectedTypeId && payload.length > 0) {
+          const firstForm = typeToForm(payload[0])
+          setSelectedTypeId(payload[0].id)
+          setForm(firstForm)
+          snapshotForm(firstForm)
+        }
+      } catch (caughtError) {
+        if (caughtError instanceof Error && caughtError.name === 'AbortError') {
+          return
+        }
+
+        console.error('Failed to load work item types:', caughtError)
+        toast.error('Failed to load work item types')
+      } finally {
+        if (!signal?.aborted) {
+          setIsLoading(false)
+        }
       }
-
-      const payload = await response.json()
-      setTypeDefinitions(payload)
-
-      if (!selectedTypeId && payload.length > 0) {
-        const firstForm = typeToForm(payload[0])
-        setSelectedTypeId(payload[0].id)
-        setForm(firstForm)
-        snapshotForm(firstForm)
-      }
-    } catch (caughtError) {
-      console.error('Failed to load work item types:', caughtError)
-      toast.error('Failed to load work item types')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    },
+    [currentProject, selectedTypeId, snapshotForm]
+  )
 
   const refreshEnabledTypes = async () => {
     if (!currentProject) return
@@ -1144,8 +1160,10 @@ export function WorkItemTypeManagement({
 
   useEffect(() => {
     if (!isVisible || !currentProject) return
-    void loadTypes()
-  }, [currentProject, isVisible])
+    const controller = new AbortController()
+    void loadTypes(controller.signal)
+    return () => controller.abort()
+  }, [currentProject, isVisible, loadTypes])
 
   useEffect(() => {
     if (!selectedTypeId) return
@@ -1384,7 +1402,7 @@ export function WorkItemTypeManagement({
         </div>
 
         {/* Type List */}
-        <ScrollArea className="flex-1 px-2">
+        <div className="flex-1 overflow-y-auto px-2">
           <div className="space-y-0.5 pb-2">
             {filteredTypes.map((definition) => (
               <TypeListItem
@@ -1421,7 +1439,7 @@ export function WorkItemTypeManagement({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* New Type Button */}
         <div className="border-t border-border/40 p-3">
@@ -1574,7 +1592,7 @@ export function WorkItemTypeManagement({
             </TabsList>
           </div>
 
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             {/* ── General Tab ────────────────────────────────────── */}
             <TabsContent value="general" className="mt-0 outline-none">
               <div className="mx-auto max-w-2xl space-y-8 px-6 py-6">
@@ -1917,7 +1935,7 @@ export function WorkItemTypeManagement({
                 )}
               </div>
             </TabsContent>
-          </ScrollArea>
+          </div>
         </Tabs>
       </div>
     </div>

@@ -6,16 +6,16 @@ export { normalizeStateCategory, statusFromStateCategory }
 export type { WorkItemStateCategory }
 
 const STATUS_CATEGORY_MAP: Record<string, WorkItemStateCategory[]> = {
-  backlog: ['New'],
-  todo: ['New'],
+  backlog: ['Proposed'],
+  todo: ['Proposed'],
   in_progress: ['In Progress'],
   in_review: ['In Progress'],
-  done: ['Done'],
-  cancelled: ['Done'],
+  done: ['Completed'],
+  cancelled: ['Completed'],
 }
 
 function categoriesForStatus(status: string): WorkItemStateCategory[] {
-  return STATUS_CATEGORY_MAP[status] ?? ['New']
+  return STATUS_CATEGORY_MAP[status] ?? ['Proposed']
 }
 
 async function getWorkItemTypeId(projectId: string, typeKey: string) {

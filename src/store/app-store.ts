@@ -58,6 +58,7 @@ export type State = {
   color: string
   category: string
   order: number
+  isFinal?: boolean
   _count?: { issues: number }
 }
 

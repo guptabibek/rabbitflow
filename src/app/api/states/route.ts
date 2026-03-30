@@ -3,15 +3,17 @@ import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
 import { createAuditLog } from '@/lib/domain/audit'
+import { isFinalStateCategory, normalizeStateCategory } from '@/lib/domain/state-categories'
 import { z } from 'zod'
 
 const createStateSchema = z.object({
   projectId: z.string(),
   name: z.string().min(1),
   color: z.string(),
-  category: z.enum(['New', 'In Progress', 'Done']),
+  category: z.string().trim().min(1).transform(normalizeStateCategory),
   isFinal: z.boolean().optional(),
   order: z.number().int().optional(),
+  workItemTypeId: z.string().trim().min(1).optional(),
 })
 
 export async function GET(request: NextRequest) {
@@ -62,12 +64,61 @@ export async function POST(request: NextRequest) {
       select: { order: true },
     })
 
-    const state = await db.state.create({
-      data: {
-        ...data,
-        order: data.order ?? (lastState?.order || 0) + 10,
-        isFinal: data.isFinal ?? data.category === 'Done',
-      },
+    if (data.workItemTypeId) {
+      const workItemType = await db.workItemTypeDefinition.findUnique({
+        where: { id: data.workItemTypeId },
+        select: { id: true, projectId: true },
+      })
+
+      if (!workItemType || workItemType.projectId !== data.projectId) {
+        return NextResponse.json(
+          { error: 'Selected work item type does not belong to this project' },
+          { status: 400 }
+        )
+      }
+    }
+
+    const state = await db.$transaction(async (tx) => {
+      const createdState = await tx.state.create({
+        data: {
+          projectId: data.projectId,
+          name: data.name,
+          color: data.color,
+          category: data.category,
+          order: data.order ?? (lastState?.order || 0) + 10,
+          isFinal: data.isFinal ?? isFinalStateCategory(data.category),
+        },
+      })
+
+      if (data.workItemTypeId) {
+        const lastMapping = await tx.workItemTypeStateMapping.findFirst({
+          where: {
+            projectId: data.projectId,
+            workItemTypeId: data.workItemTypeId,
+          },
+          orderBy: [{ order: 'desc' }, { createdAt: 'desc' }],
+          select: { order: true },
+        })
+
+        const mappingCount = await tx.workItemTypeStateMapping.count({
+          where: {
+            projectId: data.projectId,
+            workItemTypeId: data.workItemTypeId,
+          },
+        })
+
+        await tx.workItemTypeStateMapping.create({
+          data: {
+            projectId: data.projectId,
+            workItemTypeId: data.workItemTypeId,
+            stateId: createdState.id,
+            order: (lastMapping?.order ?? -10) + 10,
+            isInitial: mappingCount === 0,
+          },
+        })
+      }
+
+      return createdState
     })
 
     await createAuditLog({
@@ -77,6 +128,7 @@ export async function POST(request: NextRequest) {
       details: {
         stateId: state.id,
         name: state.name,
+        workItemTypeId: data.workItemTypeId ?? null,
       },
     })
 

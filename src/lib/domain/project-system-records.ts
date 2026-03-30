@@ -16,12 +16,12 @@ type HierarchyRecord = {
 }
 
 const STATUS_TO_STATE_NAME: Record<string, string> = {
-  backlog: 'Backlog',
-  todo: 'To Do',
-  in_progress: 'In Progress',
-  in_review: 'In Review',
-  done: 'Done',
-  cancelled: 'Cancelled',
+  backlog: 'New / Groomed / Ready for Development',
+  todo: 'New / Groomed / Ready for Development',
+  in_progress: 'Development in Progress',
+  in_review: 'Product Acceptance Testing (PAT)',
+  done: 'Closed',
+  cancelled: 'Closed',
 }
 
 const PLANNING_FIELD_KEYS = ['story_points', 'scope', 'desirability', 'defect_of_origin'] as const
@@ -372,27 +372,6 @@ async function ensureWorkItemTypeStateMappings(
         })),
       })
       continue
-    }
-
-    const mappedStateIds = new Set(existingMappings.map((mapping) => mapping.stateId))
-    const maxOrder = existingMappings[existingMappings.length - 1]?.order ?? 0
-
-    let createdCount = 0
-    for (const state of states) {
-      if (mappedStateIds.has(state.id)) {
-        continue
-      }
-
-      createdCount += 1
-      await tx.workItemTypeStateMapping.create({
-        data: {
-          projectId,
-          workItemTypeId: type.id,
-          stateId: state.id,
-          order: maxOrder + createdCount * 10,
-          isInitial: false,
-        },
-      })
     }
 
     const hasInitial = existingMappings.some((mapping) => mapping.isInitial)

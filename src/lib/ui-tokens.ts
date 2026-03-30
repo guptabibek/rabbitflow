@@ -6,6 +6,8 @@
  * property defined in globals.css, so light/dark mode works automatically.
  */
 
+import { normalizeStateCategory } from '@/lib/domain/state-categories'
+
 /* ------------------------------------------------------------------ */
 /*  Work-item TYPE styles                                             */
 /* ------------------------------------------------------------------ */
@@ -100,8 +102,10 @@ export function getRoleTone(role: string): string {
 /* ------------------------------------------------------------------ */
 
 export function getCategoryBadge(category: string): string {
-  if (category === 'Done')        return 'bg-category-done-bg text-category-done border-0'
-  if (category === 'In Progress') return 'bg-category-active-bg text-category-active border-0'
+  const normalized = normalizeStateCategory(category)
+
+  if (normalized === 'Completed')  return 'bg-category-done-bg text-category-done border-0'
+  if (normalized === 'In Progress') return 'bg-category-active-bg text-category-active border-0'
   return 'bg-category-default-bg text-category-default border-0'
 }
 

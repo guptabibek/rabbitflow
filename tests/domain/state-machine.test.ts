@@ -6,16 +6,16 @@ import { normalizeStateCategory, statusFromStateCategory } from '../../src/lib/d
 // normalizeStateCategory
 // ---------------------------------------------------------------------------
 
-test('normalizeStateCategory: "Done" returns Done', () => {
-  assert.equal(normalizeStateCategory('Done'), 'Done')
+test('normalizeStateCategory: "Done" returns Completed', () => {
+  assert.equal(normalizeStateCategory('Done'), 'Completed')
 })
 
-test('normalizeStateCategory: "Completed" returns Done', () => {
-  assert.equal(normalizeStateCategory('Completed'), 'Done')
+test('normalizeStateCategory: "Completed" returns Completed', () => {
+  assert.equal(normalizeStateCategory('Completed'), 'Completed')
 })
 
-test('normalizeStateCategory: "Resolved" returns Done', () => {
-  assert.equal(normalizeStateCategory('Resolved'), 'Done')
+test('normalizeStateCategory: "Resolved" returns Completed', () => {
+  assert.equal(normalizeStateCategory('Resolved'), 'Completed')
 })
 
 test('normalizeStateCategory: "In Progress" returns In Progress', () => {
@@ -26,16 +26,20 @@ test('normalizeStateCategory: "InProgress" returns In Progress', () => {
   assert.equal(normalizeStateCategory('InProgress'), 'In Progress')
 })
 
-test('normalizeStateCategory: "New" returns New', () => {
-  assert.equal(normalizeStateCategory('New'), 'New')
+test('normalizeStateCategory: "Proposed" returns Proposed', () => {
+  assert.equal(normalizeStateCategory('Proposed'), 'Proposed')
 })
 
-test('normalizeStateCategory: unknown string defaults to New', () => {
-  assert.equal(normalizeStateCategory('random'), 'New')
+test('normalizeStateCategory: "New" returns Proposed', () => {
+  assert.equal(normalizeStateCategory('New'), 'Proposed')
 })
 
-test('normalizeStateCategory: empty string defaults to New', () => {
-  assert.equal(normalizeStateCategory(''), 'New')
+test('normalizeStateCategory: unknown string defaults to Proposed', () => {
+  assert.equal(normalizeStateCategory('random'), 'Proposed')
+})
+
+test('normalizeStateCategory: empty string defaults to Proposed', () => {
+  assert.equal(normalizeStateCategory(''), 'Proposed')
 })
 
 // ---------------------------------------------------------------------------
@@ -60,6 +64,10 @@ test('statusFromStateCategory: In Progress returns in_progress', () => {
 
 test('statusFromStateCategory: InProgress returns in_progress', () => {
   assert.equal(statusFromStateCategory('InProgress'), 'in_progress')
+})
+
+test('statusFromStateCategory: Proposed returns backlog', () => {
+  assert.equal(statusFromStateCategory('Proposed'), 'backlog')
 })
 
 test('statusFromStateCategory: New returns backlog', () => {

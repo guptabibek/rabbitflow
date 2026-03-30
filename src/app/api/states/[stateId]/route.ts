@@ -4,11 +4,12 @@ import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
 import { createAuditLog } from '@/lib/domain/audit'
+import { isFinalStateCategory, normalizeStateCategory } from '@/lib/domain/state-categories'
 
 const updateStateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   color: z.string().trim().min(1).optional(),
-  category: z.enum(['New', 'In Progress', 'Done']).optional(),
+  category: z.string().trim().min(1).transform(normalizeStateCategory).optional(),
   isFinal: z.boolean().optional(),
   order: z.number().int().optional(),
 })
@@ -42,13 +43,18 @@ export async function PUT(
     const auth = await requireProjectPermission(request, existing.projectId, 'masterdata:manage')
     if (!auth.ok) return auth.response
 
+    const nextCategory = data.category ?? existing.category
+    const nextIsFinal =
+      data.isFinal ??
+      (data.category ? isFinalStateCategory(data.category) : existing.isFinal)
+
     const updated = await db.state.update({
       where: { id },
       data: {
         name: data.name,
         color: data.color,
-        category: data.category,
-        isFinal: data.isFinal,
+        category: nextCategory,
+        isFinal: nextIsFinal,
         order: data.order,
       },
     })

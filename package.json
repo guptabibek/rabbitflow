@@ -15,7 +15,7 @@
     "db:push": "npm run db:prepare && prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "npm run db:prepare && prisma migrate dev",
-    "db:seed:bootstrap": "node scripts/seed-bootstrap.mjs",
+    "db:seed:bootstrap": "node --experimental-strip-types scripts/seed-bootstrap.mjs",
     "db:reset": "prisma migrate reset",
     "docker:up": "docker compose --env-file .env.docker up -d --build",
     "docker:prod:up": "docker compose -f docker-compose.production.yml --env-file .env.production up -d --build",

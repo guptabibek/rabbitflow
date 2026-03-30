@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   PointerSensor,
@@ -24,7 +24,7 @@ import {
 import { WorkItemTypeManagement } from '@/components/project-management/work-item-type-management'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,8 +37,13 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  isFinalStateCategory,
+  normalizeStateCategory,
+  type WorkItemStateCategory,
+} from '@/lib/domain/state-categories'
 import { getApiErrorMessage } from '@/lib/utils'
 
 type TypeStateMappingRecord = {
@@ -98,6 +103,16 @@ type PreviewField = {
   groupLabel: string
 }
 
+const LIFECYCLE_OPTIONS: Array<{
+  value: WorkItemStateCategory
+  label: string
+  description: string
+}> = [
+  { value: 'Proposed', label: 'Start', description: 'Not started yet' },
+  { value: 'In Progress', label: 'Working', description: 'Active or under validation' },
+  { value: 'Completed', label: 'Finished', description: 'Done, closed, or completed' },
+]
+
 function SortableRow({
   id,
   children,
@@ -130,9 +145,16 @@ function SortableRow({
 }
 
 function stateCategoryBadgeClass(category: string) {
-  if (category === 'Done') return 'bg-category-done-bg text-category-done border-0'
-  if (category === 'In Progress') return 'bg-category-active-bg text-category-active border-0'
+  const normalized = normalizeStateCategory(category)
+
+  if (normalized === 'Completed') return 'bg-category-done-bg text-category-done border-0'
+  if (normalized === 'In Progress') return 'bg-category-active-bg text-category-active border-0'
   return 'bg-category-default-bg text-category-default border-0'
+}
+
+function stateCategoryLabel(category: string) {
+  const normalized = normalizeStateCategory(category)
+  return LIFECYCLE_OPTIONS.find((option) => option.value === normalized)?.label ?? normalized
 }
 
 function humanizeDataType(value: string) {
@@ -196,7 +218,11 @@ function renderPreviewControl(field: PreviewField) {
 }
 
 export function AdminConfigPanel() {
-  const { currentProject, currentProjectPermissions, workItemTypes, states, setStates } = useAppStore()
+  const currentProject = useAppStore((state) => state.currentProject)
+  const currentProjectPermissions = useAppStore((state) => state.currentProjectPermissions)
+  const workItemTypes = useAppStore((state) => state.workItemTypes)
+  const states = useAppStore((state) => state.states)
+  const setStates = useAppStore((state) => state.setStates)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -206,13 +232,13 @@ export function AdminConfigPanel() {
   const [stateDrafts, setStateDrafts] = useState<State[]>([])
   const [newStateName, setNewStateName] = useState('')
   const [newStateColor, setNewStateColor] = useState('#64748b')
-  const [newStateCategory, setNewStateCategory] = useState<'New' | 'In Progress' | 'Done'>('New')
-  const [newStateFinal, setNewStateFinal] = useState(false)
+  const [newStateCategory, setNewStateCategory] = useState<WorkItemStateCategory>('Proposed')
 
   const [stateConfigLoading, setStateConfigLoading] = useState(false)
   const [stateConfigSaving, setStateConfigSaving] = useState(false)
   const [mappedStates, setMappedStates] = useState<TypeStateMappingRecord[]>([])
   const [stateTransitions, setStateTransitions] = useState<Record<string, TypeTransitionRecord>>({})
+  const [showStateLibrary, setShowStateLibrary] = useState(false)
 
   const [fieldConfigSaving, setFieldConfigSaving] = useState(false)
   const [fieldMappings, setFieldMappings] = useState<TypeFieldMappingRecord[]>([])
@@ -237,139 +263,138 @@ export function AdminConfigPanel() {
     setStateDrafts([...states].sort((a, b) => a.order - b.order))
   }, [states])
 
-  const fetchTypeStateConfig = async (typeId: string) => {
-    setStateConfigLoading(true)
-    try {
-      const response = await fetch(`/api/work-item-types/${typeId}/states`, {
-        cache: 'no-store',
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load state machine configuration')
-      }
+  const fetchTypeConfiguration = useCallback(
+    async (typeId: string, signal?: AbortSignal) => {
+      if (!currentProject) return
 
-      const payload = await response.json()
-      const nextMappings = Array.isArray(payload?.mappings)
-        ? payload.mappings
-            .filter((row: TypeStateMappingRecord) => row?.state?.id)
-            .sort((a: TypeStateMappingRecord, b: TypeStateMappingRecord) => a.order - b.order)
-        : []
+      setStateConfigLoading(true)
+      setPlanningLoading(true)
 
-      const transitionMap = Array.isArray(payload?.transitions)
-        ? payload.transitions.reduce(
-            (acc: Record<string, TypeTransitionRecord>, row: TypeTransitionRecord) => {
-              if (!row.isEnabled) {
+      try {
+        const [stateResponse, fieldResponse, planningResponse] = await Promise.all([
+          fetch(`/api/work-item-types/${typeId}/states`, {
+            cache: 'no-store',
+            signal,
+          }),
+          fetch(`/api/work-item-types/${typeId}/fields`, {
+            cache: 'no-store',
+            signal,
+          }),
+          fetch(
+            `/api/planning-config?projectId=${currentProject.id}&workItemTypeId=${typeId}`,
+            { cache: 'no-store', signal }
+          ),
+        ])
+
+        if (!stateResponse.ok) {
+          throw new Error('Failed to load state machine configuration')
+        }
+        if (!fieldResponse.ok) {
+          throw new Error('Failed to load field mapping configuration')
+        }
+        if (!planningResponse.ok) {
+          throw new Error('Failed to load planning configuration')
+        }
+
+        const [statePayload, fieldPayload, planningPayload] = await Promise.all([
+          stateResponse.json(),
+          fieldResponse.json(),
+          planningResponse.json(),
+        ])
+
+        if (signal?.aborted) {
+          return
+        }
+
+        const nextMappings = Array.isArray(statePayload?.mappings)
+          ? statePayload.mappings
+              .filter((row: TypeStateMappingRecord) => row?.state?.id)
+              .sort((a: TypeStateMappingRecord, b: TypeStateMappingRecord) => a.order - b.order)
+          : []
+
+        const transitionMap = Array.isArray(statePayload?.transitions)
+          ? statePayload.transitions.reduce(
+              (acc: Record<string, TypeTransitionRecord>, row: TypeTransitionRecord) => {
+                if (!row.isEnabled) {
+                  return acc
+                }
+
+                const key = `${row.fromStateId}->${row.toStateId}`
+                acc[key] = {
+                  id: row.id,
+                  fromStateId: row.fromStateId,
+                  toStateId: row.toStateId,
+                  order: row.order,
+                  isEnabled: row.isEnabled,
+                  requiresApproval: Boolean(row.requiresApproval),
+                  approverRoles: Array.isArray(row.approverRoles)
+                    ? row.approverRoles.filter((value): value is string => typeof value === 'string')
+                    : [],
+                  minApprovals: typeof row.minApprovals === 'number' ? row.minApprovals : 1,
+                }
                 return acc
-              }
+              },
+              {}
+            )
+          : {}
 
-              const key = `${row.fromStateId}->${row.toStateId}`
-              acc[key] = {
-                id: row.id,
-                fromStateId: row.fromStateId,
-                toStateId: row.toStateId,
-                order: row.order,
-                isEnabled: row.isEnabled,
-                requiresApproval: Boolean(row.requiresApproval),
-                approverRoles: Array.isArray(row.approverRoles)
-                  ? row.approverRoles.filter((value): value is string => typeof value === 'string')
-                  : [],
-                minApprovals: typeof row.minApprovals === 'number' ? row.minApprovals : 1,
-              }
-              return acc
-            },
-            {}
-          )
-        : {}
+        const mappings = Array.isArray(fieldPayload?.mappings)
+          ? fieldPayload.mappings
+              .filter((row: TypeFieldMappingRecord) => row?.fieldDefinition?.id)
+              .sort((a: TypeFieldMappingRecord, b: TypeFieldMappingRecord) => a.order - b.order)
+          : []
 
-      setMappedStates(nextMappings)
-      setStateTransitions(transitionMap)
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to load type state configuration')
-      setMappedStates([])
-      setStateTransitions({})
-    } finally {
-      setStateConfigLoading(false)
-    }
-  }
+        const planningRows = Array.isArray(planningPayload)
+          ? planningPayload
+              .filter((row: TypeFieldMappingRecord) => row?.fieldDefinition?.id)
+              .sort((a: TypeFieldMappingRecord, b: TypeFieldMappingRecord) => a.order - b.order)
+          : []
 
-  const fetchTypeFieldMappings = async (typeId: string) => {
-    try {
-      const response = await fetch(`/api/work-item-types/${typeId}/fields`, {
-        cache: 'no-store',
-      })
-      if (!response.ok) {
-        throw new Error('Failed to load field mapping configuration')
+        setMappedStates(nextMappings)
+        setStateTransitions(transitionMap)
+        setFieldMappings(mappings)
+        setPlanningFields(
+          planningRows.map((row: TypeFieldMappingRecord) => ({
+            fieldDefinitionId: row.fieldDefinitionId,
+            order: row.order,
+            requiredOverride: row.requiredOverride ?? null,
+            isVisible: row.isVisible,
+            options: Array.isArray(row.fieldDefinition.options)
+              ? row.fieldDefinition.options.join('\n')
+              : '',
+            fieldLabel: row.fieldDefinition.label,
+            dataType: row.fieldDefinition.dataType,
+          }))
+        )
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return
+        }
+
+        console.error(error)
+        toast.error(error instanceof Error ? error.message : 'Failed to load type configuration')
+        setMappedStates([])
+        setStateTransitions({})
+        setFieldMappings([])
+        setPlanningFields([])
+      } finally {
+        if (!signal?.aborted) {
+          setStateConfigLoading(false)
+          setPlanningLoading(false)
+        }
       }
-
-      const payload = await response.json()
-      const mappings = Array.isArray(payload?.mappings)
-        ? payload.mappings
-            .filter((row: TypeFieldMappingRecord) => row?.fieldDefinition?.id)
-            .sort((a: TypeFieldMappingRecord, b: TypeFieldMappingRecord) => a.order - b.order)
-        : []
-
-      setFieldMappings(mappings)
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to load field mappings')
-      setFieldMappings([])
-    }
-  }
-
-  const fetchPlanningConfiguration = async (typeId: string) => {
-    if (!currentProject) return
-
-    setPlanningLoading(true)
-    try {
-      const response = await fetch(
-        `/api/planning-config?projectId=${currentProject.id}&workItemTypeId=${typeId}`,
-        { cache: 'no-store' }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to load planning configuration')
-      }
-
-      const payload = await response.json()
-      const planningRows = Array.isArray(payload)
-        ? payload
-            .filter((row: TypeFieldMappingRecord) => row?.fieldDefinition?.id)
-            .sort((a: TypeFieldMappingRecord, b: TypeFieldMappingRecord) => a.order - b.order)
-        : []
-
-      setPlanningFields(
-        planningRows.map((row: TypeFieldMappingRecord) => ({
-          fieldDefinitionId: row.fieldDefinitionId,
-          order: row.order,
-          requiredOverride: row.requiredOverride ?? null,
-          isVisible: row.isVisible,
-          options: Array.isArray(row.fieldDefinition.options)
-            ? row.fieldDefinition.options.join('\n')
-            : '',
-          fieldLabel: row.fieldDefinition.label,
-          dataType: row.fieldDefinition.dataType,
-        }))
-      )
-    } catch (error) {
-      console.error(error)
-      toast.error('Failed to load planning configuration')
-      setPlanningFields([])
-    } finally {
-      setPlanningLoading(false)
-    }
-  }
+    },
+    [currentProject]
+  )
 
   useEffect(() => {
     if (!selectedTypeId) return
 
-    const timer = window.setTimeout(() => {
-      void fetchTypeStateConfig(selectedTypeId)
-      void fetchTypeFieldMappings(selectedTypeId)
-      void fetchPlanningConfiguration(selectedTypeId)
-    }, 0)
+    const controller = new AbortController()
+    void fetchTypeConfiguration(selectedTypeId, controller.signal)
 
-    return () => window.clearTimeout(timer)
-  }, [selectedTypeId])
+    return () => controller.abort()
+  }, [fetchTypeConfiguration, selectedTypeId])
 
   const mappedStateIds = useMemo(
     () => new Set(mappedStates.map((mapping) => mapping.stateId)),
@@ -395,6 +420,11 @@ export function AdminConfigPanel() {
   const availableStatesForMapping = useMemo(
     () => [...stateDrafts].sort((a, b) => a.order - b.order),
     [stateDrafts]
+  )
+
+  const unmappedStates = useMemo(
+    () => availableStatesForMapping.filter((state) => !mappedStateIds.has(state.id)),
+    [availableStatesForMapping, mappedStateIds]
   )
 
   const selectedTypeSections = useMemo<WorkItemSectionDefinition[]>(
@@ -501,6 +531,22 @@ export function AdminConfigPanel() {
     })
   }
 
+  const moveStateDraft = (index: number, direction: -1 | 1) => {
+    setStateDrafts((previous) => {
+      const nextIndex = index + direction
+      if (nextIndex < 0 || nextIndex >= previous.length) return previous
+      return arrayMove(previous, index, nextIndex)
+    })
+  }
+
+  const moveMappedState = (index: number, direction: -1 | 1) => {
+    setMappedStates((previous) => {
+      const nextIndex = index + direction
+      if (nextIndex < 0 || nextIndex >= previous.length) return previous
+      return arrayMove(previous, index, nextIndex)
+    })
+  }
+
   const saveStateOrdering = async () => {
     if (!canManageMasterData) {
       toast.error('You do not have permission to manage project configuration')
@@ -519,7 +565,7 @@ export function AdminConfigPanel() {
             name: state.name,
             color: state.color,
             category: state.category,
-            isFinal: state.category === 'Done',
+            isFinal: isFinalStateCategory(state.category),
             order: index * 10,
           }),
         })
@@ -567,7 +613,8 @@ export function AdminConfigPanel() {
           name: newStateName.trim(),
           color: newStateColor,
           category: newStateCategory,
-          isFinal: newStateFinal || newStateCategory === 'Done',
+          isFinal: isFinalStateCategory(newStateCategory),
+          workItemTypeId: selectedType?.id,
         }),
       })
 
@@ -581,10 +628,12 @@ export function AdminConfigPanel() {
       const next = [...stateDrafts, state].sort((a, b) => a.order - b.order)
       setStateDrafts(next)
       setStates(next)
+      if (selectedType) {
+        await fetchTypeConfiguration(selectedType.id)
+      }
       setNewStateName('')
       setNewStateColor('#64748b')
-      setNewStateCategory('New')
-      setNewStateFinal(false)
+      setNewStateCategory('Proposed')
       toast.success('State created')
     } catch (error) {
       console.error(error)
@@ -609,7 +658,7 @@ export function AdminConfigPanel() {
           name: state.name,
           color: state.color,
           category: state.category,
-          isFinal: state.category === 'Done',
+          isFinal: isFinalStateCategory(state.category),
           order: state.order,
         }),
       })
@@ -791,7 +840,7 @@ export function AdminConfigPanel() {
       }
 
       toast.success('State machine updated')
-      await fetchTypeStateConfig(selectedType.id)
+  await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
       toast.error('Failed to save state machine')
@@ -832,7 +881,7 @@ export function AdminConfigPanel() {
       }
 
       toast.success('Field mappings saved')
-      await fetchTypeFieldMappings(selectedType.id)
+  await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
       toast.error('Failed to save field mappings')
@@ -880,7 +929,7 @@ export function AdminConfigPanel() {
       }
 
       toast.success('Planning configuration saved')
-      await fetchPlanningConfiguration(selectedType.id)
+  await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
       toast.error('Failed to save planning configuration')
@@ -1043,173 +1092,102 @@ export function AdminConfigPanel() {
         </TabsContent>
 
         <TabsContent value="states" className="mt-0 space-y-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Workflow is configured per work item type</div>
+              <div className="text-xs text-muted-foreground">
+                Add states to the selected type first. Lifecycle grouping is only used for board and reporting behavior.
+              </div>
+            </div>
+            {renderTypeFilter()}
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card>
+            <div className="grid gap-4">
+              <Card className="border-primary/15 shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-base">Project States</CardTitle>
+                  <CardTitle className="text-base">
+                    {selectedType ? `${selectedType.name} Workflow` : 'Type State Machine'}
+                  </CardTitle>
+                  <CardDescription>
+                    Define the states used by this work item type, set the initial state, and control allowed transitions.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    placeholder="State name"
-                    value={newStateName}
-                    onChange={(event) => setNewStateName(event.target.value)}
-                  />
-                  <Input
-                    type="color"
-                    value={newStateColor}
-                    onChange={(event) => setNewStateColor(event.target.value)}
-                  />
-                  <Select
-                    value={newStateCategory}
-                    onValueChange={(value) =>
-                      setNewStateCategory(value as 'New' | 'In Progress' | 'Done')
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="New">New</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Done">Done</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <label className="flex items-center gap-2 rounded-md border px-3 text-sm">
-                    <Checkbox
-                      checked={newStateFinal || newStateCategory === 'Done'}
-                      onCheckedChange={(value) => setNewStateFinal(value === true)}
-                      disabled={newStateCategory === 'Done'}
-                    />
-                    Final
-                  </label>
-                </div>
-
-                <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
-                  {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Add State
-                </Button>
-
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleStateDraftDragEnd}
-                >
-                  <SortableContext
-                    items={stateDrafts.map((state) => state.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-2">
-                      {stateDrafts.map((state, index) => (
-                        <SortableRow key={state.id} id={state.id}>
-                          <div className="grid gap-2 md:grid-cols-[1fr_120px_160px_auto_auto]">
-                            <Input
-                              value={state.name}
-                              onChange={(event) =>
-                                setStateDrafts((previous) =>
-                                  previous.map((row) =>
-                                    row.id === state.id
-                                      ? { ...row, name: event.target.value }
-                                      : row
-                                  )
-                                )
-                              }
-                            />
-                            <Input
-                              type="color"
-                              value={state.color}
-                              onChange={(event) =>
-                                setStateDrafts((previous) =>
-                                  previous.map((row) =>
-                                    row.id === state.id
-                                      ? { ...row, color: event.target.value }
-                                      : row
-                                  )
-                                )
-                              }
-                            />
-                            <Select
-                              value={state.category}
-                              onValueChange={(value) =>
-                                setStateDrafts((previous) =>
-                                  previous.map((row) =>
-                                    row.id === state.id
-                                      ? { ...row, category: value }
-                                      : row
-                                  )
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="New">New</SelectItem>
-                                <SelectItem value="In Progress">In Progress</SelectItem>
-                                <SelectItem value="Done">Done</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="outline"
-                              onClick={() => void updateStateRow({ ...state, order: index * 10 })}
-                              disabled={stateConfigSaving || !canManageMasterData}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => void deleteState(state.id)}
-                              disabled={stateConfigSaving || !canManageMasterData}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </SortableRow>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-
-                  <Button variant="secondary" onClick={saveStateOrdering} disabled={stateConfigSaving || !canManageMasterData}>
-                    {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Save State Ordering
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Type State Machine</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                {renderTypeFilter()}
-
                 {stateConfigLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" /> Loading type state machine...
                   </div>
                 ) : selectedType ? (
                   <>
+                    <div className="rounded-xl border border-border/60 bg-muted/15 p-3 space-y-3">
+                      <div>
+                        <div className="text-sm font-medium">Add Workflow State</div>
+                        <div className="text-xs text-muted-foreground">
+                          Give the state a clear name. Lifecycle grouping only tells the system whether it behaves like start, working, or finished.
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_88px_200px_auto]">
+                        <Input
+                          placeholder="State name"
+                          value={newStateName}
+                          onChange={(event) => setNewStateName(event.target.value)}
+                        />
+                        <Input
+                          type="color"
+                          value={newStateColor}
+                          onChange={(event) => setNewStateColor(event.target.value)}
+                        />
+                        <Select
+                          value={newStateCategory}
+                          onValueChange={(value) => setNewStateCategory(value as WorkItemStateCategory)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Lifecycle group" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {LIFECYCLE_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label} · {option.description}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
+                          {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Add State
+                        </Button>
+                      </div>
+                    </div>
+
+                    {unmappedStates.length > 0 ? (
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Attach Existing State</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {unmappedStates.map((state) => (
+                            <Button
+                              key={state.id}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleStateMapping(state, true)}
+                              disabled={stateConfigSaving || !canManageMasterData}
+                            >
+                              {state.name}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Mapped States</Label>
-                      {availableStatesForMapping.map((state) => (
-                        <label key={state.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={mappedStateIds.has(state.id)}
-                              onCheckedChange={(checked) =>
-                                toggleStateMapping(state, checked === true)
-                              }
-                            />
-                            <span className="text-sm">{state.name}</span>
-                            <Badge className={stateCategoryBadgeClass(state.category)}>
-                              {state.category}
-                            </Badge>
-                          </div>
-                        </label>
-                      ))}
+                      <Label className="text-xs text-muted-foreground">Workflow States</Label>
+                      {mappedStates.length === 0 ? (
+                        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                          No states are attached to this work item type yet.
+                        </div>
+                      ) : null}
                     </div>
 
                     <DndContext
@@ -1222,22 +1200,48 @@ export function AdminConfigPanel() {
                         strategy={verticalListSortingStrategy}
                       >
                         <div className="space-y-2">
-                          {mappedStates.map((mapping) => (
+                          {mappedStates.map((mapping, index) => (
                             <SortableRow key={mapping.stateId} id={mapping.stateId}>
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium">{mapping.state.name}</span>
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="truncate text-sm font-medium">{mapping.state.name}</span>
                                   <Badge className={stateCategoryBadgeClass(mapping.state.category)}>
-                                    {mapping.state.category}
+                                    {stateCategoryLabel(mapping.state.category)}
                                   </Badge>
                                 </div>
-                                <label className="flex items-center gap-2 text-sm">
-                                  <Checkbox
-                                    checked={mapping.isInitial}
-                                    onCheckedChange={() => setInitialState(mapping.stateId)}
-                                  />
-                                  Initial
-                                </label>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => moveMappedState(index, -1)}
+                                    disabled={index === 0 || stateConfigSaving || !canManageMasterData}
+                                  >
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => moveMappedState(index, 1)}
+                                    disabled={index === mappedStates.length - 1 || stateConfigSaving || !canManageMasterData}
+                                  >
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <Checkbox
+                                      checked={mapping.isInitial}
+                                      onCheckedChange={() => setInitialState(mapping.stateId)}
+                                    />
+                                    Initial
+                                  </label>
+                                  <Button
+                                    variant="ghost"
+                                    className="text-destructive"
+                                    onClick={() => toggleStateMapping(mapping.state, false)}
+                                    disabled={stateConfigSaving || !canManageMasterData}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
                               </div>
                             </SortableRow>
                           ))}
@@ -1383,16 +1387,143 @@ export function AdminConfigPanel() {
                       </div>
                     ) : null}
 
-                    <Button onClick={saveTypeStateMachine} disabled={stateConfigSaving || !canManageMasterData}>
-                      {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Type State Machine
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <Button onClick={saveTypeStateMachine} disabled={stateConfigSaving || !canManageMasterData}>
+                        {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Save Workflow
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowStateLibrary((current) => !current)}
+                      >
+                        {showStateLibrary ? 'Hide Shared Library' : 'Advanced: Manage Shared Library'}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <div className="text-sm text-muted-foreground">No work item type selected.</div>
                 )}
                 </CardContent>
               </Card>
+
+              {showStateLibrary ? (
+                <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Shared State Library</CardTitle>
+                  <CardDescription>
+                    Advanced maintenance for reusable states. Rename, recolor, reorder, or delete states already in the project library.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                <div className="text-xs text-muted-foreground">Reorder with the drag handle or arrow controls.</div>
+
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleStateDraftDragEnd}
+                >
+                  <SortableContext
+                    items={stateDrafts.map((state) => state.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-2">
+                      {stateDrafts.map((state, index) => (
+                        <SortableRow key={state.id} id={state.id}>
+                          <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_88px_180px_auto]">
+                            <Input
+                              value={state.name}
+                              onChange={(event) =>
+                                setStateDrafts((previous) =>
+                                  previous.map((row) =>
+                                    row.id === state.id
+                                      ? { ...row, name: event.target.value }
+                                      : row
+                                  )
+                                )
+                              }
+                            />
+                            <Input
+                              type="color"
+                              value={state.color}
+                              onChange={(event) =>
+                                setStateDrafts((previous) =>
+                                  previous.map((row) =>
+                                    row.id === state.id
+                                      ? { ...row, color: event.target.value }
+                                      : row
+                                  )
+                                )
+                              }
+                            />
+                            <Select
+                              value={normalizeStateCategory(state.category)}
+                              onValueChange={(value) =>
+                                setStateDrafts((previous) =>
+                                  previous.map((row) =>
+                                    row.id === state.id
+                                      ? { ...row, category: value }
+                                      : row
+                                  )
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {LIFECYCLE_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>{option.label} · {option.description}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => moveStateDraft(index, -1)}
+                                disabled={index === 0 || stateConfigSaving || !canManageMasterData}
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => moveStateDraft(index, 1)}
+                                disabled={index === stateDrafts.length - 1 || stateConfigSaving || !canManageMasterData}
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => void updateStateRow({ ...state, order: index * 10 })}
+                                disabled={stateConfigSaving || !canManageMasterData}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() => void deleteState(state.id)}
+                                disabled={stateConfigSaving || !canManageMasterData}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </SortableRow>
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+
+                  <Button variant="secondary" onClick={saveStateOrdering} disabled={stateConfigSaving || !canManageMasterData}>
+                    {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save State Ordering
+                  </Button>
+                </CardContent>
+              </Card>
+              ) : null}
             </div>
             {renderLivePreviewPanel()}
           </div>
