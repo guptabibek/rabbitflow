@@ -10,6 +10,39 @@ type SmtpConfig = {
   from: string
 }
 
+type SmtpTransportError = Error & {
+  code?: string
+  errno?: number
+  syscall?: string
+  hostname?: string
+  command?: string
+  response?: string
+}
+
+function asSmtpTransportError(error: unknown): SmtpTransportError | null {
+  if (error instanceof Error) {
+    return error as SmtpTransportError
+  }
+
+  return null
+}
+
+function isDnsResolutionError(error: SmtpTransportError | null) {
+  if (!error) {
+    return false
+  }
+
+  return error.code === 'EDNS' || error.code === 'EAI_AGAIN' || error.syscall === 'getaddrinfo'
+}
+
+function isAuthError(error: SmtpTransportError | null) {
+  if (!error) {
+    return false
+  }
+
+  return error.code === 'EAUTH'
+}
+
 function readSmtpConfig() {
   const host = process.env.SMTP_HOST
   const portRaw = process.env.SMTP_PORT || '587'
@@ -85,12 +118,15 @@ export async function sendEmail(payload: {
   try {
     await sendWithConfig(config)
   } catch (primaryError) {
+    let finalError = asSmtpTransportError(primaryError)
+
     // Common production misconfig: port 587 + SMTPS secure mode. Retry with STARTTLS.
     if (config.secure && config.port === 587) {
       try {
         await sendWithConfig({ ...config, secure: false }, true)
         return
       } catch (fallbackError) {
+        finalError = asSmtpTransportError(fallbackError) ?? finalError
         console.error('SMTP send failed on primary and fallback transport:', {
           primaryError,
           fallbackError,
@@ -98,6 +134,16 @@ export async function sendEmail(payload: {
       }
     } else {
       console.error('SMTP send failed:', primaryError)
+    }
+
+    if (isDnsResolutionError(finalError)) {
+      throw new Error(
+        `SMTP host \"${config.host}\" could not be resolved from the application runtime. Check container DNS and outbound network access.`
+      )
+    }
+
+    if (isAuthError(finalError)) {
+      throw new Error('SMTP authentication failed. Verify SMTP username and password.')
     }
 
     throw new Error('SMTP delivery failed. Verify SMTP host, port, secure mode, username and password.')
