@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react'
 import { useAppStore, WorkItemType } from '@/store/app-store'
+import { SavedViews } from '@/components/project-management/saved-views'
+import { hasActiveFilters } from '@/lib/domain/issue-filters'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -110,14 +112,10 @@ export function FilterBar({
     setWorkItemTypeFilter('all')
   }
 
-  const hasActiveFilters =
-    filters.assigneeId ||
-    filters.priority ||
-    filters.type ||
-    filters.search ||
-    filters.iterationId ||
-    filters.labelIds.length > 0 ||
-    workItemTypeFilter !== 'all'
+  // Shared with the views that do the filtering, so the "clear" affordance can
+  // never disagree with what is actually applied. The local copy this replaces
+  // omitted areaId, so an area-only filter left no way to clear it.
+  const filtersAreActive = hasActiveFilters(filters, { workItemTypeTab: workItemTypeFilter })
 
   const handleViewModeChange = (mode: 'board' | 'list') => {
     setViewMode(mode)
@@ -146,6 +144,10 @@ export function FilterBar({
             data-testid="work-items-search-input"
           />
         </div>
+
+        {/* Saved views. The SavedView model and /api/views CRUD have existed
+            since the schema was written, with no interface anywhere. */}
+        <SavedViews />
 
         <Select
           value={workItemTypeFilter}
@@ -267,7 +269,7 @@ export function FilterBar({
           </Popover>
         )}
 
-        {hasActiveFilters && (
+        {filtersAreActive && (
           <Button
             variant="ghost"
             size="sm"
