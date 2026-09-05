@@ -22,12 +22,28 @@ function resolveAliasedPath(specifier) {
   return null
 }
 
+/**
+ * Next's package exports resolve under the bundler, but Node's ESM resolver
+ * needs the explicit file. Only the subpaths integration tests actually import
+ * are mapped, so an unexpected specifier fails loudly rather than silently
+ * resolving somewhere surprising.
+ */
+const NEXT_SUBPATH_ALIASES = {
+  'next/server': 'next/server.js',
+  'next/headers': 'next/headers.js',
+}
+
 export async function resolve(specifier, context, nextResolve) {
   if (specifier.startsWith('@/')) {
     const resolved = resolveAliasedPath(specifier)
     if (resolved) {
       return { url: resolved, shortCircuit: true }
     }
+  }
+
+  const nextAlias = NEXT_SUBPATH_ALIASES[specifier]
+  if (nextAlias) {
+    return nextResolve(nextAlias, context)
   }
 
   return nextResolve(specifier, context)

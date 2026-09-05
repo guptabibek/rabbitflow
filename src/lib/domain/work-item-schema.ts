@@ -108,10 +108,31 @@ export async function getProjectWorkItemTypeDefinition(projectId: string, typeKe
   })
 
   if (!typeDefinition) {
-    throw new Error(`Unknown work item type "${typeKey}" for project ${projectId}`)
+    throw new UnknownWorkItemTypeError(typeKey)
   }
 
   return typeDefinition
+}
+
+/**
+ * Raised when a caller names a work-item type the project does not define.
+ *
+ * A distinct class so callers can map it to 400 rather than letting it surface
+ * as a 500: the type key comes straight from the request body, so an unknown
+ * value is a client error, not a server fault. It previously escaped as a bare
+ * Error past route handlers that only catch ZodError.
+ *
+ * The message deliberately omits the project id, which used to be interpolated
+ * into an error that could reach a client.
+ */
+export class UnknownWorkItemTypeError extends Error {
+  readonly typeKey: string
+
+  constructor(typeKey: string) {
+    super(`Unknown work item type "${typeKey}"`)
+    this.name = 'UnknownWorkItemTypeError'
+    this.typeKey = typeKey
+  }
 }
 
 function getOptionsArray(field: LoadedFieldDefinition) {
@@ -369,7 +390,18 @@ export async function prepareCustomFieldWrites(
   customFields: Record<string, WorkItemFieldInput> | undefined,
   mode: 'create' | 'update'
 ) {
-  const typeDefinition = await getProjectWorkItemTypeDefinition(projectId, typeKey)
+  // Returned as a validation failure rather than thrown, so the caller reports
+  // 400 like every other bad-input case on this path.
+  let typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>
+  try {
+    typeDefinition = await getProjectWorkItemTypeDefinition(projectId, typeKey)
+  } catch (error) {
+    if (error instanceof UnknownWorkItemTypeError) {
+      return { ok: false as const, error: error.message }
+    }
+    throw error
+  }
+
   const fieldMap = new Map(typeDefinition.fields.map((field) => [field.key, field]))
   const payload = customFields ?? {}
 

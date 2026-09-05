@@ -156,3 +156,78 @@ test that fails before the fix and passes after."
 - **No mocking framework abuse** — the domain functions are pure enough to test directly,
   which is itself evidence of reasonable design.
 - **`tests/e2e/README.md`** documents how to run the suite.
+
+---
+
+# Update — integration suite added (2026-09-05)
+
+The gap described above is partly closed. `tests/integration/` now runs **61
+tests against a real PostgreSQL database**, covering exactly the layers that had
+zero coverage.
+
+```console
+npm test              →  243 passing   (pure domain functions)
+npm run test:integration →  61 passing   (routes + database)
+npm run test:all      →  304 passing
+```
+
+## What the integration suite covers
+
+| File | Tests | Covers |
+|---|---:|---|
+| `authorization.test.ts` | 18 | 6 roles × read/write endpoints, cross-project isolation, revoked/expired sessions, deactivated users, permission disclosure |
+| `auth-flow.test.ts` | 14 | password login, lockout, rate limiting, MFA challenge/verify/replay, admin MFA enforcement, challenge durability, logout revocation, registration gate |
+| `issues-api.test.ts` | 17 | create/update/delete, required custom fields, schedule validation, optimistic-lock 409, cross-project denial, pagination, tsvector search |
+| `api-token.test.ts` | 12 | bearer auth, read/write scope enforcement, revoked/expired/unknown tokens, deactivated owner, privilege ceiling, `lastUsedAt`, hash-at-rest |
+
+## Why a real database
+
+These tests deliberately do not mock Prisma. The behaviour they protect —
+row-level authorization, foreign-key protection, optimistic locking, transaction
+boundaries — does not exist in a mock. A mocked client would pass every
+authorization assertion while the real query returned another tenant's rows.
+
+`tests/integration/support/db.ts` refuses to run against a URL whose name does
+not contain "test", because the helpers truncate tables.
+
+## Bugs this suite caught immediately
+
+- **An unknown `workItemType` returned 500 rather than 400.**
+  `getProjectWorkItemTypeDefinition` threw a bare `Error`, and the route handlers
+  catch only `ZodError`. Client-supplied input therefore surfaced as a server
+  fault, and the thrown message interpolated the project id. Fixed with a typed
+  `UnknownWorkItemTypeError` mapped to a validation response.
+- **BullMQ retried Redis forever**, holding the Node event loop open. Harmless in
+  production where Redis exists, but it meant a Redis outage produced a hung
+  process rather than a degraded one. Now fails fast and falls back inline.
+- **A test assumption about label permissions was wrong**, not the code: labels
+  are gated on `workitem:update`, not `masterdata:manage`. The test now pins the
+  real contract.
+
+## Running locally
+
+```bash
+docker run -d --name rf-test-pg \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_USER=test -e POSTGRES_DB=rabbitflow_test \
+  -p 55433:5432 postgres:16-alpine
+
+export TEST_DATABASE_URL="postgresql://test:test@localhost:55433/rabbitflow_test"
+export DATABASE_URL="$TEST_DATABASE_URL"
+export JWT_SECRET="integration-test-secret-at-least-32-bytes-long"
+
+npx prisma migrate deploy
+npm run test:integration
+```
+
+Files run with `--test-concurrency=1`: they share one database, so parallel
+`before` hooks would race on truncation.
+
+## Still missing
+
+- **Component tests.** No testing library is installed. The filter predicate
+  duplicated across four views remains the highest-value target, and is pure once
+  extracted.
+- **Broader route coverage.** 4 of 124 route files are exercised. Priority order:
+  relations, board/backlog reorder, approvals, admin security.
+- **E2E in CI.** The Playwright suite is wired into the pipeline but its
+  assertions have not been reviewed against the current UI.

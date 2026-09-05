@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start -p 3000",
     "test": "node --test --test-isolation=none --experimental-strip-types --import ./tests/support/alias-hooks.mjs \"tests/domain/**/*.test.ts\"",
+    "test:integration": "node --test --test-concurrency=1 --experimental-strip-types --import ./tests/support/alias-hooks.mjs \"tests/integration/**/*.test.ts\"",
+    "test:all": "npm run test && npm run test:integration",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",

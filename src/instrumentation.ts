@@ -21,7 +21,7 @@ export async function register() {
       console.info(`Received ${signal}, shutting down gracefully...`)
 
       try {
-        await Promise.all([worker.close(), sideEffectWorker.close()])
+        await Promise.all([worker.close(), sideEffectWorker?.close()])
       } catch (error) {
         console.error('Error closing background workers:', error)
       }

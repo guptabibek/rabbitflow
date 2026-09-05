@@ -1,5 +1,9 @@
 import { db } from '@/lib/db'
-import { customFieldValuesToRecord, getProjectWorkItemTypeDefinition } from '@/lib/domain/work-item-schema'
+import {
+  customFieldValuesToRecord,
+  getProjectWorkItemTypeDefinition,
+  UnknownWorkItemTypeError,
+} from '@/lib/domain/work-item-schema'
 import { isStateMappedToType } from '@/lib/domain/state-machine'
 
 type IssueReferenceValidationInput = {
@@ -150,7 +154,18 @@ export async function validateIssueReferences(input: IssueReferenceValidationInp
     customFields,
   } = input
 
-  const typeDefinition = await getProjectWorkItemTypeDefinition(projectId, workItemType)
+  // The type key comes straight from the request body, so an unknown value is a
+  // client error. Returned as a validation message rather than thrown, since
+  // route handlers here only catch ZodError and everything else became a 500.
+  let typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>
+  try {
+    typeDefinition = await getProjectWorkItemTypeDefinition(projectId, workItemType)
+  } catch (error) {
+    if (error instanceof UnknownWorkItemTypeError) {
+      return error.message
+    }
+    throw error
+  }
 
   if (parentIssueId) {
     if (currentIssueId && currentIssueId === parentIssueId) {

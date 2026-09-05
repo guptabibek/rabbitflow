@@ -79,6 +79,15 @@ jobs:
       - name: Schema matches migrations
         run: npx prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url "$DATABASE_URL" --exit-code
 
+      # Authorization, auth flow, work-item CRUD and API tokens against a real
+      # database. These cover behaviour a mocked Prisma client cannot: row-level
+      # access control, foreign-key protection and optimistic locking.
+      - name: Integration tests
+        run: npm run test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://rabbitflow:rabbitflow@localhost:5432/rabbitflow_ci
+          JWT_SECRET: ci-only-secret-value-at-least-32-bytes-long-xxxxx
+
   build:
     name: Production build
     runs-on: ubuntu-latest

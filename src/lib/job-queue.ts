@@ -32,16 +32,38 @@ export type SideEffectJob =
       actorUserId: string
     }
 
+/** True when Redis has been configured at all. */
+export function isQueueConfigured(): boolean {
+  return Boolean(
+    process.env.REDIS_URL ||
+      process.env.REDIS_TLS_URL ||
+      (process.env.REDIS_HOST && process.env.REDIS_PORT)
+  )
+}
+
 function getConnection(): ConnectionOptions {
   const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL
-  if (url) return { url }
+
+  // Fail fast rather than retrying forever. BullMQ's default reconnect strategy
+  // retries indefinitely, which keeps the Node event loop alive and turns a
+  // Redis outage into a hung process rather than a degraded one. Callers already
+  // fall back to inline execution, so a quick failure is strictly better.
+  const shared = {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    retryStrategy: () => null,
+    connectTimeout: 3000,
+  }
+
+  if (url) return { url, ...shared } as ConnectionOptions
 
   return {
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT ? Number.parseInt(process.env.REDIS_PORT, 10) : 6379,
     password: process.env.REDIS_PASSWORD || undefined,
     username: process.env.REDIS_USERNAME || undefined,
-  }
+    ...shared,
+  } as ConnectionOptions
 }
 
 let queue: Queue<SideEffectJob> | null = null
@@ -58,8 +80,24 @@ function getQueue(): Queue<SideEffectJob> {
         removeOnFail: { count: 5000 },
       },
     })
+
+    // Without a listener an ioredis connection error is an unhandled 'error'
+    // event, which crashes the process.
+    queue.on('error', (error) => {
+      console.error('Side effect queue connection error:', error.message)
+    })
   }
   return queue
+}
+
+/** Release the queue connection. Used on shutdown and by tests. */
+export async function closeQueue(): Promise<void> {
+  if (!queue) return
+  const current = queue
+  queue = null
+  await current.close().catch(() => {
+    // Closing a connection that never established is not an error worth raising.
+  })
 }
 
 /** Execute a job inline. Shared by the worker and the no-Redis fallback. */
@@ -99,14 +137,18 @@ export async function runSideEffect(job: SideEffectJob): Promise<void> {
  * entirely.
  */
 export async function enqueueSideEffect(job: SideEffectJob): Promise<void> {
-  try {
-    await getQueue().add(job.kind, job)
-    return
-  } catch (error) {
-    console.error(
-      `Failed to enqueue side effect "${job.kind}", running inline instead:`,
-      error instanceof Error ? error.message : error
-    )
+  // With no Redis configured there is nothing to enqueue to; run inline rather
+  // than paying a connection timeout on every call.
+  if (isQueueConfigured()) {
+    try {
+      await getQueue().add(job.kind, job)
+      return
+    } catch (error) {
+      console.error(
+        `Failed to enqueue side effect "${job.kind}", running inline instead:`,
+        error instanceof Error ? error.message : error
+      )
+    }
   }
 
   try {
@@ -156,8 +198,12 @@ export function queueAssignmentEmail(args: {
 
 let workerInstance: Worker<SideEffectJob> | null = null
 
-export function startSideEffectWorker(): Worker<SideEffectJob> {
+export function startSideEffectWorker(): Worker<SideEffectJob> | null {
   if (workerInstance) return workerInstance
+  if (!isQueueConfigured()) {
+    console.warn('Redis is not configured; side effects will run inline rather than queued.')
+    return null
+  }
 
   workerInstance = new Worker<SideEffectJob>(
     JOB_QUEUE_NAME,

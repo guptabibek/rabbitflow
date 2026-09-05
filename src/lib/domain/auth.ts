@@ -5,7 +5,7 @@ import {
   hasPermission,
   listPermissions,
   normalizeProjectRole,
-  Permission,
+  type Permission,
 } from '@/lib/domain/rbac'
 import { canAccessProjectPermission, getProjectPermissionRules } from '@/lib/domain/access-control'
 import {
