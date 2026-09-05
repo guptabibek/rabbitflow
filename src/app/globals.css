@@ -67,6 +67,22 @@
   --color-status-done-bg: var(--status-done-bg);
   --color-status-cancelled-bg: var(--status-cancelled-bg);
 
+  /*
+    Solid fills for charts, progress bars and column dots.
+
+    `bg-status-*-bar` was referenced in four places — the Reports status
+    distribution chart, the dashboard status bars, the Kanban column dots and
+    ui-tokens.ts — but the tokens were never defined, so Tailwind emitted no
+    class and every one of those surfaces rendered colourless. The translucent
+    `-bg` variants are for badge backgrounds and are too faint for a fill.
+  */
+  --color-status-backlog-bar: var(--status-backlog);
+  --color-status-todo-bar: var(--status-todo);
+  --color-status-in-progress-bar: var(--status-in-progress);
+  --color-status-in-review-bar: var(--status-in-review);
+  --color-status-done-bar: var(--status-done);
+  --color-status-cancelled-bar: var(--status-cancelled);
+
   /* Work-item Type Tokens */
   --color-type-epic: var(--type-epic);
   --color-type-feature: var(--type-feature);
@@ -432,6 +448,7 @@
     background: transparent;
   }
 
+
   /* Kanban drag-over feedback (Upgraded with smooth pulse and better contrast) */
   .kanban-column-drag-over {
     background: var(--surface-hover) !important;
@@ -586,3 +603,48 @@
     --is-dark-mode: 1;
   }
 }
+
+/* Defined outside @layer: layer-scoped rules lose to Tailwind utility ordering
+   here and the ::after box is never created. */
+/*
+  Horizontally scrolling regions (the Kanban board) need a permanent
+  affordance. With overlay scrollbars the board silently clipped its Done and
+  Cancelled columns at common laptop widths: content was reachable, but nothing
+  on screen said so.
+
+  `scroll-affordance-x` keeps the thumb visible and fades the right edge while
+  more content remains, using a scroll-driven animation where supported.
+*/
+.scroll-affordance-x {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
+  scrollbar-width: thin;
+  scroll-behavior: smooth;
+}
+
+.scroll-affordance-x::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  background-clip: padding-box;
+}
+
+/* The fade sits on a wrapper so it does not scroll away with the content. */
+.scroll-affordance-shell {
+  position: relative;
+}
+
+.scroll-affordance-shell::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--background));
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.scroll-affordance-shell[data-overflowing='true']::after {
+  opacity: 1;
+}
+

@@ -25,6 +25,10 @@ import {
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
 import { PRESET_COLORS } from '@/lib/ui-tokens'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 export function LabelsManagement({
   trigger,
@@ -100,6 +104,8 @@ export function LabelsManagement({
       toast.error(error instanceof Error ? error.message : 'Failed to update label')
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
 
   const handleDelete = async (id: string) => {
     if (!canManageLabels) {
@@ -259,7 +265,7 @@ export function LabelsManagement({
                       aria-label="Delete label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
                       disabled={!canManageLabels}
-                      onClick={() => handleDelete(label.id)}
+                      onClick={() => deleteConfirm.request(label)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -278,6 +284,16 @@ export function LabelsManagement({
           </div>
         </ScrollArea>
       </DialogContent>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete label "${deleteConfirm.target?.name ?? ''}"?`}
+        description="This label will be removed from every work item currently using it. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </Dialog>
   )
 }

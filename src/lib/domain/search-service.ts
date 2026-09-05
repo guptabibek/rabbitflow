@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
+import { getAreaAccessScope } from '@/lib/domain/access-control'
 
 // ============================================================================
 // FULL-TEXT SEARCH SERVICE
@@ -49,6 +50,97 @@ function toLikePattern(raw: string): string {
   return `%${sanitized}%`
 }
 
+type SearchMembership = {
+  projectId: string
+  role: string
+  extraPermissions: unknown
+}
+
+type SearchAreaScope = {
+  /** Projects where the caller may read every work item. */
+  unrestrictedProjectIds: string[]
+  /** Specific areas the caller may read in otherwise-restricted projects. */
+  allowedAreaIds: string[]
+  /** Projects where the caller may read work items with no area assigned. */
+  unassignedProjectIds: string[]
+}
+
+/**
+ * Collapse the per-project area ACLs into three flat lists that a single SQL
+ * predicate can consume. Mirrors `getAreaAccessScope` + `applyAreaScopeFilter`,
+ * which is what the work-item list endpoint applies.
+ */
+async function resolveSearchAreaScope(
+  projectIds: string[],
+  membershipByProject: Map<string, SearchMembership>
+): Promise<SearchAreaScope> {
+  const unrestrictedProjectIds: string[] = []
+  const allowedAreaIds: string[] = []
+  const unassignedProjectIds: string[] = []
+
+  await Promise.all(
+    projectIds.map(async (projectId) => {
+      const membership = membershipByProject.get(projectId)
+
+      const extraPermissions = Array.isArray(membership?.extraPermissions)
+        ? membership.extraPermissions.filter((value): value is string => typeof value === 'string')
+        : []
+
+      const scope = await getAreaAccessScope(
+        projectId,
+        // A system admin reaching a project without membership is handled by the
+        // caller; here an absent membership means no role, i.e. no access.
+        membership?.role ?? null,
+        'workitem:read',
+        extraPermissions
+      )
+
+      if (scope.unrestricted) {
+        unrestrictedProjectIds.push(projectId)
+        return
+      }
+
+      allowedAreaIds.push(...scope.allowedAreaIds)
+      if (scope.allowUnassigned) {
+        unassignedProjectIds.push(projectId)
+      }
+    })
+  )
+
+  return { unrestrictedProjectIds, allowedAreaIds, unassignedProjectIds }
+}
+
+/**
+ * Resolve a free-text query to issue ids within a single project, using the
+ * `Issue.searchVector` tsvector index plus a prefix match on the issue key.
+ *
+ * Capped rather than paginated: this feeds a filter that the caller then paginates.
+ */
+export async function findIssueIdsMatchingSearch(
+  projectId: string,
+  query: string,
+  limit = 500
+): Promise<string[]> {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const tsQuery = toTsQuery(trimmed)
+  const keyPattern = `${trimmed.replace(/[%_\\]/g, '\\$&')}%`
+
+  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT i."id"
+    FROM "Issue" i
+    WHERE i."projectId" = ${projectId}
+      AND (
+        ${tsQuery === '' ? Prisma.sql`FALSE` : Prisma.sql`i."searchVector" @@ to_tsquery('english', ${tsQuery})`}
+        OR i."key" ILIKE ${keyPattern}
+      )
+    LIMIT ${limit}
+  `)
+
+  return rows.map((row) => row.id)
+}
+
 export async function globalSearch(
   query: string,
   options: {
@@ -70,12 +162,15 @@ export async function globalSearch(
     return { items: [], total: 0, query }
   }
 
-  // Get projects the user has access to
+  // Get projects the user has access to, with the role needed for area scoping.
   const userMemberships = await db.projectMember.findMany({
     where: { userId: options.userId },
-    select: { projectId: true },
+    select: { projectId: true, role: true, extraPermissions: true },
   })
   const accessibleProjectIds = userMemberships.map((m) => m.projectId)
+  const membershipByProject = new Map(
+    userMemberships.map((membership) => [membership.projectId, membership])
+  )
 
   // If a specific project is requested, verify access
   if (options.projectId && !accessibleProjectIds.includes(options.projectId)) {
@@ -86,11 +181,27 @@ export async function globalSearch(
     ? [options.projectId]
     : accessibleProjectIds
 
-  if (targetProjectIds.length === 0 && !types.includes('user')) {
+  // Every searchable entity — users included — is now scoped to the caller's
+  // projects, so a caller with no memberships has nothing to search.
+  if (targetProjectIds.length === 0) {
     return { items: [], total: 0, query }
   }
 
   const results: SearchResultItem[] = []
+
+  // Area-level ACLs must apply here exactly as they do on /api/issues. Without
+  // this, a user restricted to a subset of area paths could read the titles and
+  // descriptions of work items in areas they are denied, simply by searching for
+  // them — the ACL was enforced on the list endpoint but not on search.
+  const areaScope = await resolveSearchAreaScope(targetProjectIds, membershipByProject)
+
+  if (
+    areaScope.unrestrictedProjectIds.length === 0 &&
+    areaScope.allowedAreaIds.length === 0 &&
+    areaScope.unassignedProjectIds.length === 0
+  ) {
+    return { items: [], total: 0, query }
+  }
 
   // === ISSUE SEARCH (tsvector) ===
   if (types.includes('issue') && targetProjectIds.length > 0 && tsQuery) {
@@ -117,6 +228,11 @@ export async function globalSearch(
       JOIN "Project" p ON p."id" = i."projectId"
       WHERE i."projectId" = ANY(${targetProjectIds})
         AND i."searchVector" @@ to_tsquery('english', ${tsQuery})
+        AND (
+          i."projectId" = ANY(${areaScope.unrestrictedProjectIds})
+          OR i."areaId" = ANY(${areaScope.allowedAreaIds})
+          OR (i."areaId" IS NULL AND i."projectId" = ANY(${areaScope.unassignedProjectIds}))
+        )
       ORDER BY "rank" DESC
       LIMIT ${pageSize}
       OFFSET ${offset}
@@ -166,6 +282,14 @@ export async function globalSearch(
       JOIN "User" u ON u."id" = c."authorId"
       WHERE i."projectId" = ANY(${targetProjectIds})
         AND c."searchVector" @@ to_tsquery('english', ${tsQuery})
+        -- Comments inherit the area ACL of the work item they hang off, so the
+        -- same predicate applies here: otherwise a restricted area's discussion
+        -- would leak even though the work item itself is filtered out.
+        AND (
+          i."projectId" = ANY(${areaScope.unrestrictedProjectIds})
+          OR i."areaId" = ANY(${areaScope.allowedAreaIds})
+          OR (i."areaId" IS NULL AND i."projectId" = ANY(${areaScope.unassignedProjectIds}))
+        )
       ORDER BY "rank" DESC
       LIMIT ${Math.ceil(pageSize / 2)}
     `)
@@ -217,10 +341,18 @@ export async function globalSearch(
   }
 
   // === USER SEARCH (ILIKE) ===
-  if (types.includes('user')) {
+  // Scoped to users who share at least one project with the caller. Without this
+  // filter any authenticated account — including one created through self-service
+  // registration with zero memberships — could enumerate the entire staff
+  // directory, names and email addresses included, by searching the corporate
+  // email domain.
+  if (types.includes('user') && targetProjectIds.length > 0) {
     const users = await db.user.findMany({
       where: {
         isActive: true,
+        projectMemberships: {
+          some: { projectId: { in: targetProjectIds } },
+        },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { email: { contains: query, mode: 'insensitive' } },

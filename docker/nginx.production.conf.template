@@ -21,14 +21,31 @@ http {
 
   resolver 127.0.0.11 ipv6=off valid=30s;
 
+  # Edge rate limiting. The application enforces its own per-identity limits;
+  # these stop abusive traffic before it reaches Node at all.
+  #   auth  — credential stuffing and password-reset mail-bombing
+  #   api   — general API abuse
+  #   conn  — SSE streams hold a connection for 5 minutes each
+  limit_req_zone $binary_remote_addr zone=auth_zone:10m rate=10r/m;
+  limit_req_zone $binary_remote_addr zone=api_zone:10m rate=120r/m;
+  limit_conn_zone $binary_remote_addr zone=conn_zone:10m;
+  limit_req_status 429;
+  limit_conn_status 429;
+
   map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
   }
 
-  map $http_x_forwarded_proto $forwarded_proto {
-    default $http_x_forwarded_proto;
-    '' $scheme;
+  # Derive the forwarded protocol from the connection nginx actually accepted,
+  # never from the client's own X-Forwarded-Proto header. The application decides
+  # whether to mark the session cookie `Secure` from this value, so echoing an
+  # attacker-supplied header would let a client control that flag.
+  #
+  # If you place another trusted proxy in front of nginx, replace $scheme with a
+  # realip-derived value rather than trusting the raw header.
+  map "" $forwarded_proto {
+    default $scheme;
   }
 
   server {
@@ -60,9 +77,40 @@ http {
       proxy_pass http://app:3000;
       expires 30d;
       add_header Cache-Control "public, max-age=2592000, immutable";
+
+      # nginx replaces rather than merges add_header sets, so the server-level
+      # security headers must be repeated in any location that adds its own.
+      add_header X-Content-Type-Options nosniff always;
+      add_header X-Frame-Options SAMEORIGIN always;
+      add_header Referrer-Policy strict-origin-when-cross-origin always;
+    }
+
+    # Authentication endpoints: strict limit, small burst for legitimate retries.
+    location ~ ^/api/auth/(login|register|mfa/verify|password-reset) {
+      limit_req zone=auth_zone burst=5 nodelay;
+      limit_conn conn_zone 20;
+
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $forwarded_proto;
+      proxy_read_timeout 60s;
+      proxy_connect_timeout 10s;
+      proxy_send_timeout 60s;
+      proxy_pass http://app:3000;
+
+      # Repeated here because nginx's add_header does not merge with the
+      # server-level set once a location adds any header of its own.
+      add_header X-Content-Type-Options nosniff always;
+      add_header X-Frame-Options SAMEORIGIN always;
+      add_header Referrer-Policy strict-origin-when-cross-origin always;
     }
 
     location / {
+      limit_req zone=api_zone burst=60 nodelay;
+      limit_conn conn_zone 50;
+
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import { createPasswordResetOtp } from '@/lib/auth-otp'
 import { isSmtpConfigured, sendEmail } from '@/lib/email'
@@ -13,6 +14,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email } = requestSchema.parse(body)
+
+    // Caps outbound reset email per IP, so this endpoint cannot be used to
+    // mail-bomb a user or to farm valid addresses.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.passwordResetRequest)
+    if (limited) return limited
 
     if (!isSmtpConfigured()) {
       return NextResponse.json(

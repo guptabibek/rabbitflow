@@ -1,4 +1,5 @@
 import { copyFile, mkdir } from 'node:fs/promises'
+import { queueAssignmentEmail, queueSlaTimers, queueWebhookEvent } from '@/lib/job-queue'
 import path from 'node:path'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -314,14 +315,14 @@ export async function POST(
         },
       })
 
-      void sendWorkItemAssignmentEmail({
+      void queueAssignmentEmail({
         issueId: createdIssue.id,
         assigneeUserId: createdIssue.assignee.id,
         actorUserId: createAuth.actor.userId,
       })
     }
 
-    void attachSlaTimers(
+    void queueSlaTimers(
       createdIssue.id,
       source.projectId,
       createdIssue.priority,
@@ -334,7 +335,7 @@ export async function POST(
         include: issueMutationInclude,
       })) ?? createdIssue
 
-    void dispatchWebhookEvent(source.projectId, 'issue.created', {
+    void queueWebhookEvent(source.projectId, 'issue.created', {
       issue: {
         id: finalIssue.id,
         key: finalIssue.key,

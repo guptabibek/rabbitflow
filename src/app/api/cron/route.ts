@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndMarkBreachedTimers } from '@/lib/domain/sla-engine'
+import { purgeExpiredAuthChallenges, secretsMatch } from '@/lib/auth-otp'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -18,7 +19,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 export async function POST(request: NextRequest) {
   try {
     const secret = request.headers.get('x-cron-secret')
-    if (!CRON_SECRET || secret !== CRON_SECRET) {
+    if (!CRON_SECRET || !secret || !secretsMatch(CRON_SECRET, secret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -33,7 +34,16 @@ export async function POST(request: NextRequest) {
       results.slaBreaches = { error: String(error) }
     }
 
-    // 2. Recurring task execution – call the existing endpoint
+    // 2. Purge expired auth challenges so the table does not grow without bound
+    try {
+      const purged = await purgeExpiredAuthChallenges()
+      results.authChallenges = { purged }
+    } catch (error) {
+      console.error('Auth challenge purge failed in cron:', error)
+      results.authChallenges = { error: String(error) }
+    }
+
+    // 3. Recurring task execution – call the existing endpoint
     try {
       const baseUrl = request.nextUrl.origin
       const response = await fetch(`${baseUrl}/api/recurring-tasks/execute`, {

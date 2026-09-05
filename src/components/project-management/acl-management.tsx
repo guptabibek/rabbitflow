@@ -26,6 +26,10 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Shield, UserCog, Trash2 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 type Rule = {
   id: string
@@ -83,6 +87,7 @@ function parseExtraPermissions(value: unknown): string[] {
 export function AclManagement() {
   const currentProject = useAppStore((state) => state.currentProject)
   const [rules, setRules] = useState<Rule[]>([])
+  const deleteConfirm = useDestructiveConfirm<Rule>()
   const [areas, setAreas] = useState<Area[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -427,7 +432,8 @@ export function AclManagement() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive"
-                          onClick={() => void handleDeleteRule(rule.id)}
+                          aria-label={`Delete ${rule.effect} rule for ${rule.role} on ${rule.permission}`}
+                          onClick={() => deleteConfirm.request(rule)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -477,6 +483,20 @@ export function AclManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title="Delete access rule?"
+        description={
+          deleteConfirm.target
+            ? `This removes the "${deleteConfirm.target.effect}" rule granting ${deleteConfirm.target.permission} to ${deleteConfirm.target.role}. Members with that role will immediately fall back to their default permissions.`
+            : ''
+        }
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDeleteRule(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

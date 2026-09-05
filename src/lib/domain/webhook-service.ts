@@ -11,6 +11,7 @@ import {
   getProjectAuditActorUserId,
   notifyProjectOperators,
 } from '@/lib/domain/notification-service'
+import { assertSafeOutboundUrl } from '@/lib/domain/url-safety'
 
 // ============================================================================
 // WEBHOOK EVENT TYPES
@@ -156,6 +157,15 @@ async function deliverWebhook(
         }
       }
 
+      // Re-validate at delivery time, not only at configuration time: DNS for a
+      // previously-public host can be repointed at an internal address later.
+      const urlCheck = await assertSafeOutboundUrl(webhook.url)
+      if (!urlCheck.ok) {
+        error = urlCheck.reason
+        success = false
+        throw new Error(urlCheck.reason)
+      }
+
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 10_000)
 
@@ -165,10 +175,18 @@ async function deliverWebhook(
           headers,
           body: payloadString,
           signal: controller.signal,
+          // Do not follow redirects: a public URL that 302s to
+          // http://169.254.169.254/ would otherwise defeat the address checks.
+          redirect: 'manual',
         })
 
         statusCode = response.status
-        responseBody = await response.text().catch(() => null)
+        // The response body is deliberately NOT captured. It was previously
+        // stored (4 KB) and rendered in the webhook management UI, which turned
+        // any project admin into the holder of an arbitrary HTTP read primitive
+        // against the internal network and cloud metadata service. A receiver's
+        // status code is all that is needed to judge delivery.
+        responseBody = null
         success = response.ok
 
         if (!success) {
@@ -192,7 +210,9 @@ async function deliverWebhook(
         event,
         payload: payload as Prisma.InputJsonValue,
         statusCode,
-        responseBody: responseBody?.slice(0, 4096) ?? null,
+        // Always null — see the delivery block above for why receiver response
+        // bodies are no longer persisted.
+        responseBody,
         duration: Date.now() - startTime,
         success,
         attempt: retryAttempt.attempt,

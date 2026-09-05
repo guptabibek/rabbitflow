@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
+import { validateUploadBuffer } from '@/lib/domain/file-upload'
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
@@ -26,21 +27,33 @@ export async function POST(
       return NextResponse.json({ error: 'Image file is required' }, { status: 400 })
     }
 
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image uploads are allowed' }, { status: 400 })
-    }
-
+    // Check the declared size before buffering so an oversized body is rejected
+    // without reading it all into memory.
     if (file.size > MAX_AVATAR_SIZE) {
       return NextResponse.json({ error: 'Avatar must be 5MB or smaller' }, { status: 400 })
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    // Validate by content, not by the client-supplied MIME type or filename. The
+    // previous implementation trusted `file.type` and took the extension from
+    // `file.name`, which let an HTML payload be stored as `<id>-<ts>.html` and
+    // served as active content from this application's own origin.
+    const validation = validateUploadBuffer(buffer, file.name, {
+      allow: 'image',
+      maxBytes: MAX_AVATAR_SIZE,
+      namePrefix: id,
+    })
+
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars')
     await mkdir(uploadDir, { recursive: true })
 
-    const safeExtension = path.extname(file.name) || '.png'
-    const fileName = `${id}-${Date.now()}${safeExtension}`
+    const fileName = validation.storedFileName
     const destination = path.join(uploadDir, fileName)
-    const buffer = Buffer.from(await file.arrayBuffer())
 
     await writeFile(destination, buffer)
 

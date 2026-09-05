@@ -1,9 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { X, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOnboardingSafe } from '@/hooks/use-onboarding'
+
+/**
+ * Subscribe to browser history changes.
+ *
+ * The app navigates via client-side state rather than the router for most views,
+ * so `popstate` is the only signal available; that is sufficient here, because a
+ * route-scoped tooltip only needs to re-evaluate when the URL actually changes.
+ */
+function subscribeToLocation(onChange: () => void) {
+  window.addEventListener('popstate', onChange)
+  return () => window.removeEventListener('popstate', onChange)
+}
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -59,11 +71,19 @@ export function OnboardingTooltip({
     !isDismissed &&
     step.key === ctx.status.currentStep // Only show for the current active step
 
-  // Route check
-  const [currentPath, setCurrentPath] = useState('')
-  useEffect(() => {
-    setCurrentPath(window.location.pathname)
-  }, [])
+  // Route check.
+  //
+  // Read the path with useSyncExternalStore rather than setting state inside an
+  // effect: the effect version triggered a cascading second render on every
+  // mount, and reported an empty path on the first one — so a tooltip scoped to
+  // a route flickered or briefly rendered in the wrong place.
+  const currentPath = useSyncExternalStore(
+    subscribeToLocation,
+    () => window.location.pathname,
+    // Server snapshot: no location during SSR, and an empty path simply means
+    // "no route match yet", which is the correct pre-hydration answer.
+    () => ''
+  )
 
   const routeMatch = !route || currentPath.includes(route)
   const visible = shouldShow && routeMatch

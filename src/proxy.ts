@@ -10,7 +10,8 @@ export default async function proxy(request: NextRequest) {
   const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApiRoute = pathname.startsWith('/api/admin')
   const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
-  const isPublicHealthRoute = pathname === '/api/health'
+  // Covers /api/health, /api/health/live and /api/health/ready.
+  const isPublicHealthRoute = pathname === '/api/health' || pathname.startsWith('/api/health/')
 
   // Public auth APIs, no auth required.
   if (
@@ -26,6 +27,20 @@ export default async function proxy(request: NextRequest) {
   }
 
   const token = request.cookies.get('auth-token')?.value
+
+  // Programmatic API access presents a bearer token instead of a session cookie.
+  // This gate runs on the edge runtime and cannot reach the database to validate
+  // it, so the request is forwarded and `domain/auth.ts` authenticates the token
+  // against ApiToken (checking hash, revocation, expiry, owner activity and
+  // scope). Nothing is trusted here beyond "there is a bearer header to check".
+  //
+  // Restricted to /api/ so a bearer header can never stand in for a session on a
+  // page route, and no x-user-id is injected, so an unauthenticated request that
+  // slips past here still resolves to no identity downstream.
+  const hasBearerToken = request.headers.get('authorization')?.toLowerCase().startsWith('bearer ')
+  if (!token && hasBearerToken && pathname.startsWith('/api/') && !isAdminApiRoute) {
+    return NextResponse.next()
+  }
 
   if (!token) {
     if (isPublicAuthRoute) {
@@ -80,5 +95,14 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt).*)'],
+  // Excludes framework assets and the handful of public branding files that must
+  // load on the unauthenticated login page — `logo.svg` is the favicon, and
+  // gating it made every page request 307 to /login for that asset.
+  //
+  // Deliberately narrow: only these exact names are exempt. `/uploads/**` stays
+  // behind the gate, because those are user-supplied files that must not be
+  // readable without a session.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|logo\\.svg|manifest\\.webmanifest|apple-touch-icon\\.png).*)',
+  ],
 }

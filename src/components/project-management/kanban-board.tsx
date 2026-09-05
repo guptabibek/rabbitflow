@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCorners, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Inbox, Plus } from 'lucide-react'
@@ -86,6 +86,32 @@ export function KanbanBoard() {
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
   const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
   const canUpdateBoard = currentProjectPermissions.includes('board:update')
+
+  // Columns beyond the viewport were previously unreachable-looking: the board
+  // scrolled, but overlay scrollbars meant nothing indicated that Done and
+  // Cancelled existed off-screen. Track whether content remains to the right so
+  // the edge fade can say so.
+  const boardScrollRef = useRef<HTMLDivElement | null>(null)
+  const [hasHiddenColumns, setHasHiddenColumns] = useState(false)
+
+  const updateOverflowState = useCallback(() => {
+    const element = boardScrollRef.current
+    if (!element) return
+
+    const remaining = element.scrollWidth - element.clientWidth - element.scrollLeft
+    setHasHiddenColumns(remaining > 8)
+  }, [])
+
+  useEffect(() => {
+    updateOverflowState()
+
+    const element = boardScrollRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateOverflowState)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [updateOverflowState, issues.length])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -220,7 +246,15 @@ export function KanbanBoard() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex h-full gap-4 overflow-x-auto p-4" role="region" aria-label="Kanban board">
+      <div className="scroll-affordance-shell h-full" data-overflowing={hasHiddenColumns}>
+      <div
+        ref={boardScrollRef}
+        onScroll={updateOverflowState}
+        className="scroll-affordance-x flex h-full gap-4 overflow-x-auto p-4"
+        role="region"
+        aria-label="Kanban board"
+        tabIndex={0}
+      >
         {issuesByStatus.map((column) => (
           <BoardColumn
             key={column.id}
@@ -258,6 +292,7 @@ export function KanbanBoard() {
             </>
           </BoardColumn>
         ))}
+      </div>
       </div>
       <DragOverlay>
         {activeIssue ? (

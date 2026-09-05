@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db, isUniqueConstraintError } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
@@ -121,7 +122,7 @@ export async function POST(
       },
     })
 
-    void dispatchWebhookEvent(projectId, 'member.added', {
+    void queueWebhookEvent(projectId, 'member.added', {
       member: {
         id: member.id,
         userId: member.userId,

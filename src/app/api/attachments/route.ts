@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
+import { sanitizeDisplayFileName, validateUploadBuffer } from '@/lib/domain/file-upload'
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
@@ -77,23 +78,40 @@ export async function POST(request: NextRequest) {
     const auth = await requireProjectPermission(request, issue.projectId, 'workitem:update')
     if (!auth.ok) return auth.response
 
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    // Validate by content. This endpoint previously performed no type check at
+    // all and derived the stored extension from the client-supplied filename,
+    // so any file — including HTML or SVG — could be served as active content
+    // from this application's own origin.
+    const validation = validateUploadBuffer(buffer, file.name, {
+      allow: 'attachment',
+      maxBytes: MAX_ATTACHMENT_SIZE,
+      namePrefix: issue.id,
+    })
+
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'attachments')
     await mkdir(uploadDir, { recursive: true })
 
-    const extension = path.extname(file.name) || ''
-    const safeName = `${issue.id}-${Date.now()}${extension}`
+    const safeName = validation.storedFileName
     const filePath = path.join(uploadDir, safeName)
-    await writeFile(filePath, Buffer.from(await file.arrayBuffer()))
+    await writeFile(filePath, buffer)
 
     let attachment
     try {
       attachment = await db.attachment.create({
         data: {
           issueId,
-          fileName: file.name,
+          // Display name only — never used to build a path.
+          fileName: sanitizeDisplayFileName(file.name),
           filePath: `/uploads/attachments/${safeName}`,
           fileSize: file.size,
-          mimeType: file.type || 'application/octet-stream',
+          // Record the type we detected, not the one the client claimed.
+          mimeType: validation.detectedType,
           uploadedBy: auth.actor.userId,
         },
         include: {
@@ -112,7 +130,7 @@ export async function POST(request: NextRequest) {
       action: 'attachment_added',
       details: {
         key: issue.key,
-        fileName: file.name,
+        fileName: attachment.fileName,
       },
     })
 

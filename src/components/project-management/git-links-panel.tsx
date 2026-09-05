@@ -31,6 +31,10 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { fetchWithRetry, getApiErrorMessage, parseJsonResponse } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,6 +149,8 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
     }
   }
 
+  const deleteConfirm = useDestructiveConfirm<GitLink>()
+
   const handleDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/git-links/${id}`, { method: 'DELETE' })
@@ -239,7 +245,8 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"
-                onClick={() => handleDelete(link.id)}
+                onClick={() => deleteConfirm.request(link)}
+                aria-label="Remove linked git resource"
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -316,6 +323,21 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title="Remove git link?"
+        description={
+          deleteConfirm.target
+            ? `This unlinks the ${deleteConfirm.target.linkType.replace('_', ' ')} "${deleteConfirm.target.title ?? deleteConfirm.target.externalUrl}" from this work item. The branch, commit or pull request itself is not affected.`
+            : ''
+        }
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

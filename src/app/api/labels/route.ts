@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    void dispatchWebhookEvent(data.projectId, 'label.created', {
+    void queueWebhookEvent(data.projectId, 'label.created', {
       label: {
         id: label.id,
         name: label.name,

@@ -40,6 +40,7 @@ model User {
   ledTeams                    Team[]                   @relation("TeamLead")
   createdTeams                Team[]                   @relation("TeamCreator")
   authSessions                AuthSession[]
+  authChallenges              AuthChallenge[]
   securityAuditEventsAuthored SecurityAuditEvent[]     @relation("SecurityAuditActor")
   securityAuditEventsTargeted SecurityAuditEvent[]     @relation("SecurityAuditTarget")
   notifications               Notification[]           @relation("NotificationRecipient")
@@ -89,6 +90,37 @@ model AuthSession {
 
   @@index([userId, createdAt])
   @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+}
+
+/// Short-lived authentication challenges: in-progress MFA enrolment/verification
+/// and password-reset OTPs.
+///
+/// These previously lived in Redis via the `cacheSet`/`cacheGet` helpers, which
+/// silently no-op when Redis is unavailable. That made Redis a hard dependency
+/// for signing in: the challenge was issued, the write was discarded, and the
+/// verify step then failed forever with "MFA session expired". Auth state must
+/// not depend on a cache whose writes can vanish.
+model AuthChallenge {
+  id        String   @id @default(cuid())
+  /// Opaque random token handed to the client. Not the primary key so it can be
+  /// rotated independently and looked up without exposing row ids.
+  token     String   @unique
+  /// 'mfa_setup' | 'mfa_verify' | 'password_reset'
+  kind      String
+  userId    String
+  /// TOTP seed being enrolled (mfa_setup only). Promoted to User.mfaSecret on success.
+  secret    String?
+  /// SHA-256 of the emailed OTP (password_reset only). Never stored in the clear.
+  codeHash  String?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  consumedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind, consumedAt])
   @@index([expiresAt])
 }
 
@@ -478,7 +510,9 @@ model Issue {
   project          Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   typeDefinition   WorkItemTypeDefinition? @relation(fields: [projectId, workItemType], references: [projectId, key], onDelete: Restrict)
   assignee         User?                   @relation("AssignedIssues", fields: [assigneeId], references: [id], onDelete: SetNull)
-  reporter         User                    @relation("ReportedIssues", fields: [reporterId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: deleting a user must never delete the work items they
+  // reported. Users are deactivated, not deleted (see AuthChallenge/isActive).
+  reporter         User                    @relation("ReportedIssues", fields: [reporterId], references: [id], onDelete: Restrict)
   iteration        Iteration?              @relation(fields: [iterationId], references: [id], onDelete: SetNull)
   area             Area?                   @relation(fields: [areaId], references: [id], onDelete: SetNull)
   stateRecord      State?                  @relation(fields: [stateId], references: [id], onDelete: SetNull)
@@ -577,7 +611,7 @@ model Attachment {
   uploadedAt DateTime @default(now())
 
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
 
   @@index([issueId])
 }
@@ -615,7 +649,7 @@ model Comment {
   updatedAt     DateTime                 @updatedAt
 
   issue     Issue             @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author    User              @relation(fields: [authorId], references: [id], onDelete: Restrict)
   mentions  CommentMention[]
   revisions CommentRevision[]
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
@@ -164,7 +165,7 @@ export async function DELETE(
       where: { id: existingMember.id },
     })
 
-    void dispatchWebhookEvent(projectId, 'member.removed', {
+    void queueWebhookEvent(projectId, 'member.removed', {
       member: {
         id: existingMember.id,
         userId: existingMember.userId,

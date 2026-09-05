@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "test": "node --test --test-isolation=none --experimental-strip-types tests/domain/content.test.ts tests/domain/mentions.test.ts tests/domain/paths.test.ts tests/domain/rbac.test.ts tests/domain/work-item-hierarchy.test.ts tests/domain/work-item-view.test.ts tests/domain/workflow.test.ts tests/domain/reports.test.ts tests/domain/import-service.test.ts tests/domain/automation-service.test.ts tests/domain/automation-failure.test.ts tests/domain/document-service.test.ts tests/domain/email-templates.test.ts tests/domain/email-queue.test.ts tests/domain/resilience.test.ts tests/domain/data-integrity.test.ts tests/domain/state-machine.test.ts tests/domain/webhook-service.test.ts",
+    "test": "node --test --test-isolation=none --experimental-strip-types --import ./tests/support/alias-hooks.mjs \"tests/domain/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",

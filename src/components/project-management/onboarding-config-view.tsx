@@ -74,12 +74,29 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    // `setLoading(true)` ran synchronously in the effect body, which forces a
+    // second render on every mount. Loading starts true and is only cleared
+    // after the fetch settles, so the synchronous set was redundant as well.
+    //
+    // `cancelled` guards against a late response from a previous projectId
+    // overwriting the current one.
+    let cancelled = false
+
     fetch(`/api/onboarding/analytics?projectId=${projectId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+      .then((d) => {
+        if (!cancelled) setData(d)
+      })
+      .catch(() => {
+        if (!cancelled) setData(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [projectId])
 
   if (loading) {

@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch rather than paying for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Values used only by CI. Never reuse these anywhere else.
+  JWT_SECRET: ci-only-secret-value-at-least-32-bytes-long-xxxxx
+  CRON_SECRET: ci-only-cron-secret
+  APP_URL: http://localhost:3000
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+jobs:
+  # Static checks are fast and catch most regressions, so they gate everything else.
+  static:
+    name: Typecheck, lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The Prisma client is generated code; nothing typechecks without it.
+      - run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+  migrations:
+    name: Migrations apply cleanly
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rabbitflow
+          POSTGRES_PASSWORD: rabbitflow
+          POSTGRES_DB: rabbitflow_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U rabbitflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://rabbitflow:rabbitflow@localhost:5432/rabbitflow_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+
+      - name: Apply migrations to an empty database
+        run: npx prisma migrate deploy
+
+      # Catches a schema.prisma edit that was never captured in a migration —
+      # the failure mode where local dev works and a fresh deploy does not.
+      - name: Schema matches migrations
+        run: npx prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url "$DATABASE_URL" --exit-code
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    needs: static
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    needs: static
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rabbitflow
+          POSTGRES_PASSWORD: rabbitflow
+          POSTGRES_DB: rabbitflow_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U rabbitflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://rabbitflow:rabbitflow@localhost:5432/rabbitflow_e2e
+      REDIS_URL: redis://localhost:6379
+      # Keep the suite deterministic: no MFA challenge, no signup gate.
+      MFA_REQUIRE_ENROLLMENT: 'false'
+      ALLOW_SELF_REGISTRATION: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Advisory only for now: fails the job on high/critical so it is visible,
+      # without blocking on transitive lows that cannot be fixed immediately.
+      - name: npm audit (high and above)
+        run: npm audit --audit-level=high

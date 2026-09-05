@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueAssignmentEmail, queueSlaTimers, queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { createAuditLog } from '@/lib/domain/audit'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { checkActorPermission, requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
 import { sanitizeRichText } from '@/lib/domain/content'
 import { formatProjectIssueKey } from '@/lib/domain/issue-key-format'
@@ -27,6 +28,7 @@ import {
   validateSprintAssignmentTeamContext,
   validateIssueReferences,
 } from '@/lib/domain/issues'
+import { findIssueIdsMatchingSearch } from '@/lib/domain/search-service'
 
 function toAutomationIssueSnapshot(issue: {
   id: string
@@ -176,11 +178,28 @@ export async function GET(request: NextRequest) {
       }
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { key: { contains: search, mode: 'insensitive' } },
-        ...(minimal ? [] : [{ description: { contains: search, mode: 'insensitive' } }]),
-      ]
+      // Use the tsvector index that Issue.searchVector already maintains via a
+      // database trigger. Leading-wildcard ILIKE cannot use an index, so the
+      // previous `contains` filters sequentially scanned the project's issues on
+      // every keystroke-driven request.
+      //
+      // Issue keys are matched separately: they are short identifiers like
+      // "RABBIT-42", not free text, and users expect prefix matching on them.
+      const matchingIds = await findIssueIdsMatchingSearch(projectId, search)
+
+      if (matchingIds.length === 0) {
+        return NextResponse.json([], {
+          headers: {
+            'x-page': String(page),
+            'x-page-size': String(pageSize),
+            ...(includeTotal ? { 'x-total-count': '0' } : {}),
+          },
+        })
+      }
+
+      where.id = where.id
+        ? { ...(where.id as Record<string, unknown>), in: matchingIds }
+        : { in: matchingIds }
     }
 
     where = applyAreaScopeFilter(where, areaScope)
@@ -271,23 +290,23 @@ export async function POST(request: NextRequest) {
     })
     if (!auth.ok) return auth.response
 
+    // Reuse the actor resolved above rather than re-running the full auth chain
+    // for each additional permission.
     if (data.assigneeId) {
-      const assignPermission = await requireProjectPermission(
-        request,
+      const assignPermission = await checkActorPermission(
+        auth.actor,
         data.projectId,
         'workitem:assign',
-        undefined,
         { areaId: data.areaId ?? null }
       )
       if (!assignPermission.ok) return assignPermission.response
     }
 
     if (data.status && data.status !== 'backlog') {
-      const transitionPermission = await requireProjectPermission(
-        request,
+      const transitionPermission = await checkActorPermission(
+        auth.actor,
         data.projectId,
         'workitem:transition',
-        undefined,
         { areaId: data.areaId ?? null }
       )
       if (!transitionPermission.ok) return transitionPermission.response
@@ -425,7 +444,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Attach SLA timers based on matching policies
-    void attachSlaTimers(
+    void queueSlaTimers(
       issue.id,
       data.projectId,
       issue.priority,
@@ -450,7 +469,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      void sendWorkItemAssignmentEmail({
+      void queueAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: auth.actor.userId,
@@ -471,7 +490,7 @@ export async function POST(request: NextRequest) {
         include: issueMutationInclude,
       })) ?? issue
 
-    void dispatchWebhookEvent(data.projectId, 'issue.created', {
+    void queueWebhookEvent(data.projectId, 'issue.created', {
       issue: {
         id: finalIssue.id,
         key: finalIssue.key,

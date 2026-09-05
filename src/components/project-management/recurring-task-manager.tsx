@@ -35,6 +35,10 @@ import {
   CalendarDays,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types — aligned with Prisma schema (RecurringTask model)
@@ -228,6 +232,8 @@ export function RecurringTaskManager() {
       toast.error(error instanceof Error ? error.message : 'Failed to update recurring task')
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; templateTitle: string }>()
 
   const handleDelete = async (id: string) => {
     try {
@@ -441,7 +447,7 @@ export function RecurringTaskManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
-                    onClick={() => handleDelete(task.id)}
+                    onClick={() => deleteConfirm.request(task)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -451,6 +457,16 @@ export function RecurringTaskManager() {
           ))}
         </div>
       )}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete recurring task "${deleteConfirm.target?.templateTitle ?? ''}"?`}
+        description="No further work items will be generated from this template. Items it already created are kept. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

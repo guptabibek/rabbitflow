@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndMarkBreachedTimers } from '@/lib/domain/sla-engine'
+import { secretsMatch } from '@/lib/auth-otp'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -12,7 +13,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 export async function POST(request: NextRequest) {
   try {
     const secret = request.headers.get('x-cron-secret')
-    if (!CRON_SECRET || secret !== CRON_SECRET) {
+    if (!CRON_SECRET || !secret || !secretsMatch(CRON_SECRET, secret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

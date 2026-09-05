@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { queueAssignmentEmail, queueWebhookEvent } from '@/lib/job-queue'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
@@ -900,7 +901,7 @@ export async function PUT(
         },
       })
 
-      void sendWorkItemAssignmentEmail({
+      void queueAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: updatePermission.actor.userId,
@@ -975,7 +976,7 @@ export async function PUT(
         include: workItemPageIssueInclude,
       })) ?? issue
 
-    void dispatchWebhookEvent(currentIssue.projectId, 'issue.updated', {
+    void queueWebhookEvent(currentIssue.projectId, 'issue.updated', {
       issue: {
         id: finalIssue.id,
         key: finalIssue.key,
@@ -991,7 +992,7 @@ export async function PUT(
     })
 
     if (finalIssue.status !== currentIssue.status) {
-      void dispatchWebhookEvent(currentIssue.projectId, 'issue.status_changed', {
+      void queueWebhookEvent(currentIssue.projectId, 'issue.status_changed', {
         issue: {
           id: finalIssue.id,
           key: finalIssue.key,
@@ -1005,7 +1006,7 @@ export async function PUT(
     }
 
     if (finalIssue.assigneeId !== currentIssue.assigneeId) {
-      void dispatchWebhookEvent(currentIssue.projectId, 'issue.assigned', {
+      void queueWebhookEvent(currentIssue.projectId, 'issue.assigned', {
         issue: {
           id: finalIssue.id,
           key: finalIssue.key,
@@ -1086,7 +1087,7 @@ export async function DELETE(
       await tx.issue.delete({ where: { id } })
     })
 
-    void dispatchWebhookEvent(issue.projectId, 'issue.deleted', {
+    void queueWebhookEvent(issue.projectId, 'issue.deleted', {
       issue: {
         id,
         key: issue.key,

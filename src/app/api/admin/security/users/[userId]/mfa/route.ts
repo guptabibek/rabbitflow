@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { invalidateAllMfaChallenges } from '@/lib/auth-otp'
+import { invalidateUserMfaChallenges } from '@/lib/auth-otp'
 import { requireSystemAdmin } from '@/lib/domain/auth'
 import { createSecurityAuditEvent } from '@/lib/security-audit'
 
@@ -89,7 +89,9 @@ export async function POST(
       },
     })
 
-    await invalidateAllMfaChallenges()
+    // Scoped to this user: invalidating every user's in-flight challenge would
+    // break sign-in for anyone mid-authentication elsewhere in the system.
+    await invalidateUserMfaChallenges(id)
 
     return NextResponse.json({
       success: true,

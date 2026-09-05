@@ -37,6 +37,10 @@ import {
   X,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -246,6 +250,8 @@ export function AutomationRuleBuilder() {
 
     await fetchRules()
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
 
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/automations/${id}`, { method: 'DELETE' })
@@ -629,7 +635,7 @@ export function AutomationRuleBuilder() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => handleDelete(rule.id)}
+                      onClick={() => deleteConfirm.request(rule)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -714,6 +720,16 @@ export function AutomationRuleBuilder() {
           ))}
         </div>
       )}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete automation rule "${deleteConfirm.target?.name ?? ''}"?`}
+        description="This rule will stop running immediately. Work items it already changed are not reverted. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

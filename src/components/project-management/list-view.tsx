@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAppStore, type Issue } from '@/store/app-store'
+import { compareIssueKeys } from '@/lib/domain/issue-key-format'
 import {
   Table,
   TableBody,
@@ -181,7 +182,7 @@ export function ListView() {
 
       switch (sortField) {
         case 'key':
-          comparison = a.key.localeCompare(b.key)
+          comparison = compareIssueKeys(a.key, b.key)
           break
         case 'title':
           comparison = a.title.localeCompare(b.title)

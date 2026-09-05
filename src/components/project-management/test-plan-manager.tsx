@@ -40,6 +40,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types — aligned with actual API / Prisma schema
@@ -270,6 +274,8 @@ export function TestPlanManager() {
       setSaving(false)
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; title: string }>()
 
   const handleDeletePlan = async (id: string) => {
     try {
@@ -571,7 +577,7 @@ export function TestPlanManager() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
-                  onClick={() => handleDeletePlan(selectedPlan.id)}
+                  onClick={() => deleteConfirm.request(selectedPlan)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -720,6 +726,16 @@ export function TestPlanManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete test plan "${deleteConfirm.target?.title ?? ''}"?`}
+        description="All test cases and recorded runs belonging to this plan will be deleted. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDeletePlan(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

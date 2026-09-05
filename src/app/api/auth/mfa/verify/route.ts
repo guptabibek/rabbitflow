@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import { AUTH_COOKIE, getAuthCookieOptions, signToken } from '@/lib/auth'
 import { createAuthSession } from '@/lib/auth-session'
@@ -21,6 +22,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { challengeToken, code } = verifyMfaSchema.parse(body)
+
+    // Bounded per challenge as well as per IP: the per-challenge attempt counter
+    // resets whenever a new challenge is issued, so without this an attacker
+    // could re-request challenges to keep guessing TOTP codes indefinitely.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.mfaVerify, challengeToken)
+    if (limited) return limited
 
     const challenge = await getMfaChallenge(challengeToken)
 

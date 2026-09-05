@@ -19,7 +19,7 @@ services:
       NEXT_PUBLIC_APP_URL: ${APP_URL:?APP_URL must be set}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-20}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       RUN_BOOTSTRAP_SEED: ${RUN_BOOTSTRAP_SEED:-false}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
@@ -42,7 +42,9 @@ services:
     volumes:
       - app_uploads:/app/public/uploads
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      # Readiness, not liveness: an instance that has lost Postgres or Redis cannot
+      # serve logins and must leave the rotation rather than keep taking traffic.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -133,8 +135,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+    # Deliberately NOT published to the host. Postgres is reachable only over the
+    # `internal` network, which is declared `internal: true`. Publishing it put the
+    # database on the host interface, where only the host firewall stood between it
+    # and the network. For ad-hoc admin access use `docker compose exec postgres psql`
+    # or an SSH tunnel.
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -156,13 +163,28 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    # Redis holds MFA challenges and password-reset OTPs, so an unauthenticated
+    # Redis is an authentication bypass — not merely a cache leak. It is password
+    # protected and, like Postgres, not published to the host.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+      - --loglevel
+      - warning
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
       interval: 10s
       timeout: 3s
       retries: 10

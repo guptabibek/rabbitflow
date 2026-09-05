@@ -196,7 +196,12 @@ export function AppSidebar({ currentView, onViewChange }: AppSidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav aria-label="Main navigation" className="px-1.5 py-1.5 flex-1 overflow-y-auto">
+      {/*
+        min-h-0 is required: in a flex column `flex-1` still resolves min-height
+        to `auto`, so the nav refuses to shrink below its content and pushes the
+        footer (setup progress + New Work Item) past the bottom of the viewport.
+      */}
+      <nav aria-label="Main navigation" className="px-1.5 py-1.5 flex-1 min-h-0 overflow-y-auto">
         {NAV_SECTIONS.map((section, sectionIndex) => (
           <div key={section.label ?? 'top'} className={sectionIndex > 0 ? 'mt-4' : ''}>
             {section.label && (

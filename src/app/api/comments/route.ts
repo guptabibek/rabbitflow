@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/domain/audit'
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    void dispatchWebhookEvent(issue.projectId, 'comment.created', {
+    void queueWebhookEvent(issue.projectId, 'comment.created', {
       comment: {
         id: comment.id,
         issueId: comment.issueId,

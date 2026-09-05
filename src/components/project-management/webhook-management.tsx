@@ -36,6 +36,10 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,6 +184,8 @@ export function WebhookManagement() {
 
     await fetchWebhooks()
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string; url: string }>()
 
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' })
@@ -341,7 +347,7 @@ export function WebhookManagement() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => handleDelete(wh.id)}
+                      onClick={() => deleteConfirm.request(wh)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -393,6 +399,16 @@ export function WebhookManagement() {
           ))}
         </div>
       )}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete webhook "${deleteConfirm.target?.name ?? ''}"?`}
+        description="No further events will be delivered to this endpoint, and its delivery history will be removed. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

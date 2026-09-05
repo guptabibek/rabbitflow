@@ -32,16 +32,23 @@ export async function GET(request: NextRequest) {
     })
 
     if (!membership) {
-      return NextResponse.json(
-        {
+      // System admins have implicit access to every project, matching the
+      // fallback in resolveActorContextResult().
+      if (auth.user.globalRole === 'admin') {
+        return NextResponse.json({
           projectId,
           userId: auth.user.id,
-          role: 'Viewer',
-          permissions: listPermissions('Viewer'),
+          role: 'Admin',
+          permissions: listPermissions('Admin'),
           membership: null,
-        },
-        { status: 200 }
-      )
+        })
+      }
+
+      // Previously this returned 200 with a full Viewer permission set, which
+      // confirmed the project existed and made the UI render a read-enabled
+      // workspace whose every subsequent API call then failed. Non-members get
+      // no permissions and no confirmation that the project exists.
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const normalizedRole = normalizeProjectRole(membership.role)

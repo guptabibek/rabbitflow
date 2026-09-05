@@ -1,4 +1,10 @@
-import { expect, type APIResponse, type Locator, type Page } from '@playwright/test'
+import {
+  expect,
+  type APIResponse,
+  type Locator,
+  type Page,
+  type Response as PlaywrightResponse,
+} from '@playwright/test'
 
 type ProjectInput = {
   name: string
@@ -201,7 +207,12 @@ export async function openNotificationPanel(page: Page) {
   await expect(page.getByTestId('notification-panel')).toBeVisible()
 }
 
-export async function readJson(response: APIResponse) {
+/**
+ * Read a JSON body from either kind of Playwright response: `APIResponse` (from
+ * `request.get()` and friends) or `Response` (from `page.waitForResponse()`).
+ * Both expose `.json()`, but they are unrelated types, so accept the union.
+ */
+export async function readJson(response: APIResponse | PlaywrightResponse) {
   return response.json()
 }
 

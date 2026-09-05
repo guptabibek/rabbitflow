@@ -39,6 +39,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,6 +205,8 @@ export function SlaDashboard() {
       setSaving(false)
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
 
   const handleDeletePolicy = async (id: string) => {
     try {
@@ -481,7 +487,7 @@ export function SlaDashboard() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => handleDeletePolicy(policy.id)}
+                      onClick={() => deleteConfirm.request(policy)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -492,6 +498,16 @@ export function SlaDashboard() {
           )}
         </TabsContent>
       </Tabs>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete SLA policy "${deleteConfirm.target?.name ?? ''}"?`}
+        description="Work items currently tracked against this policy stop being measured and their running timers are discarded. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteConfirm.target) await handleDeletePolicy(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

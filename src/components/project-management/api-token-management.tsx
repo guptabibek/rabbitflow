@@ -58,15 +58,21 @@ interface ApiToken {
   createdAt: string
 }
 
-const ALL_SCOPES = [
-  'issues:read',
-  'issues:write',
-  'projects:read',
-  'projects:write',
-  'comments:read',
-  'comments:write',
-  'admin',
-]
+/**
+ * The scopes the API actually enforces.
+ *
+ * This list previously advertised seven fine-grained scopes
+ * (`issues:read`, `projects:write`, `admin`, …) that no server code ever
+ * checked — tokens were not validated at all. Requests now authenticate through
+ * `authenticateApiToken`, which grants a token exactly the permissions its owner
+ * has, narrowed by these two scopes.
+ */
+const ALL_SCOPES = ['read', 'write'] as const
+
+const SCOPE_DESCRIPTIONS: Record<string, string> = {
+  read: 'GET requests only',
+  write: 'Create, update and delete',
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -124,7 +130,9 @@ export function ApiTokenManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: tName.trim(),
-          scopes: tScopes.length > 0 ? tScopes : ALL_SCOPES,
+          // Default to read-only rather than every scope: an unattended default
+          // should be the least privileged one.
+          scopes: tScopes.length > 0 ? tScopes : ['read'],
           expiresInDays: expDays > 0 ? expDays : undefined,
         }),
       })
@@ -261,13 +269,15 @@ export function ApiTokenManagement() {
                         variant={tScopes.includes(scope) ? 'default' : 'outline'}
                         className="cursor-pointer"
                         onClick={() => toggleScope(scope)}
+                        title={SCOPE_DESCRIPTIONS[scope]}
                       >
-                        {scope}
+                        {scope} — {SCOPE_DESCRIPTIONS[scope]}
                       </Badge>
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    No selection = all scopes.
+                    A token can never exceed your own permissions. No selection defaults to
+                    read-only.
                   </p>
                 </div>
                 <div className="space-y-1.5">

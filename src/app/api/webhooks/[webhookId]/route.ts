@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { WEBHOOK_EVENTS, getWebhookDeliveries } from '@/lib/domain/webhook-service'
+import { assertSafeOutboundUrl } from '@/lib/domain/url-safety'
 
 const updateWebhookSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
@@ -85,6 +86,15 @@ export async function PUT(
           { error: `Invalid events: ${invalidEvents.join(', ')}` },
           { status: 400 }
         )
+      }
+    }
+
+    // Re-validate on update: otherwise a webhook could be created with a public
+    // URL and then repointed at internal infrastructure.
+    if (data.url !== undefined) {
+      const urlCheck = await assertSafeOutboundUrl(data.url)
+      if (!urlCheck.ok) {
+        return NextResponse.json({ error: urlCheck.reason }, { status: 400 })
       }
     }
 
