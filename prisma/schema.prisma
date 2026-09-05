@@ -170,6 +170,15 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// Which revision of the system-record provisioning this project has had
+  /// applied (states, areas, teams, work-item types, field and state mappings).
+  ///
+  /// Read paths compare this against SYSTEM_RECORDS_VERSION, so a single indexed
+  /// column read replaces the ten COUNT queries that previously ran per project
+  /// per process every five minutes. Because it lives in the database rather
+  /// than an in-process map, replicas agree on whether provisioning is needed.
+  systemRecordsVersion Int @default(0)
+
   issues                    Issue[]
   members                   ProjectMember[]
   labels                    Label[]

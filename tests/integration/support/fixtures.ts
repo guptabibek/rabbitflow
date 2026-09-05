@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from './db.ts'
 import { signToken } from '../../../src/lib/auth.ts'
-import { ensureProjectSystemRecordsTx } from '../../../src/lib/domain/project-system-records.ts'
+import { provisionProjectSystemRecords } from '../../../src/lib/domain/project-bootstrap.ts'
 
 /**
  * Fixture builders for integration tests.
@@ -72,10 +72,7 @@ export async function createProject(options?: { key?: string; name?: string }) {
   // Provision states, areas, teams and work-item types the same way the
   // application does, so tests exercise the real schema rather than a
   // hand-rolled subset.
-  await db.$transaction((tx) => ensureProjectSystemRecordsTx(tx, project.id), {
-    maxWait: 10_000,
-    timeout: 60_000,
-  })
+  await provisionProjectSystemRecords(project.id)
 
   return project
 }

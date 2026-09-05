@@ -4,6 +4,7 @@ import { requireAuthenticatedUser, requireSystemAdmin } from '@/lib/domain/auth'
 import { setActiveProjectCookie } from '@/lib/domain/project-context'
 import { seedOnboardingStepsTx } from '@/lib/domain/onboarding-engine'
 import { ensureProjectSystemRecordsTx } from '@/lib/domain/project-system-records'
+import { SYSTEM_RECORDS_VERSION } from '@/lib/domain/project-bootstrap'
 import { z } from 'zod'
 
 const createProjectSchema = z.object({
@@ -90,6 +91,14 @@ export async function POST(request: NextRequest) {
 
       await ensureProjectSystemRecordsTx(tx, createdProject.id, auth.user.id)
       await seedOnboardingStepsTx(tx, createdProject.id)
+
+      // Stamp the provisioning revision inside the same transaction, so a
+      // project is either fully provisioned and marked, or neither. Read paths
+      // check this column instead of counting records.
+      await tx.project.update({
+        where: { id: createdProject.id },
+        data: { systemRecordsVersion: SYSTEM_RECORDS_VERSION },
+      })
 
       return tx.project.findUniqueOrThrow({
         where: { id: createdProject.id },
