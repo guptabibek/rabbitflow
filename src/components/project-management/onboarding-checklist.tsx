@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOnboarding, type OnboardingStep } from '@/hooks/use-onboarding'
+import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -191,7 +192,42 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
     recordEvent,
   } = useOnboarding()
 
-  const [isExpanded, setIsExpanded] = useState(true)
+  /**
+   * Expanded only while the user is genuinely new.
+   *
+   * Ten always-open steps occupied roughly two thirds of the dashboard, so a
+   * returning user's first impression of their own workspace was a to-do list
+   * about the product rather than their work. Once they are past the first
+   * couple of steps it collapses to a one-line progress summary they can reopen.
+   *
+   * The choice is remembered per project, so collapsing it stays collapsed.
+   */
+  const currentProject = useAppStore((state) => state.currentProject)
+  const storageKey = `rabbitflow:onboarding-expanded:${currentProject?.id ?? 'default'}`
+
+  const [isExpanded, setIsExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true
+
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      if (stored !== null) return stored === 'true'
+    } catch {
+      // Private browsing or blocked storage: fall through to the default.
+    }
+
+    // No stored preference: expand only for someone who has barely started.
+    return (status?.completedCount ?? 0) < 3
+  })
+
+  const handleExpandedChange = (next: boolean) => {
+    setIsExpanded(next)
+    if (!storageKey) return
+    try {
+      window.localStorage.setItem(storageKey, String(next))
+    } catch {
+      // Preference is a convenience; never fail the render over it.
+    }
+  }
 
   if (!showChecklist || !status || isLoading) return null
 
@@ -215,7 +251,7 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/80 shadow-lg backdrop-blur-sm" data-testid="onboarding-checklist">
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+      <Collapsible open={isExpanded} onOpenChange={handleExpandedChange}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <CollapsibleTrigger asChild>

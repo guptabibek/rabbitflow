@@ -161,4 +161,9 @@ export const RATE_LIMITS = {
   passwordResetConfirm: { name: 'pwreset-confirm', limit: 10, windowSeconds: 900 },
   mfaVerify: { name: 'mfa-verify', limit: 15, windowSeconds: 900 },
   search: { name: 'search', limit: 60, windowSeconds: 60 },
+  // Report endpoints run multi-table aggregations over the whole project, so
+  // they are the cheapest way for an authenticated user to saturate the
+  // database. Generous enough for a dashboard that loads several panels at
+  // once, tight enough to stop a loop.
+  reports: { name: 'reports', limit: 60, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { db } from '@/lib/db'
 import { issuesToCsv } from '@/lib/domain/reports'
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest) {
 
     const auth = await requireProjectPermission(request, projectId, 'project:read')
     if (!auth.ok) return auth.response
+
+    // Aggregations over the whole project; throttled per user so a loop
+    // cannot saturate the database.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.reports, auth.actor.userId)
+    if (limited) return limited
 
     const status = searchParams.get('status') || undefined
     const workItemType = searchParams.get('workItemType') || undefined

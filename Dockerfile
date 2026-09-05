@@ -25,9 +25,11 @@ FROM base AS runner
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-COPY --from=deps /app/node_modules ./node_modules
-RUN npm prune --omit=dev
 
+# `output: "standalone"` already emits the exact runtime node_modules the server
+# needs. Copying the full dependency tree and then pruning it duplicated that
+# work and inflated the image; only the Prisma engine and CLI are added on top,
+# because migrations run from the entrypoint.
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
@@ -46,6 +48,12 @@ RUN install -d -o nextjs -g nextjs \
   && chmod +x /entrypoint.sh
 
 EXPOSE 3000
+
+# Readiness, so a container that has lost Postgres or Redis is reported
+# unhealthy rather than left serving traffic it cannot complete. Compose
+# overrides this with its own check; this covers a plain `docker run`.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 USER nextjs
 

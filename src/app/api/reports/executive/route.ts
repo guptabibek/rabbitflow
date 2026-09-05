@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
 import { db } from '@/lib/db'
 import { withCache } from '@/lib/redis'
@@ -8,6 +9,11 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuthenticatedUser(request)
     if (!auth.ok) return auth.response
+
+    // Aggregations over the whole project; throttled per user so a loop
+    // cannot saturate the database.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.reports, auth.user.id)
+    if (limited) return limited
 
     const memberships = await db.projectMember.findMany({
       where: { userId: auth.user.id, project: { isArchived: false } },
