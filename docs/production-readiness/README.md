@@ -9,7 +9,11 @@ UI validation. Everything else is established by code analysis and is marked as 
 
 ## Verdict
 
-**Production readiness: 3 / 10 — not deployable to real users today.**
+**Production readiness at audit: 3 / 10 — not deployable to real users.**
+
+> **Status:** three remediation passes have since closed every P0 and most P1/P2
+> findings. Backups/DR and TLS remain with the team. See
+> [remediation-log-3.md](remediation-log-3.md) for the current position.
 
 Seven P0 findings block launch; five of them were confirmed by exploitation, not
 inference. The most severe are an unrestricted file upload that yields stored XSS on the
@@ -42,6 +46,7 @@ backups, no TLS, no observability.
 | [production-roadmap.md](production-roadmap.md) | Scorecard, gap analysis, 7-phase plan, launch checklist |
 | [remediation-log.md](remediation-log.md) | First remediation pass — what was fixed |
 | [remediation-log-2.md](remediation-log-2.md) | Second pass — SEC-002 root cause, SSRF, rate limiting, API tokens, CI, UI defects |
+| [remediation-log-3.md](remediation-log-3.md) | Third pass — integration tests, routing, code splitting, truncation, Saved Views, retention |
 
 Start with [risk-register.md](risk-register.md) for the prioritised list, or
 [production-roadmap.md](production-roadmap.md) for the plan and pre-deployment checklist.
