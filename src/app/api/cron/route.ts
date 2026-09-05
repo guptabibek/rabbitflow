@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndMarkBreachedTimers } from '@/lib/domain/sla-engine'
 import { purgeExpiredAuthChallenges, secretsMatch } from '@/lib/auth-otp'
+import { applyRetentionPolicies } from '@/lib/domain/retention'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -43,7 +44,15 @@ export async function POST(request: NextRequest) {
       results.authChallenges = { error: String(error) }
     }
 
-    // 3. Recurring task execution – call the existing endpoint
+    // 3. Retention sweep so the append-only tables stay bounded
+    try {
+      results.retention = await applyRetentionPolicies()
+    } catch (error) {
+      console.error('Retention sweep failed in cron:', error)
+      results.retention = { error: String(error) }
+    }
+
+    // 4. Recurring task execution – call the existing endpoint
     try {
       const baseUrl = request.nextUrl.origin
       const response = await fetch(`${baseUrl}/api/recurring-tasks/execute`, {

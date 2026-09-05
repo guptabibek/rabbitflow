@@ -48,6 +48,16 @@ http {
     default $scheme;
   }
 
+  # X-Forwarded-For is set to $remote_addr, not $proxy_add_x_forwarded_for.
+  #
+  # The latter *appends* to whatever the client sent, and the application reads
+  # the first entry — so a client could put any address it liked at the front
+  # and have it recorded as the source IP on sessions, audit events and rate
+  # limits. Overwriting with the address nginx actually accepted removes that.
+  #
+  # If you add another trusted proxy in front, switch to the realip module
+  # rather than reinstating $proxy_add_x_forwarded_for.
+
   server {
     listen 80;
     server_name ${APP_DOMAIN};
@@ -63,7 +73,7 @@ http {
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $forwarded_proto;
       proxy_pass http://app:3000/api/health;
     }
@@ -72,7 +82,7 @@ http {
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $forwarded_proto;
       proxy_pass http://app:3000;
       expires 30d;
@@ -93,7 +103,7 @@ http {
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $forwarded_proto;
       proxy_read_timeout 60s;
       proxy_connect_timeout 10s;
@@ -114,7 +124,7 @@ http {
       proxy_http_version 1.1;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $forwarded_proto;
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection $connection_upgrade;

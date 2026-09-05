@@ -7,7 +7,9 @@ const secret = new TextEncoder().encode(
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  // Admin *pages* need no gate here — src/app/admin/layout.tsx re-reads the
+  // role from the database and redirects. Only the API prefix is still special,
+  // to keep bearer tokens away from administrative endpoints.
   const isAdminApiRoute = pathname.startsWith('/api/admin')
   const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
   // Covers /api/health, /api/health/live and /api/health/ready.
@@ -55,19 +57,23 @@ export default async function proxy(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secret)
-    const role = (payload as { role?: unknown }).role
 
     if (isPublicAuthRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    if ((isAdminPageRoute || isAdminApiRoute) && role === 'member') {
-      if (isAdminApiRoute) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
+    // Admin access is decided downstream, against the database, not from the
+    // token's `role` claim.
+    //
+    // The claim is baked in at sign-in and the session lasts 30 days, so it goes
+    // stale in both directions. Denying on a stale claim meant a user promoted
+    // to admin was bounced from /admin until their token happened to refresh,
+    // while a demoted admin was caught anyway by the authoritative checks —
+    // `AdminLayout` re-reads globalRole from the database and redirects, and
+    // every /api/admin route calls requireSystemAdmin, which does the same.
+    //
+    // Letting the request through costs nothing and makes a role change take
+    // effect immediately.
 
     const headers = new Headers(request.headers)
     headers.set('x-user-id', payload.sub as string)
