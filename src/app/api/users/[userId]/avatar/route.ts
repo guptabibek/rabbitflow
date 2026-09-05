@@ -4,6 +4,11 @@ import path from 'node:path'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
 import { validateUploadBuffer } from '@/lib/domain/file-upload'
+import {
+  avatarFileName,
+  ensureBucketDir,
+  removeExistingAvatars,
+} from '@/lib/domain/upload-storage'
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
@@ -49,15 +54,24 @@ export async function POST(
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars')
-    await mkdir(uploadDir, { recursive: true })
+    // Outside public/, alongside attachments. Reads go through
+    // GET /api/users/[userId]/avatar/image, which requires a session.
+    const uploadDir = await ensureBucketDir('avatars')
 
-    const fileName = validation.storedFileName
+    // Replace rather than accumulate: the old implementation wrote a
+    // timestamped name and never deleted the previous file.
+    await removeExistingAvatars(id)
+
+    const fileName = avatarFileName(id, validation.extension)
     const destination = path.join(uploadDir, fileName)
 
     await writeFile(destination, buffer)
 
-    const avatarPath = `/uploads/avatars/${fileName}`
+    // A URL the client can use directly, so no component needs to know where
+    // files live. The version parameter busts caches when the image changes;
+    // the serving route locates the file from the user id alone, never from a
+    // client-supplied name.
+    const avatarPath = `/api/users/${id}/avatar/image?v=${Date.now()}`
 
     const user = await db.user.update({
       where: { id },

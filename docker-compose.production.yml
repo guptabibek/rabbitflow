@@ -37,10 +37,13 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-RabbitFlow <no-reply@rabbitflow.local>}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set}
+      # Uploads live outside the web root so the static handler cannot serve
+      # them; they are returned by authorising route handlers instead.
+      UPLOAD_DIR: /app/var/uploads
     expose:
       - "3000"
     volumes:
-      - app_uploads:/app/public/uploads
+      - app_uploads:/app/var/uploads
     healthcheck:
       # Readiness, not liveness: an instance that has lost Postgres or Redis cannot
       # serve logins and must leave the rotation rather than keep taking traffic.

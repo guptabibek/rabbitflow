@@ -6,6 +6,11 @@ import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
 import { sanitizeDisplayFileName, validateUploadBuffer } from '@/lib/domain/file-upload'
+import {
+  ensureBucketDir,
+  resolveStoredFilePath,
+  storedNameFromFilePath,
+} from '@/lib/domain/upload-storage'
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
@@ -94,8 +99,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'attachments')
-    await mkdir(uploadDir, { recursive: true })
+    // Stored outside public/ so the static handler cannot serve it. Reads go
+    // through GET /api/attachments/[attachmentId], which authorises against the
+    // parent work item first.
+    const uploadDir = await ensureBucketDir('attachments')
 
     const safeName = validation.storedFileName
     const filePath = path.join(uploadDir, safeName)
@@ -108,7 +115,8 @@ export async function POST(request: NextRequest) {
           issueId,
           // Display name only — never used to build a path.
           fileName: sanitizeDisplayFileName(file.name),
-          filePath: `/uploads/attachments/${safeName}`,
+          // Bare filename: the serving route resolves it inside the bucket.
+          filePath: safeName,
           fileSize: file.size,
           // Record the type we detected, not the one the client claimed.
           mimeType: validation.detectedType,
@@ -168,11 +176,16 @@ export async function DELETE(request: NextRequest) {
 
     await db.attachment.delete({ where: { id } })
 
-    const filePath = path.join(process.cwd(), 'public', attachment.filePath)
-    try {
-      await unlink(filePath)
-    } catch {
-      // File may already be missing — not critical
+    // Resolved through the bucket helper, which refuses any name that would
+    // escape it — including legacy rows holding a full `/uploads/...` path.
+    const storedPath = resolveStoredFilePath(
+      'attachments',
+      storedNameFromFilePath(attachment.filePath)
+    )
+    if (storedPath) {
+      await unlink(storedPath).catch(() => {
+        // File may already be missing — not worth failing the delete over.
+      })
     }
 
     await createAuditLog({

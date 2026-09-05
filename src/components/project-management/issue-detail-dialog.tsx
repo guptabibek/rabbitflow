@@ -1473,7 +1473,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                           </div>
                         </div>
                         <a
-                          href={att.filePath}
+                          // Routed rather than a direct file path: the endpoint
+                          // authorises against the parent work item before
+                          // returning anything.
+                          href={`/api/attachments/${att.id}`}
                           download={att.fileName}
                           className="inline-flex items-center justify-center rounded-md h-7 w-7 hover:bg-accent transition-colors"
                           title="Download"

@@ -59,3 +59,6 @@ dev.err.log
 dev.out.log
 # SQLite scratch file — this project's datasource is PostgreSQL
 prisma/dev.db
+
+# Runtime upload storage (outside the web root)
+/var/
