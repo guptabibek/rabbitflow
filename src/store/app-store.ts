@@ -269,7 +269,12 @@ interface AppState {
   setProjectAccess: (payload: { role: string | null; permissions: string[] }) => void
 
   issues: Issue[]
-  setIssues: (issues: Issue[]) => void
+  /** Work items the project actually has, which may exceed what is loaded. */
+  issueTotal: number
+  /** How many the client requested, so views can tell whether more exist. */
+  issuePageSize: number
+  setIssues: (issues: Issue[], meta?: { total?: number; pageSize?: number }) => void
+  appendIssues: (issues: Issue[]) => void
   addIssue: (issue: Issue) => void
   updateIssue: (id: string, data: Partial<Issue>) => void
   removeIssue: (id: string) => void
@@ -390,7 +395,24 @@ export const useAppStore = create<AppState>()(
         set({ currentProjectRole: role, currentProjectPermissions: permissions }),
 
       issues: [],
-      setIssues: (issues) => set({ issues }),
+      issueTotal: 0,
+      issuePageSize: 200,
+      setIssues: (issues, meta) =>
+        set({
+          issues,
+          // Fall back to the loaded length when the caller has no total, so
+          // "showing X of Y" never claims more than it knows.
+          issueTotal: meta?.total ?? issues.length,
+          issuePageSize: meta?.pageSize ?? 200,
+        }),
+      appendIssues: (incoming) =>
+        set((state) => {
+          // De-duplicate: a concurrent create can arrive both from the
+          // mutation response and the next page.
+          const seen = new Set(state.issues.map((issue) => issue.id))
+          const added = incoming.filter((issue) => !seen.has(issue.id))
+          return { issues: [...state.issues, ...added] }
+        }),
       addIssue: (issue) => set((state) => ({ issues: [...state.issues, issue] })),
       updateIssue: (id, data) =>
         set((state) => ({
@@ -530,6 +552,7 @@ export const useAppStore = create<AppState>()(
           currentProjectRole: null,
           currentProjectPermissions: [],
           issues: [],
+          issueTotal: 0,
           users: [],
           labels: [],
           iterations: [],

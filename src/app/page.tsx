@@ -6,6 +6,8 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import type { Project, User as AppUser } from '@/store/app-store'
+// Eager: the shell and the landing surfaces. Everything else is loaded on
+// demand — see the dynamic() declarations below.
 import {
   AppSidebar,
   BacklogView,
@@ -14,31 +16,10 @@ import {
   FilterBar,
   KanbanBoard,
   ListView,
-  ReportsView,
-  SprintManagement,
-  SprintView,
-  TeamManagement,
   UserProfile,
   CommandPalette,
   NotificationBell,
-  DocumentsView,
-  ObjectivesView,
-  RetrospectivesView,
-  WebhookManagement,
-  ImportWizard,
-  AutomationRuleBuilder,
-  TestPlanManager,
-  SlaDashboard,
-  ApiTokenManagement,
-  RecurringTaskManager,
   ApprovalDashboard,
-  RoadmapView,
-  PortfolioView,
-  CalendarView,
-  DependencyGraphView,
-  ActivityFeedView,
-  BrandingStudio,
-  AclManagement,
   LabelsManagement,
 } from '@/components/project-management'
 import { OnboardingChecklist } from '@/components/project-management/onboarding-checklist'
@@ -69,6 +50,93 @@ import {
   User,
 } from 'lucide-react'
 import { fetchWithRetry, getApiErrorMessage, parseJsonResponse } from '@/lib/utils'
+import { useViewRoute } from '@/hooks/use-view-route'
+import dynamic from 'next/dynamic'
+
+/**
+ * Views reached only by explicit navigation are loaded on demand.
+ *
+ * All 27 were statically imported into this one client component, so a user
+ * landing on the dashboard downloaded and parsed the code for Reports, SLA,
+ * Imports and the 2,000-line work-item-type editor before seeing anything.
+ * The result was a single 1.17 MB chunk.
+ *
+ * The shell, dashboard, board, list and backlog stay eager: they are the
+ * landing surfaces, and deferring them would trade one delay for another.
+ */
+function ViewSkeleton() {
+  return (
+    <div className="space-y-4 p-6" role="status" aria-label="Loading view">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
+
+const ReportsView = dynamic(() => import('@/components/project-management/reports-view').then((m) => ({ default: m.ReportsView })), {
+  loading: () => <ViewSkeleton />,
+})
+const SprintView = dynamic(() => import('@/components/project-management/sprint-view').then((m) => ({ default: m.SprintView })), {
+  loading: () => <ViewSkeleton />,
+})
+const SprintManagement = dynamic(() => import('@/components/project-management/sprint-management').then((m) => ({ default: m.SprintManagement })), {
+  loading: () => <ViewSkeleton />,
+})
+const TeamManagement = dynamic(() => import('@/components/project-management/team-management').then((m) => ({ default: m.TeamManagement })), {
+  loading: () => <ViewSkeleton />,
+})
+const DocumentsView = dynamic(() => import('@/components/project-management/documents-view').then((m) => ({ default: m.DocumentsView })), {
+  loading: () => <ViewSkeleton />,
+})
+const ObjectivesView = dynamic(() => import('@/components/project-management/objectives-view').then((m) => ({ default: m.ObjectivesView })), {
+  loading: () => <ViewSkeleton />,
+})
+const RetrospectivesView = dynamic(() => import('@/components/project-management/retrospectives-view').then((m) => ({ default: m.RetrospectivesView })), {
+  loading: () => <ViewSkeleton />,
+})
+const WebhookManagement = dynamic(() => import('@/components/project-management/webhook-management').then((m) => ({ default: m.WebhookManagement })), {
+  loading: () => <ViewSkeleton />,
+})
+const ImportWizard = dynamic(() => import('@/components/project-management/import-wizard').then((m) => ({ default: m.ImportWizard })), {
+  loading: () => <ViewSkeleton />,
+})
+const AutomationRuleBuilder = dynamic(() => import('@/components/project-management/automation-rule-builder').then((m) => ({ default: m.AutomationRuleBuilder })), {
+  loading: () => <ViewSkeleton />,
+})
+const TestPlanManager = dynamic(() => import('@/components/project-management/test-plan-manager').then((m) => ({ default: m.TestPlanManager })), {
+  loading: () => <ViewSkeleton />,
+})
+const SlaDashboard = dynamic(() => import('@/components/project-management/sla-dashboard').then((m) => ({ default: m.SlaDashboard })), {
+  loading: () => <ViewSkeleton />,
+})
+const ApiTokenManagement = dynamic(() => import('@/components/project-management/api-token-management').then((m) => ({ default: m.ApiTokenManagement })), {
+  loading: () => <ViewSkeleton />,
+})
+const RecurringTaskManager = dynamic(() => import('@/components/project-management/recurring-task-manager').then((m) => ({ default: m.RecurringTaskManager })), {
+  loading: () => <ViewSkeleton />,
+})
+const RoadmapView = dynamic(() => import('@/components/project-management/roadmap-view').then((m) => ({ default: m.RoadmapView })), {
+  loading: () => <ViewSkeleton />,
+})
+const PortfolioView = dynamic(() => import('@/components/project-management/portfolio-view').then((m) => ({ default: m.PortfolioView })), {
+  loading: () => <ViewSkeleton />,
+})
+const CalendarView = dynamic(() => import('@/components/project-management/calendar-view').then((m) => ({ default: m.CalendarView })), {
+  loading: () => <ViewSkeleton />,
+})
+const DependencyGraphView = dynamic(() => import('@/components/project-management/dependency-graph-view').then((m) => ({ default: m.DependencyGraphView })), {
+  loading: () => <ViewSkeleton />,
+})
+const ActivityFeedView = dynamic(() => import('@/components/project-management/activity-feed-view').then((m) => ({ default: m.ActivityFeedView })), {
+  loading: () => <ViewSkeleton />,
+})
+const BrandingStudio = dynamic(() => import('@/components/project-management/branding-studio').then((m) => ({ default: m.BrandingStudio })), {
+  loading: () => <ViewSkeleton />,
+})
+const AclManagement = dynamic(() => import('@/components/project-management/acl-management').then((m) => ({ default: m.AclManagement })), {
+  loading: () => <ViewSkeleton />,
+})
 
 type ViewType =
   | 'dashboard'
@@ -98,6 +166,19 @@ type ViewType =
   | 'branding'
   | 'acl'
   | 'onboarding-config'
+
+const ALL_VIEWS: readonly ViewType[] = [
+  'dashboard', 'backlog', 'board', 'sprints', 'list', 'reports', 'roadmap',
+  'portfolio', 'calendar', 'dependency-graph', 'activity', 'teams', 'settings',
+  'documents', 'objectives', 'retrospectives', 'approvals', 'webhooks',
+  'automations', 'imports', 'recurring-tasks', 'test-plans', 'sla', 'api-tokens',
+  'branding', 'acl', 'onboarding-config',
+] as const
+
+/** Guards against a hand-edited ?view= naming something that does not exist. */
+function isViewType(value: string): value is ViewType {
+  return (ALL_VIEWS as readonly string[]).includes(value)
+}
 
 type OnboardingActionTarget = ViewType | '__create_issue' | '__manage_labels'
 
@@ -201,7 +282,23 @@ export default function HomePage() {
 
   const { theme, setTheme } = useTheme()
   const { trackAction } = useOnboardingEvents()
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard')
+  // Backed by `?view=` so every workspace view is linkable and browser
+  // back/forward work. Previously all 27 views shared one useState and the URL
+  // read `/` regardless of what was on screen.
+  const { view: currentView, setView: setCurrentView } = useViewRoute<ViewType>({
+    defaultView: 'dashboard',
+    isValidView: isViewType,
+    onExternalChange: (view) => {
+      // History navigation must dismiss whatever overlay was open, or Back
+      // appears to do nothing while a dialog covers the view behind it.
+      closeWorkItem()
+      setCreateIssueOpen(false)
+      setSprintModalOpen(false)
+      setLabelsManagementOpen(false)
+      if (view === 'board') setViewMode('board')
+      else if (view === 'list') setViewMode('list')
+    },
+  })
   const [isInitialized, setIsInitialized] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -224,13 +321,21 @@ export default function HomePage() {
       const requests = [
         {
           label: 'issues',
-          request: () => fetchWithRetry(`/api/issues?projectId=${projectId}&pageSize=200`, { timeoutMs: 8_000, retries: 1 }),
-          apply: (payload: unknown) => setIssues(Array.isArray(payload) ? payload : []),
+          request: () =>
+            fetchWithRetry(`/api/issues?projectId=${projectId}&pageSize=200&includeTotal=true`, {
+              timeoutMs: 8_000,
+              retries: 1,
+            }),
+          apply: (payload: unknown, response?: Response) =>
+            setIssues(Array.isArray(payload) ? payload : [], {
+              total: Number(response?.headers.get('x-total-count')) || undefined,
+              pageSize: 200,
+            }),
         },
         {
           label: 'labels',
           request: () => fetchWithRetry(`/api/labels?projectId=${projectId}`, { timeoutMs: 8_000, retries: 1 }),
-          apply: (payload: unknown) => setLabels(Array.isArray(payload) ? payload : []),
+          apply: (payload: unknown, _response?: Response) => setLabels(Array.isArray(payload) ? payload : []),
         },
         {
           label: 'iterations',
@@ -287,7 +392,7 @@ export default function HomePage() {
             throw new Error(`${entry.label} returned malformed data`)
           }
 
-          entry.apply(payload)
+          entry.apply(payload, response)
         })
       )
 
@@ -326,7 +431,13 @@ export default function HomePage() {
           const payload = await parseJsonResponse<Record<string, unknown> | null>(bootstrapRes, null)
 
           if (payload) {
-            setIssues(Array.isArray(payload.issues) ? payload.issues : [])
+            setIssues(Array.isArray(payload.issues) ? payload.issues : [], {
+              // The true project-wide count, so views can say "showing X of Y"
+              // rather than presenting a capped page as the whole backlog.
+              total: typeof payload.issueTotal === 'number' ? payload.issueTotal : undefined,
+              pageSize:
+                typeof payload.issuePageSize === 'number' ? payload.issuePageSize : undefined,
+            })
             setLabels(Array.isArray(payload.labels) ? payload.labels : [])
             setIterations(Array.isArray(payload.iterations) ? payload.iterations : [])
             setStates(Array.isArray(payload.states) ? payload.states : [])

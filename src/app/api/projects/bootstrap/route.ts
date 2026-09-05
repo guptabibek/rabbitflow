@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         runWithDbRetry(async () => {
         const [
           issues,
+          issueTotal,
           labels,
           iterations,
           states,
@@ -49,6 +50,10 @@ export async function GET(request: NextRequest) {
             take: pageSize,
             include: issueMutationInclude,
           }),
+          // The client caps how many work items it holds. Returning the true
+          // total lets the UI say so instead of silently showing a partial
+          // board as if it were the whole project.
+          db.issue.count({ where: { projectId } }),
           db.label.findMany({
             where: { projectId },
             orderBy: { name: 'asc' },
@@ -163,6 +168,8 @@ export async function GET(request: NextRequest) {
 
         return {
           issues: issues.map((issue) => serializeIssueRecord(issue)),
+          issueTotal,
+          issuePageSize: pageSize,
           labels,
           iterations,
           states,

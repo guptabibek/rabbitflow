@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAppStore, type Issue } from '@/store/app-store'
 import { compareIssueKeys } from '@/lib/domain/issue-key-format'
+import { filterIssues } from '@/lib/domain/issue-filters'
+import { IssueLoadMore } from '@/components/project-management/issue-load-more'
 import {
   Table,
   TableBody,
@@ -148,33 +150,13 @@ export function ListView() {
   const expandedRowIds = currentProject ? hierarchyExpandedByProject[currentProject.id] ?? [] : []
   const expandedRows = useMemo(() => new Set(expandedRowIds), [expandedRowIds])
 
-  const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
-      if (filters.assigneeId && issue.assignee?.id !== filters.assigneeId) return false
-      if (filters.priority && issue.priority !== filters.priority) return false
-      if (workItemTypeFilter !== 'all' && issue.workItemType !== workItemTypeFilter) return false
-      if (
-        filters.labelIds.length > 0 &&
-        !filters.labelIds.every((labelId) =>
-          issue.labels.some(({ label }) => label.id === labelId)
-        )
-      ) {
-        return false
-      }
-      if (filters.search) {
-        const search = filters.search.toLowerCase()
-        if (
-          !issue.title.toLowerCase().includes(search) &&
-          !issue.key.toLowerCase().includes(search)
-        ) {
-          return false
-        }
-      }
-      if (filters.iterationId && issue.iteration?.id !== filters.iterationId) return false
-      if (filters.areaId && issue.area?.id !== filters.areaId) return false
-      return true
-    })
-  }, [filters, issues, workItemTypeFilter])
+  // Shared with the board and sprint views. This copy previously ignored
+  // `filters.type` and did not search descriptions, so the same filter produced
+  // different results depending on which view you were looking at.
+  const filteredIssues = useMemo(
+    () => filterIssues(issues, filters, { workItemTypeTab: workItemTypeFilter }),
+    [filters, issues, workItemTypeFilter]
+  )
 
   const sortedIssues = useMemo(() => {
     return [...filteredIssues].sort((a, b) => {
@@ -310,6 +292,10 @@ export function ListView() {
           </Badge>
         )}
       </div>
+
+      {/* Says so when the project holds more than is loaded, instead of
+          presenting a capped page as the complete backlog. */}
+      <IssueLoadMore className="mx-4 mt-2 flex-shrink-0" />
 
       {selectedIssues.length > 0 && (
         <div className="px-4 py-1.5 border-b border-border flex-shrink-0">

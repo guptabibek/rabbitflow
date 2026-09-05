@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { filterIssues } from '@/lib/domain/issue-filters'
+import { IssueLoadMore } from '@/components/project-management/issue-load-more'
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCorners, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Inbox, Plus } from 'lucide-react'
@@ -120,34 +122,7 @@ export function KanbanBoard() {
   )
 
   const filteredIssues = useMemo(
-    () =>
-      issues.filter((issue) => {
-        if (workItemTypeFilter !== 'all' && issue.workItemType !== workItemTypeFilter) return false
-        if (filters.assigneeId && issue.assignee?.id !== filters.assigneeId) return false
-        if (filters.priority && issue.priority !== filters.priority) return false
-        if (filters.type && issue.workItemType !== filters.type) return false
-        if (
-          filters.labelIds.length > 0 &&
-          !filters.labelIds.every((labelId) =>
-            issue.labels.some(({ label }) => label.id === labelId)
-          )
-        ) {
-          return false
-        }
-        if (filters.search) {
-          const search = filters.search.toLowerCase()
-          if (
-            !issue.title.toLowerCase().includes(search) &&
-            !issue.key.toLowerCase().includes(search) &&
-            !issue.description?.toLowerCase().includes(search)
-          ) {
-            return false
-          }
-        }
-        if (filters.iterationId && issue.iteration?.id !== filters.iterationId) return false
-        if (filters.areaId && issue.area?.id !== filters.areaId) return false
-        return true
-      }),
+    () => filterIssues(issues, filters, { workItemTypeTab: workItemTypeFilter }),
     [filters, issues, workItemTypeFilter]
   )
 
@@ -246,7 +221,9 @@ export function KanbanBoard() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="scroll-affordance-shell h-full" data-overflowing={hasHiddenColumns}>
+      <div className="flex h-full flex-col">
+      <IssueLoadMore className="mx-4 mt-3 flex-shrink-0" />
+      <div className="scroll-affordance-shell min-h-0 flex-1" data-overflowing={hasHiddenColumns}>
       <div
         ref={boardScrollRef}
         onScroll={updateOverflowState}
@@ -292,6 +269,7 @@ export function KanbanBoard() {
             </>
           </BoardColumn>
         ))}
+      </div>
       </div>
       </div>
       <DragOverlay>
