@@ -439,6 +439,7 @@ export function RecurringTaskManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
+                    aria-label="Edit recurring task"
                     onClick={() => openEdit(task)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -447,6 +448,7 @@ export function RecurringTaskManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
+                    aria-label="Delete recurring task"
                     onClick={() => deleteConfirm.request(task)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />

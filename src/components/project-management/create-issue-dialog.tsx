@@ -32,6 +32,7 @@ import {
   Rocket,
   Star,
   X,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -246,6 +247,32 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const selectedTypeFields = useMemo(
     () => new Set(activeTypeDefinition?.fields.map((field) => field.key) ?? []),
     [activeTypeDefinition]
+  )
+
+  /**
+   * Required custom fields for the selected type.
+   *
+   * The seeded schema marks fields required that live on the Fields tab, while
+   * the form opens on Basic. Previously nothing checked them client-side, so a
+   * user filled in everything visible, pressed Create, and got a toast in the
+   * far corner naming a field they had never seen — one field at a time, since
+   * the server stops at the first failure.
+   */
+  const requiredCustomFields = useMemo(
+    () => (activeTypeDefinition?.fields ?? []).filter((field) => field.required),
+    [activeTypeDefinition]
+  )
+
+  const missingRequiredFields = useMemo(
+    () =>
+      requiredCustomFields.filter((field) => {
+        const value = customFields[field.key]
+        if (value === undefined || value === null) return true
+        if (typeof value === 'string') return value.trim().length === 0
+        if (Array.isArray(value)) return value.length === 0
+        return false
+      }),
+    [customFields, requiredCustomFields]
   )
 
   const getHierarchyLevel = (typeKey: string) =>
@@ -556,6 +583,21 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
       return
     }
 
+    // Check required custom fields before contacting the server, and take the
+    // user to the tab that holds them. Reporting all of them at once means a
+    // form with two missing fields is fixed in one pass rather than two
+    // round-trips.
+    if (missingRequiredFields.length > 0) {
+      setActiveTab('fields')
+      const names = missingRequiredFields.map((field) => field.label).join(', ')
+      toast.error(
+        missingRequiredFields.length === 1
+          ? `${names} is required — see the Fields tab`
+          : `These fields are required: ${names}`
+      )
+      return
+    }
+
     const storyPointsResult = parseOptionalIntegerInput(storyPoints, 'Story points', MAX_STORY_POINTS)
     if (storyPointsResult.error) {
       toast.error(storyPointsResult.error)
@@ -716,8 +758,18 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
             <TabsTrigger value="metadata" className="text-xs h-7 data-[state=active]:bg-background">
               Metadata
             </TabsTrigger>
-            <TabsTrigger value="fields" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="fields" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
               Fields
+              {/* Surfaces the requirement before the user presses Create, rather
+                  than after a rejected submit. */}
+              {missingRequiredFields.length > 0 && (
+                <span
+                  className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium tabular-nums text-destructive-foreground"
+                  aria-label={`${missingRequiredFields.length} required field${missingRequiredFields.length === 1 ? '' : 's'} still empty`}
+                >
+                  {missingRequiredFields.length}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="links" className="text-xs h-7 data-[state=active]:bg-background">
               Links
@@ -1046,6 +1098,21 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
             </TabsContent>
 
             <TabsContent value="fields" className="mt-0">
+              {missingRequiredFields.length > 0 && (
+                <div
+                  className="mb-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2"
+                  role="alert"
+                >
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" aria-hidden="true" />
+                  <p className="text-xs text-foreground">
+                    Required before creating:{' '}
+                    <span className="font-medium">
+                      {missingRequiredFields.map((field) => field.label).join(', ')}
+                    </span>
+                  </p>
+                </div>
+              )}
+
               {activeTypeDefinition?.sections?.length ? (
                 <DynamicWorkItemFields
                   sections={activeTypeDefinition.sections}

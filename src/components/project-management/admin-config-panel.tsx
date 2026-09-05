@@ -1213,6 +1213,7 @@ export function AdminConfigPanel() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Move state up"
                                     onClick={() => moveMappedState(index, -1)}
                                     disabled={index === 0 || stateConfigSaving || !canManageMasterData}
                                   >
@@ -1221,6 +1222,7 @@ export function AdminConfigPanel() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Move state down"
                                     onClick={() => moveMappedState(index, 1)}
                                     disabled={index === mappedStates.length - 1 || stateConfigSaving || !canManageMasterData}
                                   >
@@ -1481,6 +1483,7 @@ export function AdminConfigPanel() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Move state up"
                                 onClick={() => moveStateDraft(index, -1)}
                                 disabled={index === 0 || stateConfigSaving || !canManageMasterData}
                               >
@@ -1489,6 +1492,7 @@ export function AdminConfigPanel() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Move state down"
                                 onClick={() => moveStateDraft(index, 1)}
                                 disabled={index === stateDrafts.length - 1 || stateConfigSaving || !canManageMasterData}
                               >

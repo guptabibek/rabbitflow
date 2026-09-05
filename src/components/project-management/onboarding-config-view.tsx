@@ -554,6 +554,7 @@ export function OnboardingConfigView() {
                         size="icon"
                         className="h-7 w-7"
                         disabled={index === 0 || saving}
+                        aria-label="Move step up"
                         onClick={() => moveStep(index, -1)}
                       >
                         <ArrowUp className="h-3.5 w-3.5" />
@@ -563,6 +564,7 @@ export function OnboardingConfigView() {
                         size="icon"
                         className="h-7 w-7"
                         disabled={index === steps.length - 1 || saving}
+                        aria-label="Move step down"
                         onClick={() => moveStep(index, 1)}
                       >
                         <ArrowDown className="h-3.5 w-3.5" />
@@ -571,6 +573,7 @@ export function OnboardingConfigView() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        aria-label="Edit onboarding step"
                         onClick={() => setEditingStep(step)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -579,6 +582,7 @@ export function OnboardingConfigView() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive"
+                        aria-label="Remove onboarding step"
                         onClick={() => removeStep(step.key)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

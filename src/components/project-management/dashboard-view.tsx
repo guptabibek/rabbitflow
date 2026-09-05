@@ -126,8 +126,11 @@ export function DashboardView() {
 
   const statCards = [
     {
-      label: 'Projects',
-      value: stats.totalProjects || projects.length,
+      // This card used to read "Projects: 1" inside a single project's
+      // dashboard, which told the reader nothing. Open work is the figure that
+      // actually matters at a glance here.
+      label: 'Open Items',
+      value: totalIssues - doneIssues,
       icon: FolderKanban,
       iconBg: 'bg-category-done-bg',
       iconColor: 'text-category-done',

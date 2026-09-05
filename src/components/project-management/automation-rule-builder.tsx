@@ -403,7 +403,7 @@ export function AutomationRuleBuilder() {
                       onChange={(e) => updateCondition(i, { value: e.target.value })}
                       className="h-7 text-xs flex-1"
                     />
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeCondition(i)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove condition" onClick={() => removeCondition(i)}>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
@@ -552,7 +552,7 @@ export function AutomationRuleBuilder() {
                       />
                     )}
 
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeAction(i)}>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove action" onClick={() => removeAction(i)}>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
@@ -635,6 +635,7 @@ export function AutomationRuleBuilder() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
+                      aria-label="Delete automation rule"
                       onClick={() => deleteConfirm.request(rule)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

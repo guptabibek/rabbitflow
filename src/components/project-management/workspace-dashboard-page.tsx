@@ -525,6 +525,7 @@ export function WorkspaceDashboardPage() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
+                              aria-label={`Actions for ${project.name}`}
                               data-testid={`dashboard-project-actions-${project.id}`}
                               onClick={(event) => event.stopPropagation()}
                             >

@@ -631,6 +631,13 @@ export default function HomePage() {
   }, [currentView, setViewMode])
 
   const handleViewChange = (view: ViewType) => {
+    // On mobile the sidebar is an overlay covering most of the screen. Leaving
+    // it open after a selection meant the chosen view loaded behind it and the
+    // user had to dismiss the scrim manually to see what they had picked.
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarCollapsed(true)
+    }
+
     closeWorkItem()
     setCreateIssueOpen(false)
     setSprintModalOpen(false)

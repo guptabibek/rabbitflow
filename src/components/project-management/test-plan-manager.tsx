@@ -399,7 +399,7 @@ export function TestPlanManager() {
           <h3 className="text-sm font-semibold">Test Plans</h3>
           <Dialog open={createPlanOpen} onOpenChange={setCreatePlanOpen}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
+              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Add test step">
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </DialogTrigger>
@@ -557,6 +557,7 @@ export function TestPlanManager() {
                             </div>
                             {caseSteps.length > 1 && (
                               <Button type="button" variant="ghost" size="icon" className="h-7 w-7 mt-0.5 flex-shrink-0"
+                                aria-label="Remove test step"
                                 onClick={() => removeStep(idx)}>
                                 <X className="h-3 w-3" />
                               </Button>
@@ -577,6 +578,7 @@ export function TestPlanManager() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
+                  aria-label="Delete test plan"
                   onClick={() => deleteConfirm.request(selectedPlan)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

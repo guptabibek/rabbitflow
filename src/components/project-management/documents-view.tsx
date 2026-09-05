@@ -309,7 +309,7 @@ export function DocumentsView() {
             <BookOpen className="h-4 w-4" />
             Documents
           </h3>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCreateOpen(true)}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="New document" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -377,6 +377,7 @@ export function DocumentsView() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive"
+                        aria-label="Delete document"
                       onClick={() => setPendingDelete({ id: selectedDoc.id, title: selectedDoc.title })}
                     >
                       <Trash2 className="h-4 w-4" />

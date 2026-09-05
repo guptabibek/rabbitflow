@@ -273,6 +273,7 @@ export function ObjectivesView() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
+                      aria-label="Add key result"
                       onClick={() => { setSelectedObjId(obj.id); setCreateKROpen(true) }}
                     >
                       <Plus className="h-4 w-4" />
@@ -281,6 +282,7 @@ export function ObjectivesView() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
+                          aria-label="Delete objective"
                       onClick={() => setPendingDelete({ id: obj.id, title: obj.title })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

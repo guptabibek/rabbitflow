@@ -290,6 +290,7 @@ export function BulkActionToolbar({
         variant="ghost"
         size="icon"
         className="ml-auto h-6 w-6"
+        aria-label="Clear selection"
         onClick={onClearSelection}
         data-testid="bulk-clear-selection-button"
       >
