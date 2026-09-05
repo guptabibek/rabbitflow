@@ -1,6 +1,7 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
 import { authenticator } from 'otplib'
 import { db } from '@/lib/db'
+import { encryptSecret } from '@/lib/crypto-box'
 
 const MFA_CHALLENGE_TTL_SECONDS = Number.parseInt(process.env.MFA_CHALLENGE_TTL_SECONDS || '600', 10)
 const PASSWORD_RESET_OTP_TTL_SECONDS = Number.parseInt(process.env.PASSWORD_RESET_OTP_TTL_SECONDS || '600', 10)
@@ -105,7 +106,12 @@ export async function createMfaChallenge(
       userId: payload.userId,
       // `mode` is encoded in the secret's presence: setup carries the seed being
       // enrolled, verify reads the seed already stored on the user.
-      secret: payload.mode === 'setup' ? (payload.secret ?? null) : null,
+      //
+      // Encrypted at rest like the user's stored seed — an in-flight enrolment
+      // is just as valuable to an attacker with database access as a completed
+      // one.
+      secret:
+        payload.mode === 'setup' && payload.secret ? encryptSecret(payload.secret) : null,
       codeHash: payload.mode,
       expiresAt,
     },

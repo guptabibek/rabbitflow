@@ -26,6 +26,9 @@ services:
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       MFA_ISSUER: ${MFA_ISSUER:-RabbitFlow}
+      # Encrypts TOTP seeds at rest. Optional so an existing deployment keeps
+      # working, but strongly recommended — see .env.example.
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
       MFA_CHALLENGE_TTL_SECONDS: ${MFA_CHALLENGE_TTL_SECONDS:-600}
       PASSWORD_RESET_OTP_TTL_SECONDS: ${PASSWORD_RESET_OTP_TTL_SECONDS:-600}
       MFA_REQUIRE_ENROLLMENT: ${MFA_REQUIRE_ENROLLMENT:-true}

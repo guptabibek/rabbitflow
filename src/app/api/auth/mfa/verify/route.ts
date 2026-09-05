@@ -4,6 +4,7 @@ import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import { AUTH_COOKIE, getAuthCookieOptions, signToken } from '@/lib/auth'
 import { createAuthSession } from '@/lib/auth-session'
+import { decryptSecret, encryptSecret, reencryptIfNeeded } from '@/lib/crypto-box'
 import {
   deleteMfaChallenge,
   getMfaChallenge,
@@ -95,7 +96,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const secret = challenge.mode === 'setup' ? challenge.secret : user.mfaSecret
+    // Both the enrolment seed carried on the challenge and the stored seed are
+    // encrypted at rest; decrypt before use. A value that predates encryption is
+    // returned unchanged, and one that cannot be decrypted yields null — which
+    // fails the code check below rather than throwing.
+    const storedSecret = challenge.mode === 'setup' ? challenge.secret : user.mfaSecret
+    const secret = storedSecret ? decryptSecret(storedSecret) : null
 
     if (!secret || !verifyTotpCode(secret, code)) {
       const nextAttempts = challenge.attempts + 1
@@ -119,13 +125,23 @@ export async function POST(request: NextRequest) {
       await db.$executeRaw`
         UPDATE "User"
         SET
-          "mfaSecret" = ${secret},
+          "mfaSecret" = ${encryptSecret(secret)},
           "mfaEnabled" = true,
           "mfaEnabledAt" = ${new Date()},
           "mfaExemptFromPolicy" = false,
           "mfaReenrollRequired" = false
         WHERE "id" = ${user.id}
       `
+    } else if (user.mfaSecret) {
+      // Upgrade a seed stored before encryption was configured. Doing it on
+      // successful verification means enrolled users migrate as they sign in,
+      // with no bulk re-encryption step and no risk of locking anyone out.
+      const upgraded = reencryptIfNeeded(user.mfaSecret)
+      if (upgraded) {
+        await db.$executeRaw`
+          UPDATE "User" SET "mfaSecret" = ${upgraded} WHERE "id" = ${user.id}
+        `
+      }
     }
 
     await deleteMfaChallenge(challengeToken)
