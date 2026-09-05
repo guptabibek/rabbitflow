@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
 import { z } from 'zod'
 import { db, isUniqueConstraintError } from '@/lib/db'
 import { getAreaAccessScope } from '@/lib/domain/access-control'
@@ -219,8 +220,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(filteredRelations)
   } catch (error) {
-    console.error('Error fetching relations:', error)
-    return NextResponse.json({ error: 'Failed to fetch relations' }, { status: 500 })
+    return internalError('Error fetching relations:', error, readRequestId(request))
   }
 }
 
@@ -336,8 +336,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Link already exists' }, { status: 409 })
     }
 
-    console.error('Error creating relation:', error)
-    return NextResponse.json({ error: 'Failed to create relation' }, { status: 500 })
+    return internalError('Error creating relation:', error, readRequestId(request))
   }
 }
 
@@ -463,7 +462,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting relation:', error)
-    return NextResponse.json({ error: 'Failed to delete relation' }, { status: 500 })
+    return internalError('Error deleting relation:', error, readRequestId(request))
   }
 }

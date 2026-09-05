@@ -81,6 +81,13 @@ export default async function proxy(request: NextRequest) {
     if (typeof sessionId === 'string' && sessionId.trim()) {
       headers.set('x-session-id', sessionId)
     }
+
+    // One id per request, so a log line and a user's error report can be tied
+    // together. Generated here rather than per-handler so every route in a
+    // single request shares it. An inbound value is overwritten: a client must
+    // not be able to choose or collide with a server-side correlation id.
+    headers.set('x-request-id', crypto.randomUUID())
+
     return NextResponse.next({ request: { headers } })
   } catch {
     if (isPublicAuthRoute) {

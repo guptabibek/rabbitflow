@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
 import { queueAssignmentEmail, queueWebhookEvent } from '@/lib/job-queue'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -408,8 +409,7 @@ export async function GET(
 
     return NextResponse.json(serializeIssueRecord(issue))
   } catch (error) {
-    console.error('Error fetching issue:', error)
-    return NextResponse.json({ error: 'Failed to fetch issue' }, { status: 500 })
+    return internalError('Error fetching issue:', error, readRequestId(request))
   }
 }
 
@@ -1037,14 +1037,10 @@ export async function PUT(
     }
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
 
-    console.error('Error updating issue:', error)
-    return NextResponse.json({ error: 'Failed to update issue' }, { status: 500 })
+    return internalError('Error updating issue:', error, readRequestId(request))
   }
 }
 
@@ -1104,7 +1100,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting issue:', error)
-    return NextResponse.json({ error: 'Failed to delete issue' }, { status: 500 })
+    return internalError('Error deleting issue:', error, readRequestId(request))
   }
 }

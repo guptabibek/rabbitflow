@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
 import { queueWebhookEvent } from '@/lib/job-queue'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
@@ -37,8 +38,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(labels)
   } catch (error) {
-    console.error('Error fetching labels:', error)
-    return NextResponse.json({ error: 'Failed to fetch labels' }, { status: 500 })
+    return internalError('Error fetching labels:', error, readRequestId(request))
   }
 }
 
@@ -76,12 +76,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(label, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
-    console.error('Error creating label:', error)
-    return NextResponse.json({ error: 'Failed to create label' }, { status: 500 })
+    return internalError('Error creating label:', error, readRequestId(request))
   }
 }

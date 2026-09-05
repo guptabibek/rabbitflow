@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
 import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
@@ -97,8 +98,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(comments)
   } catch (error) {
-    console.error('Error fetching comments:', error)
-    return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 })
+    return internalError('Error fetching comments:', error, readRequestId(request))
   }
 }
 
@@ -261,13 +261,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(comment, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
 
-    console.error('Error creating comment:', error)
-    return NextResponse.json({ error: 'Failed to create comment' }, { status: 500 })
+    return internalError('Error creating comment:', error, readRequestId(request))
   }
 }

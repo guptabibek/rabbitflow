@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
 import { queueAssignmentEmail, queueSlaTimers, queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
@@ -270,8 +271,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (error) {
-    console.error('Error fetching issues:', error)
-    return NextResponse.json({ error: 'Failed to fetch issues' }, { status: 500 })
+    return internalError('Error fetching issues:', error, readRequestId(request))
   }
 }
 
@@ -509,13 +509,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(serializeIssueRecord(finalIssue), { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
 
-    console.error('Error creating issue:', error)
-    return NextResponse.json({ error: 'Failed to create issue' }, { status: 500 })
+    return internalError('Error creating issue:', error, readRequestId(request))
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId } from '@/lib/api-error'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { db } from '@/lib/db'
@@ -45,8 +46,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(attachments)
   } catch (error) {
-    console.error('Error fetching attachments:', error)
-    return NextResponse.json({ error: 'Failed to fetch attachments' }, { status: 500 })
+    return internalError('Error fetching attachments:', error, readRequestId(request))
   }
 }
 
@@ -146,8 +146,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(attachment, { status: 201 })
   } catch (error) {
-    console.error('Error creating attachment:', error)
-    return NextResponse.json({ error: 'Failed to create attachment' }, { status: 500 })
+    return internalError('Error creating attachment:', error, readRequestId(request))
   }
 }
 
@@ -203,7 +202,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting attachment:', error)
-    return NextResponse.json({ error: 'Failed to delete attachment' }, { status: 500 })
+    return internalError('Error deleting attachment:', error, readRequestId(request))
   }
 }
