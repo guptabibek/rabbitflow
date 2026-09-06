@@ -2,12 +2,22 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Retuned rather than replaced: 24 files build on this, and the shape they
+ * expect is fine — the padding was not. The stock card carried 24px of inner
+ * padding on every edge plus a 24px gap between every slot, which is a
+ * marketing-page rhythm. On a reporting page where a card holds a 100px chart
+ * it produced 280px boxes that were two-thirds empty.
+ *
+ * For new grouping prefer `Panel` in ui/panel.tsx, which is flatter still and
+ * does not assume a header/content/footer stack.
+ */
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
+        "flex flex-col gap-3.5 rounded-lg border border-border bg-card py-3.5 text-card-foreground",
         className
       )}
       {...props}
@@ -20,7 +30,8 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
+        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1 px-3.5",
+        "has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-3.5",
         className
       )}
       {...props}
@@ -32,7 +43,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
+      className={cn("type-heading text-foreground", className)}
       {...props}
     />
   )
@@ -42,7 +53,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-xs leading-relaxed text-muted-foreground", className)}
       {...props}
     />
   )
@@ -63,11 +74,7 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
 
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
-      data-slot="card-content"
-      className={cn("px-6", className)}
-      {...props}
-    />
+    <div data-slot="card-content" className={cn("px-3.5", className)} {...props} />
   )
 }
 
@@ -75,7 +82,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
+      className={cn("flex items-center px-3.5 [.border-t]:pt-3.5", className)}
       {...props}
     />
   )

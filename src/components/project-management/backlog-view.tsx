@@ -1,30 +1,28 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/states'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   ChevronDown,
   ChevronRight,
   ArrowUp,
   ArrowDown,
-  Layers,
-  Flag,
-  Star,
-  CheckCircle2,
-  Bug,
-  CircleDot,
+  FolderOpen,
   Inbox,
-  Rocket,
-  PackageCheck,
+  RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { getApiErrorMessage } from '@/lib/utils'
-import { getTypeText, getStatusClasses, getPriorityText } from '@/lib/ui-tokens'
+import { cn, getApiErrorMessage } from '@/lib/utils'
+import {
+  PriorityIndicator,
+  StatusBadge,
+  TypeIcon,
+} from '@/components/project-management/work-item-indicators'
 
 type BacklogNode = {
   id: string
@@ -42,28 +40,14 @@ type BacklogNode = {
   children: BacklogNode[]
 }
 
-const typeIconMap: Record<string, React.ElementType> = {
-  epic: Layers,
-  feature: Flag,
-  story: Star,
-  task: CheckCircle2,
-  dev_task: CheckCircle2,
-  qc_task: CircleDot,
-  bug: Bug,
-  prod_bug: Bug,
-  issue: CircleDot,
-  design_doc: Rocket,
-  release_item: PackageCheck,
-}
-
-const typeColorMap = (t: string) => getTypeText(t)
-const statusBgMap = (s: string) => getStatusClasses(s)
-const priorityMap = (p: string) => getPriorityText(p)
-
 export function BacklogView() {
   const openWorkItem = useAppStore((s) => s.openWorkItem)
 
-  function applyReorder(nodes: BacklogNode[], oldSiblings: BacklogNode[], newSiblings: BacklogNode[]): BacklogNode[] {
+  function applyReorder(
+    nodes: BacklogNode[],
+    oldSiblings: BacklogNode[],
+    newSiblings: BacklogNode[]
+  ): BacklogNode[] {
     if (nodes === oldSiblings) return newSiblings
     return nodes.map((node) => ({
       ...node,
@@ -78,16 +62,19 @@ export function BacklogView() {
     setHierarchyExpandedIds,
     toggleHierarchyExpanded,
     workItemTypeFilter,
+    setCreateIssueOpen,
   } = useAppStore()
   const canReorderBacklog = currentProjectPermissions.includes('backlog:reorder')
+  const canCreate = currentProjectPermissions.includes('workitem:create')
   const [tree, setTree] = useState<BacklogNode[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const hasPersistedExpansion =
-    currentProject ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id) : false
+  const hasPersistedExpansion = currentProject
+    ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id)
+    : false
   const expandedIds = currentProject ? hierarchyExpandedByProject[currentProject.id] ?? [] : []
   const expanded = useMemo(() => new Set(expandedIds), [expandedIds])
 
-  const fetchBacklog = async () => {
+  const fetchBacklog = useCallback(async () => {
     if (!currentProject) return
 
     setIsLoading(true)
@@ -118,17 +105,32 @@ export function BacklogView() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => { fetchBacklog() }, 0)
-    return () => { window.clearTimeout(timer) }
   }, [currentProject, hasPersistedExpansion, setHierarchyExpandedIds, workItemTypeFilter])
 
-  const flatCount = useMemo(() => {
-    const countNodes = (nodes: BacklogNode[]): number =>
-      nodes.reduce((acc, node) => acc + 1 + countNodes(node.children), 0)
-    return countNodes(tree)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchBacklog()
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [fetchBacklog])
+
+  const { flatCount, totalPoints } = useMemo(() => {
+    const walk = (nodes: BacklogNode[]): { count: number; points: number } =>
+      nodes.reduce(
+        (acc, node) => {
+          const child = walk(node.children)
+          return {
+            count: acc.count + 1 + child.count,
+            points: acc.points + (node.storyPoints ?? 0) + child.points,
+          }
+        },
+        { count: 0, points: 0 }
+      )
+
+    const result = walk(tree)
+    return { flatCount: result.count, totalPoints: result.points }
   }, [tree])
 
   const toggleExpanded = (id: string) => {
@@ -193,95 +195,166 @@ export function BacklogView() {
   }
 
   const renderNodes = (nodes: BacklogNode[], depth = 0, siblings = nodes) => {
-    return nodes.map((node) => {
+    return nodes.map((node, index) => {
       const hasChildren = node.children.length > 0
       const isExpanded = expanded.has(node.id)
-      const TypeIcon = typeIconMap[node.workItemType] || CircleDot
 
       return (
         <div key={node.id}>
           <div
-            className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/50 transition-colors rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              'group/row relative flex h-9 cursor-pointer items-center gap-2 border-b border-border/60 pr-2',
+              'transition-colors hover:bg-surface-hover',
+              'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+            )}
             tabIndex={0}
             role="button"
-            style={{ paddingLeft: `${12 + depth * 24}px` }}
-            onClick={() => {
-              openWorkItem(node.id)
+            onClick={() => openWorkItem(node.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                openWorkItem(node.id)
+              }
             }}
           >
-            {/* Expand toggle */}
-            <button
-              type="button"
-              className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={hasChildren ? (isExpanded ? 'Collapse children' : 'Expand children') : undefined}
-              aria-expanded={hasChildren ? isExpanded : undefined}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (hasChildren) toggleExpanded(node.id)
-              }}
-            >
-              {hasChildren ? (
-                isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              ) : (
-                <span className="h-3.5 w-3.5" />
-              )}
-            </button>
+            {/*
+              Depth is drawn as a guide line rather than paid for in padding
+              alone, so a three-level tree still reads as a tree once the rows
+              have scrolled away from their parent.
+            */}
+            <span
+              aria-hidden="true"
+              className="shrink-0"
+              style={{ width: `${8 + depth * 18}px` }}
+            />
+            {depth > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 w-px bg-border"
+                style={{ left: `${8 + (depth - 1) * 18 + 10}px` }}
+              />
+            ) : null}
 
-            {/* Type icon */}
-            <TypeIcon className={`h-4 w-4 flex-shrink-0 ${typeColorMap(node.workItemType)}`} />
-
-            {/* Key */}
-            <span className="font-mono text-xs text-muted-foreground flex-shrink-0 w-16">{node.key}</span>
-
-            {/* Title */}
-            <span className="flex-1 truncate text-sm font-medium text-foreground">{node.title}</span>
-
-            {/* Status */}
-            <Badge variant="outline" className={`text-[10px] capitalize border-0 font-medium flex-shrink-0 ${statusBgMap(node.status)}`}>
-              {node.status.replace('_', ' ')}
-            </Badge>
-
-            {/* Story Points */}
-            {node.storyPoints !== null && (
-              <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">
-                {node.storyPoints}
-              </span>
-            )}
-
-            {/* Assignee */}
-            {node.assignee ? (
-              <Avatar className="h-5 w-5 flex-shrink-0">
-                <AvatarImage src={node.assignee.avatar || undefined} />
-                <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-medium">
-                  {node.assignee.name.split(' ').map((n) => n[0]).join('').toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+            {hasChildren ? (
+              <button
+                type="button"
+                className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                aria-label={isExpanded ? 'Collapse children' : 'Expand children'}
+                aria-expanded={isExpanded}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleExpanded(node.id)
+                }}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="size-3.5" />
+                ) : (
+                  <ChevronRight className="size-3.5" />
+                )}
+              </button>
             ) : (
-              <div className="h-5 w-5 flex-shrink-0" />
+              <span className="size-5 shrink-0" aria-hidden="true" />
             )}
 
-            {/* Reorder */}
+            <TypeIcon type={node.workItemType} />
+
+            <span className="w-[4.5rem] shrink-0 font-mono text-[11px] text-muted-foreground">
+              {node.key}
+            </span>
+
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
+              {node.title}
+            </span>
+
+            {/*
+              The backlog is a ranking surface, so it shows the same facts the
+              list does. It previously showed status and a bare number, leaving
+              700px of nothing between the title and the right edge and no way
+              to judge priority or ownership while ordering the work.
+            */}
+            {node.iteration ? (
+              <span className="hidden max-w-[8rem] shrink-0 truncate rounded-sm bg-surface-sunken px-1.5 py-px text-[11px] text-muted-foreground xl:inline">
+                {node.iteration.name}
+              </span>
+            ) : null}
+
+            <span className="hidden w-[6rem] shrink-0 items-center lg:flex">
+              <PriorityIndicator priority={node.priority} />
+            </span>
+
+            <span className="hidden w-[7rem] shrink-0 items-center md:flex">
+              <StatusBadge status={node.status} variant="dot" />
+            </span>
+
+            <span className="flex w-9 shrink-0 items-center justify-end">
+              {node.storyPoints != null ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="font-mono text-[11px] tabular-nums text-foreground">
+                      {node.storyPoints}
+                      <span className="text-muted-foreground">pt</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{node.storyPoints} story points</TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="text-[11px] text-muted-foreground/40">—</span>
+              )}
+            </span>
+
+            <span className="flex w-6 shrink-0 items-center">
+              {node.assignee ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Avatar className="size-5">
+                      <AvatarImage src={node.assignee.avatar || undefined} />
+                      <AvatarFallback className="bg-primary-muted text-[9px] font-semibold text-primary">
+                        {node.assignee.name
+                          .split(' ')
+                          .map((part) => part[0])
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>{node.assignee.name}</TooltipContent>
+                </Tooltip>
+              ) : null}
+            </span>
+
+            {/*
+              Rank controls sit at the end of the row they move, revealed on
+              hover or keyboard focus. Disabled at the ends of a list rather
+              than silently doing nothing.
+            */}
             {canReorderBacklog ? (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  aria-label="Move up"
-                  onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'up') }}
+                  size="icon-xs"
+                  disabled={index === 0}
+                  aria-label={`Move ${node.key} up`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    reorderNode(node, siblings, 'up')
+                  }}
                 >
-                  <ArrowUp className="h-3 w-3" />
+                  <ArrowUp />
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  aria-label="Move down"
-                  onClick={(e) => { e.stopPropagation(); reorderNode(node, siblings, 'down') }}
+                  size="icon-xs"
+                  disabled={index === siblings.length - 1}
+                  aria-label={`Move ${node.key} down`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    reorderNode(node, siblings, 'down')
+                  }}
                 >
-                  <ArrowDown className="h-3 w-3" />
+                  <ArrowDown />
                 </Button>
               </div>
             ) : null}
@@ -295,49 +368,76 @@ export function BacklogView() {
 
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <Inbox className="h-12 w-12 text-muted-foreground/30 mb-4" />
-        <h3 className="text-lg font-semibold text-foreground mb-1">No project selected</h3>
-        <p className="text-sm text-muted-foreground">Select a project from the sidebar to view the backlog</p>
-      </div>
+      <EmptyState
+        size="lg"
+        icon={FolderOpen}
+        title="No project selected"
+        description="The backlog ranks one project's unscheduled work. Choose a project from the switcher in the top bar."
+      />
     )
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-shrink-0">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Backlog</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {flatCount} work item{flatCount !== 1 ? 's' : ''} in hierarchy
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="h-8 text-sm" onClick={fetchBacklog} disabled={isLoading}>
-          {isLoading ? 'Refreshing...' : 'Refresh'}
-        </Button>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3">
+        <p className="text-xs text-muted-foreground">
+          <span className="tabular-nums text-foreground">{flatCount}</span>{' '}
+          {flatCount === 1 ? 'item' : 'items'}
+          {totalPoints > 0 ? (
+            <>
+              {' · '}
+              <span className="tabular-nums text-foreground">{totalPoints}</span> points
+            </>
+          ) : null}
+        </p>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="ml-auto"
+              onClick={fetchBacklog}
+              disabled={isLoading}
+              aria-label="Refresh backlog"
+            >
+              <RefreshCw className={cn(isLoading && 'animate-spin')} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Refresh backlog</TooltipContent>
+        </Tooltip>
       </div>
 
-      {/* Body */}
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          {isLoading && tree.length === 0 ? (
-            <div className="space-y-1 p-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full rounded-md" />
-              ))}
-            </div>
-          ) : tree.length > 0 ? (
-            renderNodes(tree)
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Inbox className="h-10 w-10 text-muted-foreground/30 mb-3" />
-              <h3 className="text-sm font-medium text-foreground mb-1">No backlog items</h3>
-              <p className="text-xs text-muted-foreground">Create issues to populate the backlog</p>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {isLoading && tree.length === 0 ? (
+          <div className="divide-y divide-border/60">
+            {Array.from({ length: 10 }).map((_, index) => (
+              <div key={index} className="flex h-9 items-center gap-2 px-3">
+                <Skeleton className="size-4" />
+                <Skeleton className="h-2.5 w-14" />
+                <Skeleton className="h-2.5 flex-1" />
+                <Skeleton className="h-2.5 w-20" />
+              </div>
+            ))}
+          </div>
+        ) : tree.length > 0 ? (
+          renderNodes(tree)
+        ) : (
+          <EmptyState
+            size="lg"
+            icon={Inbox}
+            title="The backlog is empty"
+            description="Ranked, unscheduled work lives here. Create work items and drag them into priority order before a sprint starts."
+            action={
+              canCreate ? (
+                <Button size="sm" onClick={() => setCreateIssueOpen(true)}>
+                  Create a work item
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
+      </div>
     </div>
   )
 }

@@ -3,57 +3,15 @@
 import { memo } from 'react'
 import { Issue, useAppStore } from '@/store/app-store'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { getTypeText } from '@/lib/ui-tokens'
+import { cn } from '@/lib/utils'
+import { MessageSquare, UserPlus } from 'lucide-react'
 import {
-  Bug,
-  CheckCircle2,
-  CircleDot,
-  Flag,
-  Layers,
-  MessageSquare,
-  PackageCheck,
-  Rocket,
-  Star,
-} from 'lucide-react'
-
-const priorityConfig: Record<string, { color: string; bg: string }> = {
-  lowest: { color: 'text-priority-lowest', bg: 'bg-priority-lowest-bg' },
-  low: { color: 'text-priority-low', bg: 'bg-priority-low-bg' },
-  medium: { color: 'text-priority-medium', bg: 'bg-priority-medium-bg' },
-  high: { color: 'text-priority-high', bg: 'bg-priority-high-bg' },
-  highest: { color: 'text-priority-highest', bg: 'bg-priority-highest-bg' },
-}
-
-const typeIcons: Record<string, React.ElementType> = {
-  task: CheckCircle2,
-  bug: Bug,
-  story: Star,
-  epic: Layers,
-  feature: Flag,
-  issue: CircleDot,
-  design_doc: Rocket,
-  release_item: PackageCheck,
-  dev_task: CheckCircle2,
-  qc_task: CircleDot,
-  prod_bug: Bug,
-}
-
-const typeColors: Record<string, string> = {
-  task: 'text-type-task',
-  bug: 'text-type-bug',
-  story: 'text-type-story',
-  epic: 'text-type-epic',
-  feature: 'text-type-feature',
-  issue: 'text-type-issue',
-  design_doc: 'text-type-design-doc',
-  release_item: 'text-type-release-item',
-  dev_task: 'text-type-dev-task',
-  qc_task: 'text-type-qc-task',
-  prod_bug: 'text-type-prod-bug',
-}
+  PriorityIndicator,
+  TypeIcon,
+} from '@/components/project-management/work-item-indicators'
 
 interface IssueCardProps {
   issue: Issue
@@ -77,7 +35,9 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
     transition,
   }
 
-  const TypeIcon = typeIcons[issue.workItemType] || CheckCircle2
+  const dragging = isSortableDragging || isDragging
+  const assigneeName = issue.assignee?.name ?? null
+  const comments = issue._count?.comments ?? 0
 
   return (
     <article
@@ -88,87 +48,131 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
       aria-roledescription="Draggable card"
       aria-label={`${issue.key}: ${issue.title}`}
       tabIndex={0}
-      className={`group bg-card border border-border rounded-lg p-3 cursor-pointer transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        isSortableDragging || isDragging
-          ? 'opacity-60 shadow-xl ring-2 ring-primary/30 scale-[1.02]'
-          : 'hover:border-primary/30 hover:shadow-sm'
-      }`}
+      className={cn(
+        'group cursor-pointer rounded-md border border-border bg-card p-2.5',
+        'transition-[border-color,box-shadow,transform] duration-150',
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+        dragging
+          // The lifted card is the one place a heavy shadow earns its keep: it
+          // has genuinely left the column and is floating over the board.
+          ? 'rotate-[0.4deg] border-primary/40 opacity-95 shadow-xl'
+          : 'hover:border-border-strong hover:shadow-sm'
+      )}
       onClick={() => openWorkItem(issue.id)}
     >
-      {/* Header: type icon + key + priority */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <TypeIcon className={`h-3.5 w-3.5 flex-shrink-0 ${typeColors[issue.workItemType] || 'text-muted-foreground'}`} />
-          <span className="text-xs text-muted-foreground font-mono truncate">
-            {issue.key}
-          </span>
-        </div>
-        <Badge
-          variant="outline"
-          className={`text-[10px] px-1.5 py-0 h-5 capitalize font-medium border-0 ${priorityConfig[issue.priority]?.bg || ''} ${priorityConfig[issue.priority]?.color || ''}`}
-        >
-          {issue.priority}
-        </Badge>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <TypeIcon type={issue.workItemType} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+          {issue.key}
+        </span>
+        {/* Priority as an ordered chevron rather than a coloured word: at card
+            scale a tinted "Medium" pill was the loudest thing on the board and
+            it out-shouted the title. */}
+        <PriorityIndicator priority={issue.priority} showLabel={false} />
       </div>
 
-      {/* Title */}
-      <p className="text-sm font-medium leading-snug line-clamp-2 text-foreground mb-2">
+      <p className="mb-2 line-clamp-3 text-[13px] font-medium leading-snug text-foreground">
         {issue.title}
       </p>
 
-      {/* Labels */}
-      {issue.labels && issue.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {issue.labels.slice(0, 2).map(({ label }) => (
-            <Badge
+      {issue.labels && issue.labels.length > 0 ? (
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          {issue.labels.slice(0, 3).map(({ label }) => (
+            <span
               key={label.id}
-              variant="outline"
-              className="text-[10px] px-1.5 py-0 h-4 font-normal"
-              style={{ borderColor: label.color + '60', color: label.color }}
+              className="inline-flex max-w-[7rem] items-center gap-1 rounded-sm border border-border px-1 py-px text-[10px] text-muted-foreground"
             >
-              {label.name}
-            </Badge>
+              <span
+                aria-hidden="true"
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: label.color }}
+              />
+              <span className="truncate">{label.name}</span>
+            </span>
           ))}
-          {issue.labels.length > 2 && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
-              +{issue.labels.length - 2}
-            </Badge>
-          )}
+          {issue.labels.length > 3 ? (
+            <span className="text-[10px] text-muted-foreground">
+              +{issue.labels.length - 3}
+            </span>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
-      {/* Footer: assignee + meta */}
-      <div className="flex items-center justify-between pt-1 border-t border-border/50">
-        <div className="flex items-center gap-2">
-          {issue.assignee ? (
-            <Avatar className="h-5 w-5">
-              <AvatarImage src={issue.assignee.avatar || undefined} />
-              <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-medium">
-                {issue.assignee.name.split(' ').map((n) => n[0]).join('').toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <div className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/30" />
-          )}
-          {issue._count?.comments ? (
-            <div className="flex items-center gap-0.5 text-muted-foreground">
-              <MessageSquare className="h-3 w-3" />
-              <span className="text-[10px]">{issue._count.comments}</span>
-            </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {/*
+            The unassigned state used to be a bare dashed circle with no label
+            and no tooltip — a glyph that said nothing to anyone who had not
+            been told what it meant. It now names itself on hover and to a
+            screen reader.
+          */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                {issue.assignee ? (
+                  <Avatar className="size-5">
+                    <AvatarImage src={issue.assignee.avatar || undefined} />
+                    <AvatarFallback className="bg-primary-muted text-[9px] font-semibold text-primary">
+                      {issue.assignee.name
+                        .split(' ')
+                        .map((part) => part[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <span className="flex size-5 items-center justify-center rounded-full border border-dashed border-border-strong text-muted-foreground">
+                    <UserPlus className="size-2.5" aria-hidden="true" />
+                  </span>
+                )}
+                <span className="sr-only">
+                  {assigneeName ? `Assigned to ${assigneeName}` : 'Unassigned'}
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {assigneeName ? `Assigned to ${assigneeName}` : 'Unassigned'}
+            </TooltipContent>
+          </Tooltip>
+
+          {comments > 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                  <MessageSquare className="size-3" aria-hidden="true" />
+                  <span className="tabular-nums">{comments}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {comments} {comments === 1 ? 'comment' : 'comments'}
+              </TooltipContent>
+            </Tooltip>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {issue.storyPoints != null && (
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full h-5 w-5 flex items-center justify-center">
-              {issue.storyPoints}
-            </span>
-          )}
-          {issue.iteration && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal max-w-[80px] truncate">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {issue.iteration ? (
+            <span className="max-w-[6rem] truncate rounded-sm bg-surface-sunken px-1.5 py-px text-[10px] text-muted-foreground">
               {issue.iteration.name}
-            </Badge>
-          )}
+            </span>
+          ) : null}
+          {/*
+            Story points sat in an unlabelled grey circle that read as a
+            notification badge. Labelled and set in the mono face, it reads as
+            an estimate.
+          */}
+          {issue.storyPoints != null ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="rounded-sm bg-surface-sunken px-1.5 py-px font-mono text-[10px] font-medium tabular-nums text-foreground">
+                  {issue.storyPoints}
+                  <span className="ml-0.5 text-muted-foreground">pt</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{issue.storyPoints} story points</TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
     </article>

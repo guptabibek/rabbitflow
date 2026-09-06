@@ -130,16 +130,23 @@ export function LabelsManagement({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {/*
+        A caller that drives `open` itself does not want a trigger, and
+        rendering the fallback anyway put a stray "Labels" button in the
+        document flow — it surfaced as an unstyled control floating past the
+        user menu on desktop and overflowing the viewport on mobile, because
+        the workspace shell mounts this dialog as a bare sibling of the layout.
+      */}
       {trigger ? (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
-      ) : (
+      ) : open === undefined ? (
         <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1.5 h-8 text-xs">
-            <Tags className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="sm">
+            <Tags />
             Labels
           </Button>
         </DialogTrigger>
-      )}
+      ) : null}
       <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">

@@ -260,8 +260,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
             />
           </div>
           <div className="space-y-3 pt-1">
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="login-submit-button">
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" className="w-full" loading={isLoading} data-testid="login-submit-button">
               Sign In
             </Button>
             <Button
@@ -317,8 +316,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
             />
           </div>
           <div className="flex flex-col gap-2 pt-1">
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="login-mfa-submit-button">
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" className="w-full" loading={isLoading} data-testid="login-mfa-submit-button">
               Verify and Continue
             </Button>
             <Button
@@ -353,8 +351,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
             />
           </div>
           <div className="flex flex-col gap-2 pt-1">
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="password-reset-request-submit-button">
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" className="w-full" loading={isLoading} data-testid="password-reset-request-submit-button">
               Send OTP
             </Button>
             <Button
@@ -421,8 +418,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
             />
           </div>
           <div className="flex flex-col gap-2 pt-1">
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="password-reset-confirm-submit-button">
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" className="w-full" loading={isLoading} data-testid="password-reset-confirm-submit-button">
               Reset Password
             </Button>
             <Button type="button" variant="outline" className="w-full" onClick={() => setMode('login')}>

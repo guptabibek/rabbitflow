@@ -45,7 +45,13 @@ export default function RootLayout({
           storageKey="rabbitflow-theme"
         >
           {children}
-          <Toaster richColors position="bottom-right" />
+          {/*
+            richColors is deliberately off: it paints the whole toast in the
+            status colour, which turns a failed save into the loudest thing on
+            a dense board. The tone is carried by the icon and the border
+            instead — see components/ui/sonner.tsx.
+          */}
+          <Toaster position="bottom-right" />
         </ThemeProvider>
       </body>
     </html>

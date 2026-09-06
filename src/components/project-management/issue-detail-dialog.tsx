@@ -1116,12 +1116,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             </div>
           </div>
 
-          <div className="w-full overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
-            <div className="grid grid-cols-1 divide-y divide-border/50 sm:grid-cols-2 sm:divide-x xl:grid-cols-5 xl:divide-y-0">
+          <div className="w-full overflow-hidden rounded-lg border border-border bg-card">
+            <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x xl:grid-cols-5 xl:divide-y-0">
 
               {/* State */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   State
                 </Label>
                 <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
@@ -1138,8 +1138,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Assigned To */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Assigned To
                 </Label>
                 <Select value={draft.assigneeId} onValueChange={(value) => setDraft((previous) => ({ ...previous, assigneeId: value }))} disabled={!canAssign || isSaving}>
@@ -1156,8 +1156,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Area Path */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Area Path
                 </Label>
                 <Select value={draft.areaId} onValueChange={(value) => setDraft((previous) => ({ ...previous, areaId: value }))} disabled={!canUpdate || isSaving}>
@@ -1174,8 +1174,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Sprint Team */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Sprint Team
                 </Label>
                 <Select value={selectedIterationTeamId} onValueChange={setSelectedIterationTeamId} disabled={!canUpdate || isSaving}>
@@ -1192,8 +1192,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Iteration Path */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Iteration Path
                 </Label>
                 <Select value={draft.iterationId} onValueChange={(value) => setDraft((previous) => ({ ...previous, iterationId: value }))} disabled={!canUpdate || isSaving}>
@@ -1223,7 +1223,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <main className="min-h-0 space-y-3 overflow-y-auto bg-muted/10 p-3 md:p-4">
           <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
             <div className="space-y-1">
-              <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Description</Label>
+              <Label className="type-label">Description</Label>
             </div>
             <Textarea
               value={draft.description}
@@ -1257,7 +1257,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Discussion</Label>
+                <Label className="type-label">Discussion</Label>
                 <p className="mt-1 text-xs text-muted-foreground">Comments, mentions, and delivery clarifications stay attached to this work item.</p>
               </div>
               {loadingComments && comments === null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -1371,7 +1371,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
               <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">System</div>
+                  <div className="type-label">System</div>
                   <div className="mt-1 text-xs text-muted-foreground">Track sizing, effort, and execution details tied to this work item.</div>
                 </div>
                 <div className="space-y-1 text-sm">

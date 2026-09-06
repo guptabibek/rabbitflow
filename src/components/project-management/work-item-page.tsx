@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, X } from 'lucide-react'
+import { ArrowLeft, Loader2, X } from 'lucide-react'
 import { WorkItemDetailContent, type WorkItemBootstrapPayload } from '@/components/project-management/issue-detail-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorState } from '@/components/ui/states'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TypeIcon } from '@/components/project-management/work-item-indicators'
 import { cn } from '@/lib/utils'
 
 export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; embedded?: boolean; onClose?: () => void }) {
@@ -56,34 +59,51 @@ export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; 
     void loadWorkItem()
   }, [loadWorkItem])
 
-  // --- COMPACT LOADING STATE ---
+  // Mirrors the real page: a 44px bar, the title row, then the two-column
+  // body. Nothing shifts position when the payload lands.
   if (isLoading && !payload) {
     return (
-      <div className={cn("flex flex-col bg-background", embedded ? "h-full" : "min-h-screen")}>
-        <div className="flex h-11 items-center border-b border-border/50 px-3">
-          <Skeleton className="h-7 w-32 rounded-md" />
+      <div className={cn('flex flex-col bg-background', embedded ? 'h-full' : 'min-h-dvh')}>
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+          <Skeleton className="h-7 w-20" />
+          <Skeleton className="h-3 w-40" />
         </div>
-        <div className="flex-1 space-y-4 p-4">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-8 w-8 rounded-full" />
-            <Skeleton className="h-6 flex-1 max-w-md" />
-          </div>
-          <Skeleton className="h-[calc(100vh-150px)] w-full rounded-lg" />
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+          <Skeleton className="h-6 w-14" />
+          <Skeleton className="h-6 max-w-md flex-1" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+        <div className="flex min-h-0 flex-1 gap-4 p-4">
+          <Skeleton className="h-full flex-1" />
+          <Skeleton className="hidden h-full w-80 lg:block" />
         </div>
       </div>
     )
   }
 
-  // --- ERROR STATE ---
   if (error || !payload) {
     return (
-      <div className={cn("flex items-center justify-center bg-background px-6", embedded ? "h-full" : "min-h-screen")}>
-        <div className="flex flex-col items-center gap-3 text-center">
-          <p className="text-[13px] text-muted-foreground">{error || 'Work item not found'}</p>
-          <Button variant="outline" size="sm" onClick={() => embedded && onClose ? onClose() : router.push('/')}>
-            {embedded ? 'Close' : 'Return home'}
-          </Button>
-        </div>
+      <div
+        className={cn(
+          'flex items-center justify-center bg-background px-6',
+          embedded ? 'h-full' : 'min-h-dvh'
+        )}
+      >
+        <ErrorState
+          title="This work item could not be opened"
+          description="It may have been deleted, or you may not have access to the project it belongs to."
+          detail={error}
+          onRetry={() => void loadWorkItem()}
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => (embedded && onClose ? onClose() : router.push('/'))}
+            >
+              {embedded ? 'Close' : 'Back to workspace'}
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -91,14 +111,23 @@ export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; 
   // --- COMPACT MAIN VIEW ---
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      {/* Slim Header: Reduced height and padding */}
-      <header className="z-10 flex h-11 shrink-0 items-center border-b border-border/50 bg-background/80 px-3 backdrop-blur-md">
-        <div className="flex w-full items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+      {/*
+        The item's own chrome. It sits under the workspace top bar, which
+        already says which project and section you are in, so this bar answers
+        only the next question — which item, and how do I get out of it.
+
+        The version it replaces repeated the project name the top bar was
+        showing and put the exit behind a text label competing with it for
+        first position. Here the exit is the same corner icon every overlay in
+        this product uses, and the space goes to the item's own identity.
+      */}
+      <header className="z-10 flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-[12px] font-medium text-muted-foreground hover:text-foreground"
+              size="icon-sm"
+              aria-label={embedded ? 'Close work item' : 'Back'}
               onClick={() => {
                 if (embedded && onClose) {
                   onClose()
@@ -111,22 +140,36 @@ export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; 
                 router.push('/')
               }}
             >
-              {embedded ? <X className="mr-1.5 h-3.5 w-3.5" /> : <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />}
-              {embedded ? 'Close' : 'Back'}
+              {embedded ? <X /> : <ArrowLeft />}
             </Button>
-            
-            <div className="h-3 w-[1px] bg-border/60" /> {/* Tiny separator */}
-            
-            <span className="truncate text-[12px] font-medium text-muted-foreground">
-              {payload.issue.project.name} / {payload.issue.key}
-            </span>
-          </div>
-        </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{embedded ? 'Close' : 'Back'}</TooltipContent>
+        </Tooltip>
+
+        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
+          <TypeIcon type={payload.issue.workItemType} />
+          <span className="shrink-0 font-mono text-[12px] font-medium text-foreground">
+            {payload.issue.key}
+          </span>
+          <span aria-hidden="true" className="shrink-0 text-muted-foreground/50">
+            ·
+          </span>
+          <span className="truncate text-[12px] text-muted-foreground">
+            {payload.issue.title}
+          </span>
+        </nav>
+
+        {isLoading ? (
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            Syncing
+          </span>
+        ) : null}
       </header>
 
       {/* Main Content Area: No extra container padding, full height usage */}
       <main className="min-h-0 flex-1 overflow-hidden">
-        <div className="h-full w-full bg-card/30">
+        <div className="h-full w-full">
           <WorkItemDetailContent
             payload={payload}
             isRefreshing={isLoading}

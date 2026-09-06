@@ -44,6 +44,8 @@ export async function login(page: Page, email: string, password: string) {
 }
 
 export async function logout(page: Page) {
+  // Sign-out lives in the account menu, so it has to be opened first.
+  await page.getByTestId('account-menu-trigger').click()
   await page.getByTestId('dashboard-logout-button').click()
   await expect(page).toHaveURL(/\/login$/)
 }

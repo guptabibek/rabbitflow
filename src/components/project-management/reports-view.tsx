@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState as EmptyStatePanel, InlineAlert } from '@/components/ui/states'
 import {
   BarChart3,
   TrendingUp,
@@ -112,7 +114,19 @@ function MiniStackedBar({ segments }: {
   )
 }
 
-function StatCard({ label, value, icon: Icon, trend, description, iconBg, iconColor }: {
+/**
+ * A figure in a report.
+ *
+ * The previous version gave each number a 36px tinted icon square and its own
+ * shadowed card, so a row of four spent 160px of height and most of its ink on
+ * decoration — the icon colours were chosen per call site and carried no
+ * meaning, and `bg-red-500/10` ignored the theme entirely.
+ *
+ * The signature is unchanged so all fifteen call sites keep working; `iconBg`
+ * is accepted and deliberately ignored, and `iconColor` now tints only the
+ * small leading glyph.
+ */
+function StatCard({ label, value, icon: Icon, trend, description, iconColor }: {
   label: string
   value: string | number
   icon: React.ElementType
@@ -122,24 +136,22 @@ function StatCard({ label, value, icon: Icon, trend, description, iconBg, iconCo
   iconColor?: string
 }) {
   return (
-    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-            <div className="flex items-center gap-2">
-              <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
-              {trend === 'up' && <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
-              {trend === 'down' && <TrendingDown className="h-3.5 w-3.5 text-red-500" />}
-            </div>
-            {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
-          </div>
-          <div className={`h-9 w-9 rounded-lg ${iconBg || 'bg-primary/10'} flex items-center justify-center flex-shrink-0`}>
-            <Icon className={`h-4 w-4 ${iconColor || 'text-primary'}`} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="min-w-0 rounded-lg border border-border bg-card px-3.5 py-3">
+      <div className="flex items-center gap-1.5">
+        <Icon className={`size-3.5 shrink-0 ${iconColor || 'text-muted-foreground'}`} aria-hidden="true" />
+        <span className="type-label truncate">{label}</span>
+      </div>
+      <div className="mt-1.5 flex items-baseline gap-2">
+        <span className="type-numeric text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          {value}
+        </span>
+        {trend === 'up' ? <TrendingUp className="size-3.5 text-success" aria-label="Trending up" /> : null}
+        {trend === 'down' ? <TrendingDown className="size-3.5 text-danger" aria-label="Trending down" /> : null}
+      </div>
+      {description ? (
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">{description}</p>
+      ) : null}
+    </div>
   )
 }
 
@@ -253,8 +265,8 @@ function TrendLine({ data, colorClass = 'bg-primary' }: {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <Inbox className="h-8 w-8 text-muted-foreground/30 mb-2" />
+    <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border py-6 text-center">
+      <Inbox className="size-4 text-muted-foreground/50" aria-hidden="true" />
       <p className="text-xs text-muted-foreground">{message}</p>
     </div>
   )
@@ -262,9 +274,9 @@ function EmptyState({ message }: { message: string }) {
 
 function LoadingCards({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="status" aria-label="Loading report">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-24 rounded-xl" />
+        <Skeleton key={i} className="h-[4.75rem]" />
       ))}
     </div>
   )
@@ -487,77 +499,81 @@ export function ReportsView() {
 
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-        <BarChart3 className="h-12 w-12 text-muted-foreground/20 mb-3" />
-        <p className="text-sm text-muted-foreground">Select a project to view reports</p>
-      </div>
+      <EmptyStatePanel
+        size="lg"
+        icon={BarChart3}
+        title="No project selected"
+        description="Reports are scoped to a project. Choose one from the switcher in the top bar."
+      />
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Reports & Analytics</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-            <SelectTrigger className="h-7 w-[160px] text-xs">
-              <SelectValue placeholder="All teams" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              {teams.map((team) => (
-                <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={dayRange} onValueChange={setDayRange}>
-            <SelectTrigger className="h-7 w-[100px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">7 days</SelectItem>
-              <SelectItem value="14">14 days</SelectItem>
-              <SelectItem value="30">30 days</SelectItem>
-              <SelectItem value="60">60 days</SelectItem>
-              <SelectItem value="90">90 days</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={handleExport}>
-            <Download className="h-3 w-3" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1">
-        <div className="p-4">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)} className="space-y-4">
-            <TabsList className="h-8 p-0.5 gap-0 bg-muted/50 w-full justify-start overflow-x-auto flex-nowrap">
-              <TabsTrigger value="overview" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Overview</TabsTrigger>
-              <TabsTrigger value="agile" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Agile</TabsTrigger>
-              <TabsTrigger value="productivity" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Productivity</TabsTrigger>
-              <TabsTrigger value="work-items" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Work Items</TabsTrigger>
-              <TabsTrigger value="quality" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Quality</TabsTrigger>
-              <TabsTrigger value="dora" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">DORA</TabsTrigger>
-              <TabsTrigger value="forecast" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Forecast</TabsTrigger>
-              <TabsTrigger value="time-tracking" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Time</TabsTrigger>
-              <TabsTrigger value="audit" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Audit</TabsTrigger>
+    <div className="flex h-full min-h-0 flex-col">
+      {/*
+        The tab strip belongs to the header, flush against its bottom rule, so
+        it reads as navigation within the page rather than as a floating
+        control bar. The scope filters sit with the title because they change
+        what every tab below them means.
+      */}
+      <PageHeader
+        title="Reports"
+        description={activeScopeLabel}
+        actions={
+          <>
+            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+              <SelectTrigger size="sm" className="w-[9.5rem]" aria-label="Filter by team">
+                <SelectValue placeholder="All teams" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All teams</SelectItem>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={dayRange} onValueChange={setDayRange}>
+              <SelectTrigger size="sm" className="w-[6.5rem]" aria-label="Reporting period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 days</SelectItem>
+                <SelectItem value="14">14 days</SelectItem>
+                <SelectItem value="30">30 days</SelectItem>
+                <SelectItem value="60">60 days</SelectItem>
+                <SelectItem value="90">90 days</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download />
+              <span className="hidden md:inline">Export CSV</span>
+            </Button>
+          </>
+        }
+        tabs={
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="agile">Agile</TabsTrigger>
+              <TabsTrigger value="productivity">Productivity</TabsTrigger>
+              <TabsTrigger value="work-items">Work items</TabsTrigger>
+              <TabsTrigger value="quality">Quality</TabsTrigger>
+              <TabsTrigger value="dora">DORA</TabsTrigger>
+              <TabsTrigger value="forecast">Forecast</TabsTrigger>
+              <TabsTrigger value="time-tracking">Time</TabsTrigger>
+              <TabsTrigger value="audit">Audit</TabsTrigger>
             </TabsList>
+          </Tabs>
+        }
+      />
 
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-              <span>{activeScopeLabel}</span>
-            </div>
-
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-4 py-4 sm:px-6 sm:py-5">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)} className="space-y-4">
             {loadError ? (
-              <Card className="border-destructive/30 bg-destructive/5">
-                <CardContent className="px-4 py-3 text-sm text-destructive">
-                  {loadError}
-                </CardContent>
-              </Card>
+              <InlineAlert tone="danger" title="This report could not load.">
+                {loadError}
+              </InlineAlert>
             ) : null}
 
             {/* ---------------------------------------------------------------- */}

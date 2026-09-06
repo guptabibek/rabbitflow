@@ -2,19 +2,66 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
-  return (
+/**
+ * The element-level rules in globals.css already give every `<input>` in the
+ * product its height, border, focus ring and disabled treatment, so this
+ * component exists to add what a bare element cannot: an optional leading icon
+ * and a trailing slot, without every caller re-deriving the padding.
+ */
+function Input({
+  className,
+  containerClassName,
+  type,
+  icon,
+  trailing,
+  ...props
+}: React.ComponentProps<"input"> & {
+  icon?: React.ReactNode
+  trailing?: React.ReactNode
+  /**
+   * Sizing for the wrapper an icon or trailing slot introduces. Without it the
+   * wrapper is always full-width and swallows the width the caller set on the
+   * field — which is what pushed the work-item search onto its own row and
+   * made the filter bar two rows deep at every viewport.
+   */
+  containerClassName?: string
+}) {
+  const field = (
     <input
       type={type}
       data-slot="input"
       className={cn(
-        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        "w-full min-w-0",
+        icon && "pl-8",
+        trailing && "pr-8",
         className
       )}
       {...props}
     />
+  )
+
+  if (!icon && !trailing) return field
+
+  return (
+    <div
+      data-slot="input-wrapper"
+      className={cn("relative flex w-full items-center", containerClassName)}
+    >
+      {icon ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-2.5 flex text-muted-foreground [&_svg]:size-3.5"
+        >
+          {icon}
+        </span>
+      ) : null}
+      {field}
+      {trailing ? (
+        <span className="absolute right-1.5 flex items-center text-muted-foreground">
+          {trailing}
+        </span>
+      ) : null}
+    </div>
   )
 }
 

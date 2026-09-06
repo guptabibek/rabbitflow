@@ -30,6 +30,12 @@ import { WorkItemPage } from '@/components/project-management/work-item-page'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
+import { PageHeader } from '@/components/ui/page-header'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,11 +46,17 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Building2,
+  Check,
   ChevronDown,
+  ChevronRight,
+  LayoutGrid,
   LogOut,
+  Menu,
   Moon,
   PanelLeft,
+  Plus,
   PanelLeftClose,
+  RefreshCw,
   Shield,
   Sun,
   User,
@@ -180,6 +192,41 @@ function isViewType(value: string): value is ViewType {
   return (ALL_VIEWS as readonly string[]).includes(value)
 }
 
+/**
+ * The name and section for every destination, so the top bar can say where
+ * you are. The shell previously showed only the project name regardless of
+ * what was on screen: twenty-seven views, one label, and no way back up.
+ */
+const VIEW_META: Record<ViewType, { label: string; section?: string }> = {
+  dashboard: { label: 'Overview' },
+  backlog: { label: 'Backlog', section: 'Plan' },
+  board: { label: 'Board', section: 'Plan' },
+  list: { label: 'Work items', section: 'Plan' },
+  sprints: { label: 'Sprints', section: 'Plan' },
+  roadmap: { label: 'Roadmap', section: 'Plan' },
+  calendar: { label: 'Calendar', section: 'Plan' },
+  portfolio: { label: 'Portfolio', section: 'Track' },
+  'dependency-graph': { label: 'Dependencies', section: 'Track' },
+  objectives: { label: 'Goals', section: 'Track' },
+  approvals: { label: 'Approvals', section: 'Track' },
+  activity: { label: 'Activity', section: 'Track' },
+  reports: { label: 'Reports', section: 'Analyse' },
+  documents: { label: 'Documents', section: 'Analyse' },
+  retrospectives: { label: 'Retros', section: 'Analyse' },
+  teams: { label: 'Teams', section: 'Settings' },
+  settings: { label: 'Settings', section: 'Settings' },
+  webhooks: { label: 'Webhooks', section: 'Settings' },
+  automations: { label: 'Automations', section: 'Settings' },
+  imports: { label: 'Import', section: 'Settings' },
+  'recurring-tasks': { label: 'Recurring tasks', section: 'Settings' },
+  'test-plans': { label: 'Test plans', section: 'Settings' },
+  sla: { label: 'SLA policies', section: 'Settings' },
+  'api-tokens': { label: 'API tokens', section: 'Settings' },
+  branding: { label: 'Branding', section: 'Settings' },
+  acl: { label: 'ACL rules', section: 'Settings' },
+  'onboarding-config': { label: 'Onboarding', section: 'Settings' },
+}
+
 type OnboardingActionTarget = ViewType | '__create_issue' | '__manage_labels'
 
 const ONBOARDING_TARGET_ALIASES: Record<string, OnboardingActionTarget> = {
@@ -300,20 +347,35 @@ export default function HomePage() {
     },
   })
   const [isInitialized, setIsInitialized] = useState(false)
+  /**
+   * Desktop collapse is now a rail, not a disappearance, so it no longer needs
+   * to be forced on at narrow widths — below md the sidebar is a drawer
+   * instead, which is a different control entirely.
+   */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isMobileNavOpen, setMobileNavOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [appLoadError, setAppLoadError] = useState<string | null>(null)
   const [projectDataError, setProjectDataError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [isLabelsManagementOpen, setLabelsManagementOpen] = useState(false)
 
+  /**
+   * Narrow laptops get the rail so the board keeps its columns; the drawer
+   * takes over below md and is driven by its own state. Only ever set on
+   * mount and on a genuine crossing of the breakpoint, so a user who expands
+   * the rail does not have it collapsed again by an unrelated resize.
+   */
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) setSidebarCollapsed(true)
+    const query = window.matchMedia('(max-width: 1180px)')
+    const apply = (matches: boolean) => {
+      if (window.innerWidth >= 768) setSidebarCollapsed(matches)
     }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+
+    apply(query.matches)
+    const onChange = (event: MediaQueryListEvent) => apply(event.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
   }, [])
 
   const fetchProjectDataLegacy = useCallback(
@@ -631,12 +693,10 @@ export default function HomePage() {
   }, [currentView, setViewMode])
 
   const handleViewChange = (view: ViewType) => {
-    // On mobile the sidebar is an overlay covering most of the screen. Leaving
-    // it open after a selection meant the chosen view loaded behind it and the
-    // user had to dismiss the scrim manually to see what they had picked.
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      setSidebarCollapsed(true)
-    }
+    // The mobile drawer covers most of the screen. Leaving it open after a
+    // selection meant the chosen view loaded behind it and the user had to
+    // dismiss the scrim manually to see what they had picked.
+    setMobileNavOpen(false)
 
     closeWorkItem()
     setCreateIssueOpen(false)
@@ -711,44 +771,49 @@ export default function HomePage() {
   }
 
   if (!isInitialized) {
+    /*
+      Mirrors the real shell's geometry exactly — 48px chrome, 13.5rem
+      sidebar, the same page-header block — so that nothing on screen moves
+      when the workspace resolves. A skeleton that does not match the layout
+      it stands in for is just a differently shaped spinner.
+    */
     return (
-      <div className="flex h-dvh bg-background">
-        <div className="hidden w-52 flex-col border-r border-border bg-sidebar md:flex">
-          <div className="border-b border-border p-3">
-            <Skeleton className="h-6 w-32" />
+      <div className="flex h-dvh overflow-hidden bg-background">
+        <div className="hidden w-[13.5rem] shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+          <div className="flex h-12 items-center gap-2 border-b border-sidebar-border px-3">
+            <Skeleton className="size-6 rounded-md" />
+            <Skeleton className="h-3 w-24" />
           </div>
           <div className="space-y-1 p-2">
-            <Skeleton className="h-8 w-full rounded-md" />
-            <Skeleton className="h-8 w-full rounded-md" />
-            <Skeleton className="h-8 w-full rounded-md" />
-            <Skeleton className="h-8 w-full rounded-md" />
-          </div>
-          <div className="mt-4 px-2">
-            <Skeleton className="mb-2 h-3 w-12" />
-            <div className="space-y-1">
-              <Skeleton className="h-7 w-full rounded-md" />
-              <Skeleton className="h-7 w-full rounded-md" />
-            </div>
+            <Skeleton className="h-7 w-full" />
+            <div className="pt-3" />
+            <Skeleton className="h-2.5 w-10" />
+            {[0, 1, 2, 3, 4].map((index) => (
+              <Skeleton key={index} className="h-7 w-full" />
+            ))}
           </div>
         </div>
-        <div className="flex flex-1 flex-col">
-          <div className="flex h-12 items-center justify-between border-b border-border px-4">
-            <Skeleton className="h-6 w-44" />
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-7 w-7 rounded-md" />
-              <Skeleton className="h-7 w-7 rounded-full" />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+            <Skeleton className="h-4 w-52" />
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="size-7 rounded-md" />
+              <Skeleton className="size-7 rounded-md" />
+              <Skeleton className="h-7 w-24 rounded-md" />
             </div>
           </div>
-          <div className="flex-1 p-4 sm:p-6">
-            <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-              {[1, 2, 3, 4].map((index) => (
-                <Skeleton key={index} className="h-24 rounded-xl" />
-              ))}
-            </div>
-            <Skeleton className="mb-6 h-32 rounded-xl" />
-            <div className="grid gap-6 md:grid-cols-2">
-              <Skeleton className="h-64 rounded-xl" />
-              <Skeleton className="h-64 rounded-xl" />
+
+          <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="mt-2 h-5 w-44" />
+          </div>
+
+          <div className="flex-1 space-y-4 p-4 sm:p-6">
+            <Skeleton className="h-[4.75rem] w-full" />
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Skeleton className="h-64 lg:col-span-2" />
+              <Skeleton className="h-64" />
             </div>
           </div>
         </div>
@@ -758,167 +823,273 @@ export default function HomePage() {
 
   if (appLoadError && !currentProject) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h1 className="text-lg font-semibold">Workspace failed to initialize</h1>
-          <p className="mt-2 text-sm text-muted-foreground" data-testid="home-init-error">
+      <div className="flex min-h-dvh items-center justify-center bg-background px-6">
+        <div className="w-full max-w-md rounded-lg border border-border bg-card">
+          <ErrorState
+            title="This workspace did not load"
+            description="Your session is fine — the workspace data could not be fetched. Retrying usually resolves it."
+            detail={appLoadError}
+            action={
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReloadKey((value) => value + 1)}
+                  data-testid="home-init-retry-button"
+                >
+                  <RefreshCw />
+                  Retry
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  Sign out
+                </Button>
+              </>
+            }
+          />
+          <span className="sr-only" data-testid="home-init-error">
             {appLoadError}
-          </p>
-          <div className="mt-4 flex items-center gap-2">
-            <Button onClick={() => setReloadKey((value) => value + 1)} data-testid="home-init-retry-button">
-              Retry
-            </Button>
-            <Button variant="outline" onClick={handleLogout}>
-              Sign out
-            </Button>
-          </div>
+          </span>
         </div>
       </div>
     )
   }
 
+  const viewMeta = VIEW_META[currentView] ?? { label: 'Overview' }
+
+  const projectMenu = currentProject ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="max-w-[15rem] gap-1.5 px-1.5 font-medium"
+          aria-label={`Current project: ${currentProject.name}. Switch project`}
+        >
+          <span
+            aria-hidden="true"
+            className="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
+            style={{ backgroundColor: currentProject.color }}
+          >
+            {currentProject.key.slice(0, 2)}
+          </span>
+          <span className="truncate">{currentProject.name}</span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        <DropdownMenuLabel>Switch project</DropdownMenuLabel>
+        {projects
+          .filter((project) => !project.isArchived)
+          .map((project) => (
+            <DropdownMenuItem
+              key={project.id}
+              onClick={() => handleProjectChange(project.id)}
+              className="gap-2"
+            >
+              <span
+                aria-hidden="true"
+                className="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
+                style={{ backgroundColor: project.color }}
+              >
+                {project.key.slice(0, 2)}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{project.name}</span>
+              {project.id === currentProject.id ? (
+                <Check className="size-3.5 text-primary" />
+              ) : (
+                <span className="text-[11px] text-muted-foreground">
+                  {project.currentUserRole}
+                </span>
+              )}
+            </DropdownMenuItem>
+          ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleBackToDashboard} className="gap-2">
+          <LayoutGrid className="size-3.5" />
+          All projects
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null
+
   return (
     <OnboardingProvider>
     <div className="flex h-dvh overflow-hidden bg-background">
+      {/*
+        Desktop: a resident column that collapses to a 52px rail rather than
+        to nothing, so navigation is never more than one click away.
+      */}
       <aside
-        role="complementary"
         aria-label="Project navigation"
-        className={`${
-          sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-52'
-        } flex-shrink-0 border-r border-border bg-sidebar transition-all duration-200 ease-in-out max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl`}
+        className="hidden shrink-0 border-r border-sidebar-border md:block"
       >
-        <AppSidebar currentView={currentView} onViewChange={handleViewChange} />
+        <AppSidebar
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          collapsed={sidebarCollapsed}
+        />
       </aside>
 
-      {!sidebarCollapsed && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setSidebarCollapsed(true)}
-          aria-hidden="true"
-        />
-      )}
+      {/*
+        Below md the same navigation becomes a drawer. Previously it was the
+        desktop sidebar pinned over the content with a hand-rolled scrim, which
+        trapped focus behind it and could not be dismissed with Escape.
+      */}
+      <Sheet open={isMobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          showCloseButton={false}
+          className="w-[13.5rem] overflow-hidden bg-sidebar p-0 md:hidden"
+        >
+          <SheetTitle className="sr-only">Project navigation</SheetTitle>
+          <AppSidebar
+            currentView={currentView}
+            onViewChange={handleViewChange}
+            onNavigate={() => setMobileNavOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 flex-shrink-0 items-center justify-between border-b border-border bg-background px-3 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2">
+        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2 sm:px-3">
+          <div className="flex min-w-0 items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setSidebarCollapsed((value) => !value)}
+              size="icon-sm"
+              className="md:hidden"
+              aria-label="Open navigation"
+              onClick={() => setMobileNavOpen(true)}
             >
-              {sidebarCollapsed ? (
-                <PanelLeft className="h-3.5 w-3.5" />
-              ) : (
-                <PanelLeftClose className="h-3.5 w-3.5" />
-              )}
+              <Menu />
             </Button>
 
-            {currentProject && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-7 max-w-[280px] gap-1.5 px-2 text-[13px] font-medium">
-                    <div
-                      className="flex h-4.5 w-4.5 items-center justify-center rounded text-[9px] font-bold text-white"
-                      style={{ backgroundColor: currentProject.color }}
-                    >
-                      {currentProject.key.slice(0, 2)}
-                    </div>
-                    <span className="truncate">{currentProject.name}</span>
-                    <ChevronDown className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    Switch Project
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {projects
-                    .filter((project) => !project.isArchived)
-                    .map((project) => (
-                      <DropdownMenuItem
-                        key={project.id}
-                        onClick={() => handleProjectChange(project.id)}
-                        className="gap-2"
-                      >
-                        <div
-                          className="h-4 w-4 rounded-sm flex-shrink-0"
-                          style={{ backgroundColor: project.color }}
-                        />
-                        <span className="truncate">{project.name}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {project.currentUserRole}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleBackToDashboard} className="gap-2">
-                    <User className="h-4 w-4" />
-                    Dashboard
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="hidden md:inline-flex"
+                  aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  aria-pressed={sidebarCollapsed}
+                  onClick={() => setSidebarCollapsed((value) => !value)}
+                >
+                  {sidebarCollapsed ? <PanelLeft /> : <PanelLeftClose />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              </TooltipContent>
+            </Tooltip>
+
+            {/*
+              Project → section → view. The shell used to show the project name
+              alone, so nothing on screen distinguished the Board from the
+              Backlog from SLA Policies except the content itself.
+            */}
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
+              {projectMenu}
+              {currentProject ? (
+                <>
+                  <ChevronRight
+                    className="hidden size-3 shrink-0 text-muted-foreground/50 sm:block"
+                    aria-hidden="true"
+                  />
+                  {viewMeta.section ? (
+                    <>
+                      <span className="hidden text-[13px] text-muted-foreground lg:inline">
+                        {viewMeta.section}
+                      </span>
+                      <ChevronRight
+                        className="hidden size-3 shrink-0 text-muted-foreground/50 lg:block"
+                        aria-hidden="true"
+                      />
+                    </>
+                  ) : null}
+                  <span
+                    aria-current="page"
+                    className="hidden truncate text-[13px] font-medium text-foreground sm:inline"
+                  >
+                    {viewMeta.label}
+                  </span>
+                </>
+              ) : null}
+            </nav>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5">
             <CommandPalette />
             <NotificationBell />
-            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
-              {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  onClick={toggleTheme}
+                >
+                  {theme === 'dark' ? <Sun /> : <Moon />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              </TooltipContent>
+            </Tooltip>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-7 gap-1.5 px-1.5">
-                  <Avatar className="h-5 w-5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 px-1 sm:pr-2"
+                  aria-label="Account menu"
+                  data-testid="account-menu-trigger"
+                >
+                  <Avatar className="size-6">
                     <AvatarImage src={currentUser?.avatar || undefined} />
-                    <AvatarFallback className="bg-primary/10 text-[10px] text-primary">
+                    <AvatarFallback className="bg-primary-muted text-[10px] font-semibold text-primary">
                       {(currentUser?.name || 'User')
                         .split(' ')
                         .map((segment) => segment[0])
                         .join('')
+                        .slice(0, 2)
                         .toUpperCase() || 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="hidden text-[13px] sm:inline">
+                  <span className="hidden max-w-[9rem] truncate sm:inline">
                     {currentUser?.name || 'User'}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="space-y-1">
-                  <div className="text-sm font-medium">{currentUser?.name}</div>
-                  <div className="text-xs font-normal text-muted-foreground">
+              <DropdownMenuContent align="end" className="w-60">
+                <div className="px-2 pb-1.5 pt-1.5">
+                  <p className="truncate text-[13px] font-medium">{currentUser?.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
                     {currentUser?.email}
-                  </div>
-                </DropdownMenuLabel>
+                  </p>
+                </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setIsProfileOpen(true)}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile Settings
+                  <User />
+                  Profile settings
                 </DropdownMenuItem>
                 {currentUser?.globalRole === 'admin' ? (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      Organization Admin
-                    </DropdownMenuLabel>
+                    <DropdownMenuLabel>Organization</DropdownMenuLabel>
                     <DropdownMenuItem onClick={() => router.push('/admin/panel')}>
-                      <Building2 className="mr-2 h-4 w-4" />
-                      Admin Panel
+                      <Building2 />
+                      Admin panel
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => router.push('/admin/security')}>
-                      <Shield className="mr-2 h-4 w-4" />
-                      Admin Security
+                      <Shield />
+                      Security
                     </DropdownMenuItem>
                   </>
                 ) : null}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-500">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
+                <DropdownMenuItem variant="destructive" onClick={handleLogout}>
+                  <LogOut />
+                  Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -943,22 +1114,34 @@ export default function HomePage() {
                 />
                 )}
 
+              {/*
+                A partial sync failure is not a reason to take the whole view
+                away — the previously loaded data is still useful. This says
+                what is stale and offers the fix, in the product's own warning
+                tone rather than hard-coded amber that ignored dark mode.
+              */}
               {projectDataError ? (
-                <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900" data-testid="home-project-data-error">
-                  <span>{projectDataError}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 border-amber-300 bg-white/80 text-amber-900 hover:bg-white"
-                    onClick={() => currentProject && void fetchProjectData(currentProject.id)}
-                    data-testid="home-project-data-retry-button"
+                <div className="shrink-0 px-4 pt-3 sm:px-6" data-testid="home-project-data-error">
+                  <InlineAlert
+                    tone="warning"
+                    title="Some project data is out of date."
+                    action={
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => currentProject && void fetchProjectData(currentProject.id)}
+                        data-testid="home-project-data-retry-button"
+                      >
+                        Retry sync
+                      </Button>
+                    }
                   >
-                    Retry sync
-                  </Button>
+                    {projectDataError}
+                  </InlineAlert>
                 </div>
               ) : null}
 
-              <div className="flex-1 overflow-auto">
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto">
                 {isCreateScreenVisible ? (
                   <CreateIssueDialog
                     mode="screen"
@@ -970,7 +1153,54 @@ export default function HomePage() {
                   <>
                     {currentView === 'dashboard' && (
                       <>
-                        <div className="px-6 pt-6">
+                        {/*
+                          The overview is the one workspace surface that earns a
+                          full page header: it is where someone lands, and it is
+                          the only view whose title is not already answered by
+                          the toolbar underneath it. The board, list and backlog
+                          get their identity from the breadcrumb plus their own
+                          filter bar, so a second title there would be a third
+                          horizontal band saying nothing new.
+                        */}
+                        <PageHeader
+                          title={currentProject?.name ?? 'Overview'}
+                          description={
+                            currentProject?.description ||
+                            'Everything that needs a decision in this project, in one place.'
+                          }
+                          meta={
+                            currentProject ? (
+                              <>
+                                <Badge variant="outline" className="font-mono">
+                                  {currentProject.key}
+                                </Badge>
+                                {currentProject.currentUserRole ? (
+                                  <Badge variant="secondary">
+                                    {currentProject.currentUserRole}
+                                  </Badge>
+                                ) : null}
+                              </>
+                            ) : null
+                          }
+                          actions={
+                            currentProject ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewChange('board')}
+                                >
+                                  Open board
+                                </Button>
+                                <Button size="sm" onClick={() => setCreateIssueOpen(true)}>
+                                  <Plus />
+                                  New work item
+                                </Button>
+                              </>
+                            ) : null
+                          }
+                        />
+                        <div className="px-4 pt-4 sm:px-6">
                           <OnboardingChecklist onNavigate={handleOnboardingNavigate} />
                         </div>
                         <DashboardView />

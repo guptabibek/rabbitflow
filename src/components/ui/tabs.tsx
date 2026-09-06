@@ -5,16 +5,40 @@ import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Two tab treatments, because they answer different questions:
+ *
+ *   underline  "which part of this page am I looking at" — the default, for
+ *              page-level sections. Reads as navigation, sits directly on the
+ *              page header, and never boxes the content below it.
+ *   segmented  "which mode is this control in" — for switching a view's shape
+ *              (board vs list, week vs month). Reads as a control.
+ *
+ * The stock list was segmented-only and stretched every trigger to fill its
+ * container, so nine report sections spread across 1200px with no relationship
+ * between a tab's width and its importance.
+ */
+
+type TabsVariant = "underline" | "segmented"
+
+const TabsVariantContext = React.createContext<TabsVariant>("underline")
+
 function Tabs({
   className,
+  variant = "underline",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+}: React.ComponentProps<typeof TabsPrimitive.Root> & {
+  variant?: TabsVariant
+}) {
   return (
-    <TabsPrimitive.Root
-      data-slot="tabs"
-      className={cn("flex flex-col gap-2", className)}
-      {...props}
-    />
+    <TabsVariantContext.Provider value={variant}>
+      <TabsPrimitive.Root
+        data-slot="tabs"
+        data-variant={variant}
+        className={cn("flex flex-col gap-4", className)}
+        {...props}
+      />
+    </TabsVariantContext.Provider>
   )
 }
 
@@ -22,11 +46,19 @@ function TabsList({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
+  const variant = React.useContext(TabsVariantContext)
+
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+        "flex items-center",
+        variant === "underline" &&
+          // Scrolls rather than wraps: a wrapped tab strip changes the page's
+          // vertical rhythm the moment someone narrows the window.
+          "-mb-px w-full gap-0.5 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        variant === "segmented" &&
+          "h-8 w-fit gap-0.5 rounded-md border border-border bg-surface-sunken p-0.5",
         className
       )}
       {...props}
@@ -38,11 +70,29 @@ function TabsTrigger({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+  const variant = React.useContext(TabsVariantContext)
+
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap font-medium",
+        "transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45",
+        "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+        variant === "underline" && [
+          "relative h-9 rounded-t-sm px-3 text-[13px] text-muted-foreground",
+          "hover:text-foreground",
+          // The indicator is a box-shadow rather than a border so it overlaps
+          // the list's own bottom rule instead of adding a second line.
+          "data-[state=active]:text-foreground",
+          "data-[state=active]:shadow-[inset_0_-2px_0_0_var(--primary)]",
+        ],
+        variant === "segmented" && [
+          "h-7 rounded-[5px] px-2.5 text-xs text-muted-foreground",
+          "hover:text-foreground",
+          "data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-2xs",
+        ],
         className
       )}
       {...props}
@@ -57,7 +107,7 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
+      className={cn("flex-1 outline-none data-[state=active]:animate-view-in", className)}
       {...props}
     />
   )

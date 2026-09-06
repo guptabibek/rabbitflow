@@ -14,78 +14,36 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { EmptyState } from '@/components/ui/states'
+import { SkeletonTable } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { BulkActionToolbar } from '@/components/project-management/bulk-action-toolbar'
+import {
+  PriorityIndicator,
+  StatusBadge,
+  TypeIcon,
+  priorityRank,
+} from '@/components/project-management/work-item-indicators'
 import {
   buildWorkItemHierarchy,
   flattenWorkItemHierarchy,
 } from '@/lib/domain/work-item-hierarchy'
 import {
-  ArrowUpDown,
-  Bug,
-  CheckCircle2,
+  ArrowDown,
+  ArrowUp,
+  ChevronsUpDown,
   ChevronDown,
   ChevronRight,
-  CircleDot,
-  Flag,
-  Inbox,
-  Layers,
-  PackageCheck,
-  Rocket,
-  Star,
+  FolderOpen,
+  ListFilter,
+  Shapes,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { getApiErrorMessage } from '@/lib/utils'
-import { getTypeText, getStatusClasses, PRIORITY_STYLES } from '@/lib/ui-tokens'
-
-const typeIcons: Record<string, React.ElementType> = {
-  task: CheckCircle2,
-  bug: Bug,
-  story: Star,
-  epic: Layers,
-  feature: Flag,
-  issue: CircleDot,
-  design_doc: Rocket,
-  release_item: PackageCheck,
-  dev_task: CheckCircle2,
-  qc_task: CircleDot,
-  prod_bug: Bug,
-}
-
-const typeColors: Record<string, string> = {
-  task: 'text-type-task',
-  bug: 'text-type-bug',
-  story: 'text-type-story',
-  epic: 'text-type-epic',
-  feature: 'text-type-feature',
-  issue: 'text-type-issue',
-  design_doc: 'text-type-design-doc',
-  release_item: 'text-type-release-item',
-  dev_task: 'text-type-dev-task',
-  qc_task: 'text-type-qc-task',
-  prod_bug: 'text-type-prod-bug',
-}
-
-const statusStyles: Record<string, string> = {
-  backlog: 'bg-status-backlog-bg text-status-backlog',
-  todo: 'bg-status-todo-bg text-status-todo',
-  in_progress: 'bg-status-in-progress-bg text-status-in-progress',
-  in_review: 'bg-status-in-review-bg text-status-in-review',
-  done: 'bg-status-done-bg text-status-done',
-  cancelled: 'bg-status-cancelled-bg text-status-cancelled',
-}
-
-const priorityConfig: Record<string, { label: string; color: string }> = {
-  lowest: { label: 'Lowest', color: 'text-priority-lowest' },
-  low: { label: 'Low', color: 'text-priority-low' },
-  medium: { label: 'Medium', color: 'text-priority-medium' },
-  high: { label: 'High', color: 'text-priority-high' },
-  highest: { label: 'Highest', color: 'text-priority-highest' },
-}
+import { cn, getApiErrorMessage } from '@/lib/utils'
+import { hasActiveFilters } from '@/lib/domain/issue-filters'
 
 type SortField =
   | 'key'
@@ -97,36 +55,55 @@ type SortField =
   | 'createdAt'
 type SortOrder = 'asc' | 'desc'
 
-type VisibleRow = {
-  issue: Issue
-  depth: number
-  hasChildren: boolean
-  isExpanded: boolean
-}
-
-function SortHeaderButton({
+/**
+ * A sortable column header.
+ *
+ * The previous version drew the same neutral up/down glyph on every column
+ * including the active one, so the table told you it could be sorted but never
+ * which column was sorting it or in which direction. Here the icon is the
+ * state: a single arrow pointing the way the data actually runs on the active
+ * column, and a dimmed pair everywhere else.
+ */
+function SortHeader({
   field,
   activeField,
+  order,
   onSort,
+  align = 'left',
   children,
 }: {
   field: SortField
   activeField: SortField
+  order: SortOrder
   onSort: (field: SortField) => void
+  align?: 'left' | 'right'
   children: ReactNode
 }) {
+  const active = activeField === field
+  const Icon = !active ? ChevronsUpDown : order === 'asc' ? ArrowUp : ArrowDown
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-6 -ml-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+    <button
+      type="button"
       onClick={() => onSort(field)}
+      aria-label={`Sort by ${String(children)}`}
+      className={cn(
+        'group/sort -mx-1 inline-flex h-6 max-w-full items-center gap-1 rounded-sm px-1',
+        'text-[11px] font-semibold uppercase tracking-[0.055em] transition-colors',
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+        active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+        align === 'right' && 'flex-row-reverse'
+      )}
     >
-      {children}
-      <ArrowUpDown
-        className={`ml-1 h-3 w-3 ${activeField === field ? 'text-foreground' : 'opacity-40'}`}
+      <span className="truncate">{children}</span>
+      <Icon
+        className={cn(
+          'size-3 shrink-0 transition-opacity',
+          active ? 'opacity-100' : 'opacity-0 group-hover/sort:opacity-60'
+        )}
+        aria-hidden="true"
       />
-    </Button>
+    </button>
   )
 }
 
@@ -134,6 +111,7 @@ export function ListView() {
   const openWorkItem = useAppStore((s) => s.openWorkItem)
   const {
     issues,
+    isLoading,
     currentProject,
     filters,
     hierarchyExpandedByProject,
@@ -141,12 +119,18 @@ export function ListView() {
     toggleHierarchyExpanded,
     workItemTypeFilter,
     setIssues,
+    setFilters,
+    setWorkItemTypeFilter,
+    setCreateIssueOpen,
+    currentProjectPermissions,
   } = useAppStore()
   const [selectedIssues, setSelectedIssues] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>('key')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
-  const hasPersistedExpansion =
-    currentProject ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id) : false
+
+  const hasPersistedExpansion = currentProject
+    ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id)
+    : false
   const expandedRowIds = currentProject ? hierarchyExpandedByProject[currentProject.id] ?? [] : []
   const expandedRows = useMemo(() => new Set(expandedRowIds), [expandedRowIds])
 
@@ -172,17 +156,11 @@ export function ListView() {
         case 'status':
           comparison = a.status.localeCompare(b.status)
           break
-        case 'priority': {
-          const priorityOrder: Record<string, number> = {
-            highest: 0,
-            high: 1,
-            medium: 2,
-            low: 3,
-            lowest: 4,
-          }
-          comparison = priorityOrder[a.priority] - priorityOrder[b.priority]
+        case 'priority':
+          // Ranked highest-first via the shared scale, so "ascending" means
+          // "most urgent first" here and in every other view.
+          comparison = priorityRank(b.priority) - priorityRank(a.priority)
           break
-        }
         case 'workItemType':
           comparison = a.workItemType.localeCompare(b.workItemType)
           break
@@ -243,10 +221,11 @@ export function ListView() {
     setSortOrder('asc')
   }
 
+  const allSelected = selectedIssues.length === visibleRows.length && visibleRows.length > 0
+  const someSelected = selectedIssues.length > 0 && !allSelected
+
   const toggleSelectAll = () => {
-    setSelectedIssues(
-      selectedIssues.length === visibleRows.length ? [] : visibleRows.map((row) => row.issue.id)
-    )
+    setSelectedIssues(allSelected ? [] : visibleRows.map((row) => row.issue.id))
   }
 
   const toggleSelect = (id: string) => {
@@ -262,43 +241,50 @@ export function ListView() {
     toggleHierarchyExpanded(currentProject.id, id)
   }
 
+  const filtersActive = hasActiveFilters(filters, { workItemTypeTab: workItemTypeFilter })
+
+  const clearFilters = () => {
+    setFilters({
+      assigneeId: null,
+      priority: null,
+      type: null,
+      search: '',
+      sprintId: null,
+      iterationId: null,
+      areaId: null,
+      labelIds: [],
+    })
+    setWorkItemTypeFilter('all')
+  }
+
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <Inbox className="h-12 w-12 text-muted-foreground/30 mb-4" />
-        <h3 className="text-lg font-semibold text-foreground mb-1">No project selected</h3>
-        <p className="text-sm text-muted-foreground">Select a project from the dashboard</p>
-      </div>
+      <EmptyState
+        size="lg"
+        icon={FolderOpen}
+        title="No project selected"
+        description="Work items belong to a project. Choose one from the switcher in the top bar to see its items here."
+      />
     )
   }
 
   return (
-    <div className="h-full flex flex-col" data-testid="work-items-list-view">
-      <div className="px-4 py-2.5 border-b border-border flex items-center gap-3 flex-shrink-0">
+    <div className="flex h-full min-h-0 flex-col" data-testid="work-items-list-view">
+      {/*
+        Selection count, total and bulk actions share one strip. Previously the
+        counts had a row to themselves and the bulk toolbar appeared in a second
+        row beneath it, so selecting an item pushed the whole table down by
+        40px — the rows moved out from under the cursor mid-selection.
+      */}
+      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-3">
         <Checkbox
-          checked={selectedIssues.length === visibleRows.length && visibleRows.length > 0}
+          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
           onCheckedChange={toggleSelectAll}
+          aria-label={allSelected ? 'Clear selection' : 'Select all work items'}
           data-testid="work-items-select-all"
         />
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {visibleRows.length} visible
-        </span>
-        <Badge variant="secondary" className="text-[10px] h-5">
-          {sortedIssues.length} total in tree
-        </Badge>
-        {selectedIssues.length > 0 && (
-          <Badge variant="secondary" className="text-[10px] h-5">
-            {selectedIssues.length} selected
-          </Badge>
-        )}
-      </div>
 
-      {/* Says so when the project holds more than is loaded, instead of
-          presenting a capped page as the complete backlog. */}
-      <IssueLoadMore className="mx-4 mt-2 flex-shrink-0" />
-
-      {selectedIssues.length > 0 && (
-        <div className="px-4 py-1.5 border-b border-border flex-shrink-0">
+        {selectedIssues.length > 0 ? (
           <BulkActionToolbar
             selectedIds={selectedIssues}
             onClearSelection={() => setSelectedIssues([])}
@@ -316,173 +302,379 @@ export function ListView() {
               }
             }}
           />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            <span className="tabular-nums text-foreground">{visibleRows.length}</span>{' '}
+            {visibleRows.length === 1 ? 'item' : 'items'}
+            {filtersActive && sortedIssues.length !== issues.length ? (
+              <span className="text-muted-foreground">
+                {' '}
+                of <span className="tabular-nums">{issues.length}</span>
+              </span>
+            ) : null}
+          </p>
+        )}
+
+        <div className="ml-auto">
+          <IssueLoadMore className="my-0" />
         </div>
-      )}
+      </div>
 
-      <ScrollArea className="flex-1">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent border-b border-border">
-              <TableHead className="w-8" />
-              <TableHead className="w-20">
-                <SortHeaderButton field="key" activeField={sortField} onSort={toggleSort}>
-                  Key
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="w-10">
-                <SortHeaderButton
-                  field="workItemType"
-                  activeField={sortField}
-                  onSort={toggleSort}
-                >
-                  Type
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="min-w-[320px]">
-                <SortHeaderButton field="title" activeField={sortField} onSort={toggleSort}>
-                  Title
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="w-28">
-                <SortHeaderButton field="status" activeField={sortField} onSort={toggleSort}>
-                  Status
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="w-24">
-                <SortHeaderButton field="priority" activeField={sortField} onSort={toggleSort}>
-                  Priority
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="w-36 hidden lg:table-cell">
-                <SortHeaderButton field="assignee" activeField={sortField} onSort={toggleSort}>
-                  Assignee
-                </SortHeaderButton>
-              </TableHead>
-              <TableHead className="w-28 hidden xl:table-cell">
-                <SortHeaderButton field="createdAt" activeField={sortField} onSort={toggleSort}>
-                  Created
-                </SortHeaderButton>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleRows.map(({ issue, depth, hasChildren, isExpanded }) => {
-              const TypeIcon = typeIcons[issue.workItemType] || CheckCircle2
-              const priority = priorityConfig[issue.priority]
+      <div className="flex min-h-0 flex-1 flex-col">
+        {isLoading && visibleRows.length === 0 ? (
+          <SkeletonTable rows={10} columns={6} />
+        ) : visibleRows.length === 0 ? (
+          <EmptyState
+            size="lg"
+            icon={filtersActive ? ListFilter : FolderOpen}
+            title={filtersActive ? 'No items match these filters' : 'No work items yet'}
+            description={
+              filtersActive
+                ? 'Every item in this project is filtered out. Widen or clear the filters to see them again.'
+                : 'Work items are the unit of delivery here — epics, stories, tasks and bugs all live in this list.'
+            }
+            action={
+              filtersActive ? (
+                <Button size="sm" variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : currentProjectPermissions.includes('workitem:create') ? (
+                <Button size="sm" onClick={() => setCreateIssueOpen(true)}>
+                  Create the first work item
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <>
+          {/*
+            Below md a nine-column table is not a table any more — it is a
+            horizontal scroll bar with some text behind it. The same rows are
+            re-laid-out as a stack: identity on the first line, the facts you
+            triage on underneath. Not a shrunken table; a different shape for
+            the same job.
 
-              return (
-                <TableRow
-                  key={issue.id}
-                  className="cursor-pointer hover:bg-accent/40 transition-colors border-b border-border/50"
-                  onClick={() => openWorkItem(issue.id)}
-                  data-testid={`work-item-row-${issue.id}`}
+            Its test ids are `work-item-card-*`, not `work-item-row-*`: both
+            layouts are in the DOM at once, and reusing the row ids meant a
+            desktop test resolved to the hidden mobile node and timed out
+            clicking something with no box.
+          */}
+          <ul className="divide-y divide-border/60 md:hidden">
+            {visibleRows.map(({ issue, depth, hasChildren, isExpanded }) => (
+              <li key={issue.id}>
+                <div
+                  className="flex w-full items-start gap-2 px-3 py-2.5 transition-colors active:bg-surface-hover"
+                  style={{ paddingLeft: `${12 + depth * 14}px` }}
                 >
-                  <TableCell className="py-2">
-                    <Checkbox
-                      checked={selectedIssues.includes(issue.id)}
-                      onCheckedChange={() => toggleSelect(issue.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      data-testid={`work-item-select-${issue.id}`}
-                    />
-                  </TableCell>
-                  <TableCell className="font-mono text-[11px] text-muted-foreground py-2">
-                    {issue.key}
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <TypeIcon
-                      className={`h-4 w-4 ${typeColors[issue.workItemType] || 'text-muted-foreground'}`}
-                    />
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <div
-                      className="flex items-center gap-2"
-                      style={{ paddingLeft: `${depth * 20}px` }}
-                    >
-                      <button
-                        type="button"
-                        className="h-5 w-5 flex items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          if (hasChildren) {
-                            toggleExpanded(issue.id)
-                          }
-                        }}
-                        aria-label={hasChildren ? 'Toggle child work items' : 'No child work items'}
-                        aria-expanded={hasChildren ? isExpanded : undefined}
-                      >
-                        {hasChildren ? (
-                          isExpanded ? (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          )
-                        ) : (
-                          <span className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium text-foreground truncate block">
-                          {issue.title}
-                        </span>
-                        {depth > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            Child of {issue.parentIssue?.key}
-                          </span>
-                        )}
-                      </div>
+                  <Checkbox
+                    checked={selectedIssues.includes(issue.id)}
+                    onCheckedChange={() => toggleSelect(issue.id)}
+                    aria-label={`Select ${issue.key}`}
+                    className="mt-0.5 shrink-0"
+                    data-testid={`work-item-card-select-${issue.id}`}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => openWorkItem(issue.id)}
+                    className="min-w-0 flex-1 text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    data-testid={`work-item-card-${issue.id}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <TypeIcon type={issue.workItemType} />
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {issue.key}
+                      </span>
+                      <span className="ml-auto shrink-0">
+                        <PriorityIndicator priority={issue.priority} showLabel={false} />
+                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] capitalize border-0 font-medium ${statusStyles[issue.status] || ''}`}
-                    >
-                      {issue.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <span className={`text-xs font-medium ${priority?.color || ''}`}>
-                      {priority?.label || issue.priority}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 hidden lg:table-cell">
-                    {issue.assignee ? (
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-5 w-5">
-                          <AvatarImage src={issue.assignee.avatar || undefined} />
-                          <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-medium">
-                            {issue.assignee.name
-                              .split(' ')
-                              .map((segment) => segment[0])
-                              .join('')
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs text-muted-foreground truncate">
-                          {issue.assignee.name}
+
+                    <p className="mt-0.5 text-[13px] font-medium leading-snug text-foreground">
+                      {issue.title}
+                    </p>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <StatusBadge status={issue.status} variant="dot" />
+                      <span className="text-[11px] text-muted-foreground">
+                        {issue.assignee?.name ?? 'Unassigned'}
+                      </span>
+                      {issue.storyPoints != null ? (
+                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {issue.storyPoints}pt
                         </span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">Unassigned</span>
+                      ) : null}
+                    </div>
+                  </button>
+
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(issue.id)}
+                      aria-label={isExpanded ? 'Collapse child items' : 'Expand child items'}
+                      aria-expanded={isExpanded}
+                      className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="size-4" />
+                      ) : (
+                        <ChevronRight className="size-4" />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/*
+            table-fixed with an explicit width on every column except the
+            title. Under auto layout a `w-full` title column claimed all the
+            space and squeezed the rest below their content — the key wrapped
+            onto two lines and four headers truncated to "K..", "T...",
+            "PRIOR...". Fixed layout gives the named columns exactly what they
+            asked for and hands the remainder to the title.
+
+            The min-width keeps the columns legible on a phone and lets the
+            container scroll sideways rather than crushing every cell.
+          */}
+          <Table
+            density="compact"
+            className="table-fixed min-w-[54rem]"
+            containerClassName="hidden h-full md:block"
+          >
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-8" aria-label="Select" />
+                <TableHead className="w-[5.5rem]">
+                  <SortHeader field="key" activeField={sortField} order={sortOrder} onSort={toggleSort}>
+                    Key
+                  </SortHeader>
+                </TableHead>
+                {/* An icon column too narrow for its own heading. The label
+                    lives in the button's accessible name, and each icon names
+                    itself on hover, so nothing is lost by leaving the header
+                    visually empty rather than truncating "Type" to "T...". */}
+                <TableHead className="w-9 px-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleSort('workItemType')}
+                    aria-label="Sort by type"
+                    className={cn(
+                      'flex size-6 items-center justify-center rounded-sm transition-colors',
+                      'outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+                      sortField === 'workItemType'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground/60 hover:text-foreground'
                     )}
-                  </TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground tabular-nums py-2 hidden xl:table-cell">
-                    {issue.createdAt ? format(new Date(issue.createdAt), 'MMM d, yyyy') : '-'}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {visibleRows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
-                  <Inbox className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">No work items found</p>
-                </TableCell>
+                  >
+                    <Shapes className="size-3.5" aria-hidden="true" />
+                  </button>
+                </TableHead>
+                {/*
+                  The one elastic column. Everything after it is sized to its
+                  content, which is what closes the 500px void the old layout
+                  opened between the title and the status column.
+                */}
+                <TableHead>
+                  <SortHeader field="title" activeField={sortField} order={sortOrder} onSort={toggleSort}>
+                    Title
+                  </SortHeader>
+                </TableHead>
+                <TableHead className="hidden w-[9rem] xl:table-cell">Labels</TableHead>
+                <TableHead className="w-[7.5rem]">
+                  <SortHeader field="status" activeField={sortField} order={sortOrder} onSort={toggleSort}>
+                    Status
+                  </SortHeader>
+                </TableHead>
+                <TableHead className="w-[6.5rem]">
+                  <SortHeader
+                    field="priority"
+                    activeField={sortField}
+                    order={sortOrder}
+                    onSort={toggleSort}
+                  >
+                    Priority
+                  </SortHeader>
+                </TableHead>
+                <TableHead className="hidden w-[9.5rem] lg:table-cell">
+                  <SortHeader
+                    field="assignee"
+                    activeField={sortField}
+                    order={sortOrder}
+                    onSort={toggleSort}
+                  >
+                    Assignee
+                  </SortHeader>
+                </TableHead>
+                <TableHead className="hidden w-14 xl:table-cell" align="right">
+                  Pts
+                </TableHead>
+                <TableHead className="hidden w-[6.5rem] xl:table-cell" align="right">
+                  <SortHeader
+                    field="createdAt"
+                    activeField={sortField}
+                    order={sortOrder}
+                    onSort={toggleSort}
+                    align="right"
+                  >
+                    Created
+                  </SortHeader>
+                </TableHead>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </ScrollArea>
+            </TableHeader>
+            <TableBody>
+              {visibleRows.map(({ issue, depth, hasChildren, isExpanded }) => {
+                const selected = selectedIssues.includes(issue.id)
+
+                return (
+                  <TableRow
+                    key={issue.id}
+                    selected={selected}
+                    className="cursor-pointer"
+                    onClick={() => openWorkItem(issue.id)}
+                    data-testid={`work-item-row-${issue.id}`}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => toggleSelect(issue.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`Select ${issue.key}`}
+                        data-testid={`work-item-select-${issue.id}`}
+                      />
+                    </TableCell>
+
+                    <TableCell className="font-mono text-[11px] text-muted-foreground">
+                      {issue.key}
+                    </TableCell>
+
+                    <TableCell>
+                      <TypeIcon type={issue.workItemType} />
+                    </TableCell>
+
+                    <TableCell>
+                      <div
+                        className="flex items-center gap-1"
+                        style={{ paddingLeft: `${depth * 18}px` }}
+                      >
+                        {/* Only rendered where it does something. An inert
+                            disclosure control on every leaf row reads as a
+                            broken button. */}
+                        {hasChildren ? (
+                          <button
+                            type="button"
+                            className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleExpanded(issue.id)
+                            }}
+                            aria-label={isExpanded ? 'Collapse child items' : 'Expand child items'}
+                            aria-expanded={isExpanded}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="size-3.5" />
+                            ) : (
+                              <ChevronRight className="size-3.5" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="size-5 shrink-0" aria-hidden="true" />
+                        )}
+                        <span className="truncate font-medium text-foreground">{issue.title}</span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="hidden xl:table-cell">
+                      {issue.labels && issue.labels.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          {issue.labels.slice(0, 2).map(({ label }) => (
+                            <span
+                              key={label.id}
+                              className="inline-flex max-w-[4.5rem] items-center gap-1 truncate rounded-sm border border-border px-1 py-px text-[11px] text-muted-foreground"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="size-1.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: label.color }}
+                              />
+                              <span className="truncate">{label.name}</span>
+                            </span>
+                          ))}
+                          {issue.labels.length > 2 ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              +{issue.labels.length - 2}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      {/* Dot rather than a filled chip: forty tinted pills down
+                          one column is confetti, and the eye stops reading any
+                          of them. */}
+                      <StatusBadge status={issue.status} variant="dot" />
+                    </TableCell>
+
+                    <TableCell>
+                      <PriorityIndicator priority={issue.priority} />
+                    </TableCell>
+
+                    <TableCell className="hidden lg:table-cell">
+                      {issue.assignee ? (
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <Avatar className="size-5 shrink-0">
+                            <AvatarImage src={issue.assignee.avatar || undefined} />
+                            <AvatarFallback className="bg-primary-muted text-[9px] font-semibold text-primary">
+                              {issue.assignee.name
+                                .split(' ')
+                                .map((segment) => segment[0])
+                                .join('')
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="truncate text-[12px] text-muted-foreground">
+                            {issue.assignee.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[12px] text-muted-foreground/50">Unassigned</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell className="hidden xl:table-cell" align="right">
+                      {issue.storyPoints != null ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-[12px] font-medium text-foreground">
+                              {issue.storyPoints}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Story points</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell
+                      className="hidden text-[11px] text-muted-foreground xl:table-cell"
+                      align="right"
+                    >
+                      {issue.createdAt ? format(new Date(issue.createdAt), 'd MMM yyyy') : '—'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          </>
+        )}
+      </div>
     </div>
   )
 }

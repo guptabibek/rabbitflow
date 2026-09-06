@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppStore, type Project } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,8 +19,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/states'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -387,13 +391,15 @@ export function WorkspaceDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-full max-w-5xl px-6">
-          <Skeleton className="h-10 w-64 mx-auto mb-2" />
-          <Skeleton className="h-5 w-96 mx-auto mb-10" />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="min-h-dvh bg-background">
+        <div className="h-12 border-b border-border" />
+        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="mt-2 h-3.5 w-72" />
+          <Skeleton className="mt-5 h-8 w-full max-w-sm" />
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((index) => (
-              <Skeleton key={index} className="h-40 w-full rounded-xl" />
+              <Skeleton key={index} className="h-[7.5rem] w-full" />
             ))}
           </div>
         </div>
@@ -402,219 +408,263 @@ export function WorkspaceDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <FolderKanban className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-bold text-base leading-tight">RabbitFlow</h1>
-              <p className="text-xs text-muted-foreground">Dashboard</p>
-            </div>
+    <div className="flex min-h-dvh flex-col bg-background">
+      {/*
+        The same 48px chrome as the workspace shell. The hub used to have its
+        own 64px bar with its own brand lockup, so signing in and picking a
+        project felt like crossing between two different products.
+      */}
+      <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary">
+            <FolderKanban className="size-3.5 text-primary-foreground" aria-hidden="true" />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
-              <Avatar className="h-6 w-6">
+          <span className="truncate text-[13px] font-semibold tracking-[-0.01em]">RabbitFlow</span>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 px-1 sm:pr-2"
+              aria-label="Account menu"
+              data-testid="account-menu-trigger"
+            >
+              <Avatar className="size-6">
                 <AvatarImage src={currentUser?.avatar || undefined} />
-                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                <AvatarFallback className="bg-primary-muted text-[10px] font-semibold text-primary">
                   {(currentUser?.name || 'U')
                     .split(' ')
                     .map((segment) => segment[0])
                     .join('')
+                    .slice(0, 2)
                     .toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-sm font-medium">{currentUser?.name || 'User'}</span>
+              <span className="hidden max-w-[9rem] truncate sm:inline">
+                {currentUser?.name || 'User'}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <div className="px-2 pb-1.5 pt-1.5">
+              <p className="truncate text-[13px] font-medium">{currentUser?.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{currentUser?.email}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
+            {canCreateProject ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Organization</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => void openAdminPanel()}>
+                  <Settings />
+                  Admin panel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push('/admin/security')}>
+                  <Shield />
+                  Security
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowCreateUser(true)}
+                  data-testid="dashboard-new-user-button"
+                >
+                  <UserPlus />
+                  New user
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
               onClick={handleLogout}
-              className="text-muted-foreground"
               data-testid="dashboard-logout-button"
             >
-              <LogOut className="mr-1.5 h-4 w-4" />
-              Logout
-            </Button>
-          </div>
-        </div>
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-12">
-        <div className="mb-10 text-center">
-          <h2 className="mb-2 text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-lg text-muted-foreground">
-            Select a project workspace or create a new one.
-          </p>
-        </div>
+      {/*
+        Left-aligned, not a centred hero. This is a workspace switcher, and a
+        marketing-page headline over a search box told the user nothing they
+        could act on. The four equal-weight buttons that sat beside the search
+        — three of them administrative — have moved into the account menu,
+        leaving one primary action on the page.
+      */}
+      <PageHeader
+        title="Projects"
+        description="Open a project to work in it. Each project has its own board, backlog, sprints and members."
+        meta={
+          projects.length > 0 ? (
+            <Badge variant="count">{projects.length}</Badge>
+          ) : null
+        }
+        actions={
+          canCreateProject ? (
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              data-testid="dashboard-new-project-button"
+            >
+              <Plus />
+              New project
+            </Button>
+          ) : null
+        }
+      />
 
-        <div className="mx-auto mb-8 flex max-w-2xl items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search projects..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-11 pl-10"
-              data-testid="dashboard-project-search-input"
-            />
-          </div>
-          {canCreateProject ? (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => router.push('/admin/security')}
-                className="h-11 gap-2 px-5"
-              >
-                <Shield className="h-4 w-4" />
-                Admin Security
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void openAdminPanel()}
-                className="h-11 gap-2 px-5"
-              >
-                <Settings className="h-4 w-4" />
-                Admin Panel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowCreateUser(true)}
-                className="h-11 gap-2 px-5"
-                data-testid="dashboard-new-user-button"
-              >
-                <UserPlus className="h-4 w-4" />
-                New User
-              </Button>
-              <Button
-                onClick={() => setShowCreate(true)}
-                className="h-11 gap-2 px-5"
-                data-testid="dashboard-new-project-button"
-              >
-                <Plus className="h-4 w-4" />
-                New Project
-              </Button>
-            </div>
-          ) : null}
+      <main className="w-full flex-1 px-4 py-4 sm:px-6 sm:py-5">
+        {/*
+          Search is worth its row only once a list stops being scannable. Below
+          that it stays mounted but visually hidden, so keyboard and assistive
+          users — and the e2e suite — can still reach it.
+        */}
+        <div className={projects.length > 3 ? 'mb-4 max-w-sm' : 'sr-only'}>
+          <Input
+            placeholder="Search projects"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-8"
+            aria-label="Search projects"
+            icon={<Search />}
+            data-testid="dashboard-project-search-input"
+          />
         </div>
 
         {filteredProjects.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filteredProjects.map((project) => (
-              <Card
+              /*
+                A card the size of the information in it. The previous one was
+                356x260 for a name, a description and two counts, and it opened
+                with the avatar and an overflow menu rather than the project's
+                own name — the least important thing in the strongest position.
+              */
+              <div
                 key={project.id}
-                className="group cursor-pointer border-border/50 transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
-                onClick={() => handleSelectProject(project)}
+                className="group relative flex flex-col rounded-lg border border-border bg-card transition-colors hover:border-border-strong hover:bg-surface-hover"
                 data-testid={`dashboard-project-card-${project.id}`}
               >
-                <CardContent className="p-5">
-                  <div className="mb-4 flex items-start justify-between">
-                    <div
-                      className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-bold text-white"
-                      style={{ backgroundColor: project.color }}
-                    >
-                      {project.key.slice(0, 2)}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {canManageProject(project) ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label={`Actions for ${project.name}`}
-                              data-testid={`dashboard-project-actions-${project.id}`}
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                openEditProject(project)
-                              }}
-                              data-testid={`dashboard-project-edit-${project.id}`}
-                            >
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit project
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                openEditProject(project)
-                              }}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete project
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null}
-                      <ArrowRight className="h-5 w-5 text-muted-foreground/0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
-                    </div>
-                  </div>
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="mb-1 text-base font-semibold transition-colors group-hover:text-primary">
+                <div className="flex items-start gap-2.5 p-3.5 pb-2">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white"
+                    style={{ backgroundColor: project.color }}
+                  >
+                    {project.key.slice(0, 2)}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    {/*
+                      The whole card is the target, via a stretched link on the
+                      title: the name is what a screen reader announces, and a
+                      pointer can still click anywhere.
+                    */}
+                    <h3 className="type-heading truncate text-foreground">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectProject(project)}
+                        className="after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
+                      >
                         {project.name}
-                      </h3>
-                      <p className="min-h-[40px] text-sm text-muted-foreground line-clamp-2">
-                        {project.description || 'No description'}
-                      </p>
-                    </div>
-                    {project.currentUserRole && (
-                      <Badge variant="secondary" className="shrink-0 text-[10px]">
-                        {project.currentUserRole}
-                      </Badge>
-                    )}
+                      </button>
+                    </h3>
+                    <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                      {project.description || 'No description'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5" />
-                      {project._count?.issues ?? 0} items
+
+                  {canManageProject(project) ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="relative z-10 -mr-1 -mt-1 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                          aria-label={`Actions for ${project.name}`}
+                          data-testid={`dashboard-project-actions-${project.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEditProject(project)
+                          }}
+                          data-testid={`dashboard-project-edit-${project.id}`}
+                        >
+                          <Pencil />
+                          Edit project
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openEditProject(project)
+                          }}
+                        >
+                          <Trash2 />
+                          Delete project
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
+
+                <div className="mt-auto flex items-center gap-2.5 border-t border-border px-3.5 py-2 text-[11px] text-muted-foreground">
+                  <span className="font-mono text-foreground">{project.key}</span>
+                  <span className="flex items-center gap-1">
+                    <FileText className="size-3" aria-hidden="true" />
+                    <span className="tabular-nums">{project._count?.issues ?? 0}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Users className="size-3" aria-hidden="true" />
+                    <span className="tabular-nums">{project._count?.members ?? 0}</span>
+                  </span>
+                  {project.currentUserRole ? (
+                    <span className="ml-auto rounded-sm bg-surface-sunken px-1.5 py-px font-medium">
+                      {project.currentUserRole}
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      <Users className="h-3.5 w-3.5" />
-                      {project._count?.members ?? 0} members
-                    </span>
-                    <Badge variant="outline" className="h-5 text-[10px] font-mono">
-                      {project.key}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
+                  ) : null}
+                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                </div>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="py-20 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/50">
-              <FolderKanban className="h-10 w-10 text-muted-foreground/40" />
-            </div>
-            <h3 className="mb-2 text-lg font-semibold">
-              {search ? 'No projects found' : 'No projects yet'}
-            </h3>
-            <p className="mx-auto mb-6 max-w-sm text-muted-foreground">
-              {search
-                ? 'Try a different search term.'
-                : 'Create your first project to start tracking work items, sprints, and team delivery.'}
-            </p>
-            {!search && canCreateProject && (
-              <Button
-                onClick={() => setShowCreate(true)}
-                className="gap-2"
-                data-testid="dashboard-empty-create-project-button"
-              >
-                <Plus className="h-4 w-4" />
-                Create Your First Project
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            size="lg"
+            icon={FolderKanban}
+            title={search ? `No projects match "${search}"` : 'No projects yet'}
+            description={
+              search
+                ? 'Check the spelling, or search by project key instead of name.'
+                : canCreateProject
+                  ? 'A project is the container for work items, sprints, teams and reports. Create one to get started.'
+                  : 'You are not a member of any project yet. Ask an administrator to add you to one.'
+            }
+            action={
+              search ? (
+                <Button size="sm" variant="outline" onClick={() => setSearch('')}>
+                  Clear search
+                </Button>
+              ) : canCreateProject ? (
+                <Button
+                  size="sm"
+                  onClick={() => setShowCreate(true)}
+                  data-testid="dashboard-empty-create-project-button"
+                >
+                  <Plus />
+                  Create your first project
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </main>
 

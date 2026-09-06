@@ -1154,8 +1154,7 @@ export function AdminConfigPanel() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
-                          {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        <Button onClick={createState} loading={stateConfigSaving} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
                           Add State
                         </Button>
                       </div>

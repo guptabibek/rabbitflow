@@ -780,8 +780,15 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           </TabsList>
         </div>
 
+        {/*
+          A form field is only as usable as its line length. In screen mode
+          this body is as wide as the workspace, and a 1250px-wide title input
+          with a 1250px-wide description under it is neither scannable nor
+          fillable. Capped to a comfortable measure and left-aligned, which
+          also keeps the label/field relationship readable.
+        */}
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="space-y-4">
+          <div className="max-w-3xl space-y-4">
             <TabsContent value="basic" className="space-y-4 mt-0">
               {typeOptions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
@@ -789,11 +796,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 </div>
               ) : null}
               <div>
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-                  Work Item Type
+                <Label htmlFor="work-item-type" className="mb-1.5 block text-xs">
+                  Type
                 </Label>
                 <Select value={workItemType} onValueChange={setWorkItemType}>
-                  <SelectTrigger className="h-9 text-sm" data-testid="create-work-item-type-trigger">
+                  <SelectTrigger id="work-item-type" data-testid="create-work-item-type-trigger">
                     <SelectValue placeholder="Select work item type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -808,13 +815,17 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedType ? (
-                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                    <div className={`flex h-7 w-7 items-center justify-center rounded-md ${typeBackground}`}>
-                      <TypeIcon className={`h-4 w-4 ${typeColor}`} />
-                    </div>
-                    <span>{selectedType.name}</span>
-                  </div>
+                {/*
+                  The read-only tile that used to sit here restated the value
+                  of the select immediately above it — the same word, the same
+                  icon, in a box that could not be interacted with. The chosen
+                  type is already named in the page title and in the submit
+                  button.
+                */}
+                {selectedType?.description ? (
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    {selectedType.description}
+                  </p>
                 ) : null}
               </div>
 
@@ -1359,24 +1370,24 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   if (isScreenMode) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background">
-        <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-4 py-4 sm:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2 text-base font-semibold">
-              <div className={`h-8 w-8 rounded-md ${typeBackground} flex items-center justify-center`}>
-                <TypeIcon className={`h-4 w-4 ${typeColor}`} />
-              </div>
-              <span className="truncate">Create {selectedType?.name || 'Work Item'}</span>
-              <Badge variant="outline" className="text-[10px] font-normal ml-1">
-                {currentProject.key}
-              </Badge>
-            </div>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => handleOpenChange(false)}>
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back
-            </Button>
+        {/* No gradient: a decorative wash across a form header adds nothing a
+            hairline does not, and it fought the page behind it. */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} aria-hidden="true" />
+            <h1 className="type-title truncate text-foreground">
+              New {selectedType?.name.toLowerCase() || 'work item'}
+            </h1>
+            <Badge variant="outline" className="font-mono">
+              {currentProject.key}
+            </Badge>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => handleOpenChange(false)}>
+            <ArrowLeft />
+            Back
+          </Button>
         </div>
-        <div className="flex-1 min-h-0 overflow-hidden">{formContent}</div>
+        <div className="min-h-0 flex-1 overflow-hidden">{formContent}</div>
       </div>
     )
   }

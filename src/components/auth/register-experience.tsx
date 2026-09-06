@@ -124,8 +124,7 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
             data-testid="register-password-input"
           />
         </div>
-        <Button type="submit" className="w-full" disabled={isLoading} data-testid="register-submit-button">
-          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" className="w-full" loading={isLoading} data-testid="register-submit-button">
           Create Account
         </Button>
       </form>
