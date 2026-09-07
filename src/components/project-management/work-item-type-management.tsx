@@ -654,7 +654,7 @@ function FieldRow({
               {field.label || `Field ${fieldIndex + 1}`}
             </span>
             {field.isSystem && (
-              <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+              <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                 System
               </Badge>
             )}
@@ -779,7 +779,7 @@ function SectionCard({
                 {section.title || `Section ${sectionIndex + 1}`}
               </span>
               {section.isSystem && (
-                <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+                <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                   System
                 </Badge>
               )}
@@ -1475,7 +1475,7 @@ export function WorkItemTypeManagement({
                   {form.name || 'New Work Item Type'}
                 </h2>
                 {form.isSystem && (
-                  <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+                  <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                     System
                   </Badge>
                 )}
@@ -1485,8 +1485,8 @@ export function WorkItemTypeManagement({
                   </Badge>
                 )}
                 {isDirty && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-500">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning">
+                    <span className="h-1.5 w-1.5 rounded-full bg-warning" />
                     Unsaved
                   </span>
                 )}

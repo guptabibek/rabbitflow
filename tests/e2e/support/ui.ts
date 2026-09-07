@@ -27,8 +27,30 @@ export async function openDashboard(page: Page) {
 
 export async function login(page: Page, email: string, password: string) {
   await page.goto('/login')
-  await page.getByTestId('login-email-input').fill(email)
-  await page.getByTestId('login-password-input').fill(password)
+
+  const emailInput = page.getByTestId('login-email-input')
+  const passwordInput = page.getByTestId('login-password-input')
+
+  /*
+    Fill, then prove the values survived, and retry the pair if they did not.
+
+    The fields are React-controlled. Playwright can fill them before hydration
+    completes — the DOM takes the text, then React mounts, re-renders from its
+    own empty state and wipes both. The submit that follows then carries no
+    credentials, and because the inputs are `required` the browser blocks the
+    form natively: no request is made at all, and the wait below times out with
+    nothing in the network log to explain it.
+
+    Against a dev server this is easy to hit, since the first paint of a route
+    can precede its hydration by seconds. `toPass` re-runs the whole block, so
+    a wipe simply costs one more attempt.
+  */
+  await expect(async () => {
+    await emailInput.fill(email)
+    await passwordInput.fill(password)
+    await expect(emailInput).toHaveValue(email)
+    await expect(passwordInput).toHaveValue(password)
+  }).toPass({ timeout: 20_000 })
 
   const responsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/auth/login') && response.request().method() === 'POST'
@@ -79,7 +101,9 @@ export async function editProject(page: Page, currentName: string, nextName: str
   await expect(card).toBeVisible()
 
   await card.locator('[data-testid^="dashboard-project-actions-"]').click()
-  await card.locator('[data-testid^="dashboard-project-edit-"]').click()
+  // The menu content renders in a portal at the end of <body>, so it is not a
+  // descendant of the card that opened it.
+  await page.locator('[data-testid^="dashboard-project-edit-"]').click()
   await expect(page.getByTestId('dashboard-edit-project-dialog')).toBeVisible()
 
   await page.getByTestId('dashboard-edit-project-name-input').fill(nextName)
@@ -103,17 +127,19 @@ export async function deleteProject(page: Page, projectName: string) {
   await expect(card).toBeVisible()
 
   await card.locator('[data-testid^="dashboard-project-actions-"]').click()
-  await card.locator('[data-testid^="dashboard-project-edit-"]').click()
-  await expect(page.getByTestId('dashboard-edit-project-dialog')).toBeVisible()
 
-  const dialogPromise = page.waitForEvent('dialog')
+  // Accepted from a listener so the click that opens it can settle — see the
+  // note on the same pattern in issues.spec.ts.
+  page.once('dialog', (dialog) => void dialog.accept())
+
   const responsePromise = page.waitForResponse(
     (response) => /\/api\/projects\//.test(response.url()) && response.request().method() === 'DELETE'
   )
 
-  await page.getByTestId('dashboard-delete-project-button').click()
-  const dialog = await dialogPromise
-  await dialog.accept()
+  // Delete straight from the card menu (portal-rendered, so queried off `page`).
+  // It used to route through the edit dialog, which was the only way to reach
+  // deletion at all.
+  await page.locator('[data-testid^="dashboard-project-delete-"]').click()
   const response = await responsePromise
 
   expect(response.ok()).toBeTruthy()
@@ -140,12 +166,61 @@ export async function selectRadixOption(page: Page, triggerTestId: string, optio
   await page.getByRole('option', { name: optionName, exact: true }).click()
 }
 
+/*
+  Creation renders either as a dialog or as a full-screen page, depending on
+  where it was opened from — a long form on a wide surface is a page, not a
+  modal. Both carry the same field and submit hooks, so the helper only needs
+  to accept either container.
+*/
+function createWorkItemSurface(page: Page) {
+  return page.locator(
+    '[data-testid="create-work-item-surface"], [data-testid="create-work-item-dialog"]'
+  )
+}
+
+/**
+ * Choose the work-item type on the create form.
+ *
+ * The default is Epic, which additionally requires an Objective. Tests that are
+ * not about custom fields pick `task`, the type with the smallest required set.
+ */
+export async function selectWorkItemType(page: Page, typeKey: string) {
+  await page.getByTestId('create-work-item-type-trigger').click()
+  await page.getByTestId(`create-work-item-type-${typeKey}`).click()
+}
+
+/**
+ * Set the Scope field, which every work-item type marks required.
+ *
+ * Creation is refused until it has a value, and the refusal is reported on the
+ * Fields tab — so a test that skips it never reaches whatever it was actually
+ * trying to assert.
+ */
+export async function fillRequiredScope(page: Page) {
+  await page.getByTestId('create-work-item-tab-fields').click()
+  await page.getByTestId('work-item-field-scope').click()
+  await page.getByRole('option', { name: 'In Scope', exact: true }).click()
+  await page.getByTestId('create-work-item-tab-basic').click()
+}
+
 export async function createWorkItem(page: Page, title: string, description: string) {
   await page.getByTestId('work-items-new-button').click()
-  await expect(page.getByTestId('create-work-item-dialog')).toBeVisible()
+  await expect(createWorkItemSurface(page)).toBeVisible()
+
+  /*
+    Task, not the default Epic.
+
+    Epic declares Objective as a required custom field, and every type carries a
+    required Scope. The form correctly refuses to submit until both are set —
+    which is the behaviour we want, but it is not what these tests are about, so
+    they pick the type with the smallest required set and fill it.
+  */
+  await selectWorkItemType(page, 'task')
 
   await page.getByTestId('create-work-item-title-input').fill(title)
   await page.getByTestId('create-work-item-description-input').fill(description)
+
+  await fillRequiredScope(page)
 
   const responsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/issues') && response.request().method() === 'POST'
@@ -155,7 +230,7 @@ export async function createWorkItem(page: Page, title: string, description: str
   const response = await responsePromise
 
   expect(response.status()).toBe(201)
-  await expect(page.getByTestId('create-work-item-dialog')).toBeHidden()
+  await expect(createWorkItemSurface(page)).toBeHidden()
 
   return response
 }
@@ -201,6 +276,25 @@ export async function inviteExistingMember(page: Page, searchText: string) {
   await page.getByTestId('member-management-add-existing-submit').click()
   const response = await responsePromise
   expect(response.status()).toBe(201)
+
+  /*
+    Close what this opened before handing control back.
+
+    The members dialog deliberately stays open after an add, so several people
+    can be invited in a row — correct product behaviour, but it leaves a Radix
+    overlay covering the page. Anything the caller does next (a sidebar click,
+    say) then fails with "intercepts pointer events" some distance from the
+    real cause.
+  */
+  const addDialog = page.getByTestId('member-management-add-dialog')
+  if (await addDialog.isVisible()) {
+    await page.keyboard.press('Escape')
+    await expect(addDialog).toBeHidden()
+  }
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('member-management-dialog')).toBeHidden()
+
   return response
 }
 

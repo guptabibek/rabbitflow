@@ -281,14 +281,14 @@ export function ImportWizard() {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'failed':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       case 'processing':
       case 'validating':
-        return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+        return <Loader2 className="h-3.5 w-3.5 animate-spin text-info" />
       default:
-        return <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+        return <AlertTriangle className="h-3.5 w-3.5 text-warning" />
     }
   }
 
@@ -367,7 +367,7 @@ export function ImportWizard() {
               <div className="space-y-3 py-2">
                 {validationErrors.length === 0 ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 rounded-md bg-green-500/10 p-3 text-sm text-green-600">
+                    <div className="flex items-center gap-2 rounded-md bg-success/10 p-3 text-sm text-success">
                       <CheckCircle2 className="h-4 w-4" />
                       Validation passed. Ready to import.
                     </div>
@@ -380,7 +380,7 @@ export function ImportWizard() {
                       <ScrollArea className="max-h-32">
                         <div className="space-y-1">
                           {validationSummary.warnings.slice(0, 10).map((warning, index) => (
-                            <div key={`${warning.row}-${warning.field}-${index}`} className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-700">
+                            <div key={`${warning.row}-${warning.field}-${index}`} className="rounded bg-warning/10 px-2 py-1 text-xs text-warning">
                               <span className="font-medium">Row {warning.row}</span>{' '}
                               {warning.field && <span>[{warning.field}]</span>}{' '}
                               {warning.message}
@@ -392,7 +392,7 @@ export function ImportWizard() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2 rounded-md bg-red-500/10 p-3 text-sm text-red-600">
+                    <div className="flex items-center gap-2 rounded-md bg-danger/10 p-3 text-sm text-danger">
                       <AlertTriangle className="h-4 w-4" />
                       {validationErrors.length} validation error(s)
                     </div>
@@ -441,8 +441,8 @@ export function ImportWizard() {
                 <div
                   className={`flex items-center gap-2 rounded-md p-3 text-sm ${
                     importJob.status === 'completed'
-                      ? 'bg-green-500/10 text-green-600'
-                      : 'bg-red-500/10 text-red-600'
+                      ? 'bg-success/10 text-success'
+                      : 'bg-danger/10 text-danger'
                   }`}
                 >
                   {importJob.status === 'completed' ? (
@@ -509,7 +509,7 @@ export function ImportWizard() {
                   <p className="text-xs text-muted-foreground">
                     {j.processedRows}/{j.totalRows} rows ·{' '}
                     {j.failedRows > 0 && (
-                      <span className="text-red-500">{j.failedRows} failed · </span>
+                      <span className="text-danger">{j.failedRows} failed · </span>
                     )}
                     {new Date(j.createdAt).toLocaleDateString()}
                   </p>

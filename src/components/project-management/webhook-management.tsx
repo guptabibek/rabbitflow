@@ -308,13 +308,19 @@ export function WebhookManagement() {
               <CardContent className="p-3">
                 <div className="flex items-center gap-3">
                   <button
-                    className="flex-shrink-0"
+                    className="flex-shrink-0 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => toggleExpand(wh.id)}
+                    aria-expanded={expandedId === wh.id}
+                    aria-label={
+                      expandedId === wh.id
+                        ? `Hide delivery history for ${wh.name}`
+                        : `Show delivery history for ${wh.name}`
+                    }
                   >
                     {expandedId === wh.id ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown aria-hidden="true" className="h-4 w-4" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight aria-hidden="true" className="h-4 w-4" />
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
@@ -373,9 +379,9 @@ export function WebhookManagement() {
                               className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs"
                             >
                               {d.success ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-success" />
                               ) : (
-                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                <XCircle aria-hidden="true" className="h-3.5 w-3.5 text-danger" />
                               )}
                               <span className="font-mono">{d.event}</span>
                               <span className="text-muted-foreground">try {d.attempt}</span>

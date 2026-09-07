@@ -263,11 +263,11 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
   const statusIcon = (status: string) => {
     switch (status) {
       case 'approved':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'rejected':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       default:
-        return <Clock className="h-3.5 w-3.5 text-yellow-500" />
+        return <Clock className="h-3.5 w-3.5 text-warning" />
     }
   }
 
@@ -340,9 +340,9 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
                   {approval.decisions.map((d) => (
                     <div key={d.id} className="flex items-center gap-1.5 text-xs">
                       {d.decision === 'approved' ? (
-                        <ThumbsUp className="h-3 w-3 text-green-500" />
+                        <ThumbsUp className="h-3 w-3 text-success" />
                       ) : (
-                        <ThumbsDown className="h-3 w-3 text-red-500" />
+                        <ThumbsDown className="h-3 w-3 text-danger" />
                       )}
                       <span className="font-medium">{d.user?.name ?? 'User'}</span>
                       {d.comment && (
@@ -591,7 +591,7 @@ export function ApprovalDashboard() {
           {approvals.map((a) => (
             <Card key={a.id}>
               <CardContent className="flex items-center gap-3 p-3">
-                <Clock className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                <Clock className="h-4 w-4 text-warning flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">

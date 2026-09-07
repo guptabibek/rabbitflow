@@ -87,6 +87,12 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://rabbitflow:rabbitflow@localhost:5432/rabbitflow_ci
           JWT_SECRET: ci-only-secret-value-at-least-32-bytes-long-xxxxx
+          # Without a key the two SEC-014 tests skip themselves and CI reports
+          # green while proving nothing about encryption at rest. With a key but
+          # no enrolment requirement, login never issues a setup challenge and
+          # the same tests fail on a missing seed. Both are required.
+          MFA_ENCRYPTION_KEY: Y2ktb25seS10ZXN0LWtleS0zMi1ieXRlcy1sb25nISE=
+          MFA_REQUIRE_ENROLLMENT: 'true'
 
   build:
     name: Production build

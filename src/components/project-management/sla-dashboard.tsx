@@ -269,8 +269,8 @@ export function SlaDashboard() {
       <div className="grid grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-green-500/10 p-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <div className="rounded-lg bg-success/10 p-2">
+              <CheckCircle2 className="h-5 w-5 text-success" />
             </div>
             <div>
               <p className="text-2xl font-bold">{onTrack}</p>
@@ -280,8 +280,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-yellow-500/10 p-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <div className="rounded-lg bg-warning/10 p-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
             <div>
               <p className="text-2xl font-bold">{atRisk}</p>
@@ -291,8 +291,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-red-500/10 p-2">
-              <XCircle className="h-5 w-5 text-red-500" />
+            <div className="rounded-lg bg-danger/10 p-2">
+              <XCircle className="h-5 w-5 text-danger" />
             </div>
             <div>
               <p className="text-2xl font-bold">{breached}</p>
@@ -302,8 +302,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-500/10 p-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
+            <div className="rounded-lg bg-info/10 p-2">
+              <TrendingUp className="h-5 w-5 text-info" />
             </div>
             <div>
               <p className="text-2xl font-bold">{resolved}</p>
@@ -338,13 +338,13 @@ export function SlaDashboard() {
                 <Card key={timer.id}>
                   <CardContent className="flex items-center gap-3 p-3">
                     {timer.isBreached ? (
-                      <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                      <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
                     ) : timer.isAtRisk ? (
-                      <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
                     ) : timer.status === 'paused' ? (
                       <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     ) : (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -361,7 +361,7 @@ export function SlaDashboard() {
                         <span>{timer.policy?.name ?? 'SLA Policy'}</span>
                         <Badge variant="outline" className="text-[10px] capitalize">{timer.timerType}</Badge>
                         <span>Deadline: {new Date(timer.targetAt).toLocaleString()}</span>
-                        {timer.status === 'paused' && <span className="text-yellow-500">Paused</span>}
+                        {timer.status === 'paused' && <span className="text-warning">Paused</span>}
                       </div>
                     </div>
                     <div className="text-right">
@@ -465,7 +465,7 @@ export function SlaDashboard() {
               {policies.map((policy) => (
                 <Card key={policy.id}>
                   <CardContent className="flex items-center gap-3 p-3">
-                    <Shield className={`h-4 w-4 ${policy.isActive ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                    <Shield className={`h-4 w-4 ${policy.isActive ? 'text-info' : 'text-muted-foreground'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{policy.name}</span>

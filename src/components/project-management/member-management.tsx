@@ -68,7 +68,7 @@ type GlobalUser = {
 const ROLE_OPTIONS = [
   { value: 'Admin', label: 'Admin', icon: Shield, tone: 'bg-role-admin-bg text-role-admin' },
   { value: 'PM', label: 'PM', icon: Briefcase, tone: 'bg-role-pm-bg text-role-pm' },
-  { value: 'DevOps', label: 'DevOps', icon: Shield, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300' },
+  { value: 'DevOps', label: 'DevOps', icon: Shield, tone: 'bg-info-bg text-info' },
   { value: 'Dev', label: 'Developer', icon: Wrench, tone: 'bg-role-dev-bg text-role-dev' },
   { value: 'QA', label: 'QA', icon: Bug, tone: 'bg-role-qa-bg text-role-qa' },
   { value: 'Viewer', label: 'Viewer', icon: Eye, tone: 'bg-role-viewer-bg text-role-viewer' },

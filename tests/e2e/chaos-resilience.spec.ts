@@ -80,7 +80,9 @@ test.describe('Chaos Resilience', () => {
     await selectProjectFromDashboard(page, project.name)
 
     await expect(page.getByTestId('home-project-data-error')).toContainText('Showing the latest successful slices')
-    await expect(page.getByText(project.name)).toBeVisible()
+    // The switcher, not a bare text match: the project name now appears in the
+    // sidebar, the breadcrumb and the switcher, so `getByText` is ambiguous.
+    await expect(page.getByTestId('workspace-project-switcher')).toContainText(project.name)
 
     failBootstrap = false
     corruptTeams = false
@@ -134,7 +136,19 @@ test.describe('Chaos Resilience', () => {
 
       failUnreadCount = false
       await context.setOffline(false)
-      await page.getByTestId('notification-retry-button').click()
+
+      /*
+        Coming back online fires the bell's own `online` handler, which clears
+        the error and refetches. That regularly beats the click below, taking
+        the retry button out of the DOM before it can be pressed. Click it only
+        if it is still there — what matters is that the panel recovers, not
+        which of the two paths got there first.
+      */
+      const retryButton = page.getByTestId('notification-retry-button')
+      if (await retryButton.isVisible().catch(() => false)) {
+        await retryButton.click()
+      }
+
       await expect(page.getByTestId('notification-load-error')).toHaveCount(0)
       await expect(page.getByText(title)).toBeVisible()
     } finally {

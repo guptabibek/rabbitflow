@@ -227,7 +227,7 @@ export function ApiTokenManagement() {
 
             {newTokenSecret ? (
               <div className="space-y-3 py-2">
-                <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 flex items-center gap-2">
+                <div className="rounded-md bg-success/10 p-3 text-sm text-success flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
                   Token created successfully. Copy it now — it won&apos;t be shown again.
                 </div>
@@ -243,7 +243,7 @@ export function ApiTokenManagement() {
                     onClick={() => handleCopy(newTokenSecret)}
                   >
                     {copied ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5" />
                     )}

@@ -118,7 +118,7 @@ function OnboardingStepItem({
       {/* Status indicator */}
       <div className="mt-0.5 flex-shrink-0">
         {isCompleted ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          <CheckCircle2 className="h-5 w-5 text-success" />
         ) : (
           <div
             className={cn(

@@ -280,7 +280,7 @@ function SprintCardContent({ issue }: { issue: Issue }) {
           <span className="font-mono text-[11px] text-muted-foreground font-medium">{issue.key}</span>
         </div>
         {(issue.priority === 'high' || issue.priority === 'highest') && (
-          <Badge variant="outline" className="h-4 text-[9px] px-1 border-red-500/40 text-red-400">
+          <Badge variant="outline" className="h-4 text-[9px] px-1 border-danger/40 text-danger">
             {issue.priority === 'highest' ? '!!!' : '!!'}
           </Badge>
         )}
@@ -377,9 +377,9 @@ function SprintMetricCard({
 }) {
   const toneClasses =
     tone === 'positive'
-      ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
+      ? 'border-success/20 bg-success/[0.06]'
       : tone === 'warning'
-        ? 'border-amber-500/20 bg-amber-500/[0.07]'
+        ? 'border-warning/20 bg-warning/[0.07]'
         : tone === 'danger'
           ? 'border-destructive/20 bg-destructive/[0.06]'
           : 'border-border/70 bg-card/80'
@@ -1014,7 +1014,7 @@ export function SprintView() {
                     <SelectItem key={s.id} value={s.id}>
                       <span className="flex items-center gap-2">
                         {s.name}
-                        {isActiveStatus(s.status) ? <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> : null}
+                        {isActiveStatus(s.status) ? <span className="inline-flex h-2 w-2 rounded-full bg-success animate-pulse" /> : null}
                       </span>
                     </SelectItem>
                   ))}
@@ -1115,9 +1115,9 @@ export function SprintView() {
                   <div className="mx-auto max-w-6xl space-y-6">
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                       <StatCard title="Total Items" value={analytics.stats.totalItems} icon={Hash} />
-                      <StatCard title="Completed" value={analytics.stats.completedItems} icon={CheckCircle2} accent="text-emerald-400" />
-                      <StatCard title="Remaining" value={analytics.stats.remainingItems} icon={TrendingDown} accent="text-amber-400" />
-                      <StatCard title="Story Points" value={`${analytics.stats.completedPoints} / ${analytics.stats.totalPoints}`} icon={Zap} accent="text-indigo-400" />
+                      <StatCard title="Completed" value={analytics.stats.completedItems} icon={CheckCircle2} accent="text-success" />
+                      <StatCard title="Remaining" value={analytics.stats.remainingItems} icon={TrendingDown} accent="text-warning" />
+                      <StatCard title="Story Points" value={`${analytics.stats.completedPoints} / ${analytics.stats.totalPoints}`} icon={Zap} accent="text-chart-3" />
                     </div>
 
                     <div className="grid gap-4 xl:grid-cols-5">
@@ -1181,7 +1181,7 @@ export function SprintView() {
                           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{capacityData.totals.memberCount}</div><div className="mt-1 text-xs text-muted-foreground">Team members contributing capacity</div></div>
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{overloadedMembers}</div><div className="mt-1 text-xs text-muted-foreground">Members currently over capacity</div></div>
-                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className={`text-2xl font-semibold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-emerald-500'}`}>{Math.round(netAvailabilityHours)}h</div><div className="mt-1 text-xs text-muted-foreground">Net availability remaining</div></div>
+                            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className={`text-2xl font-semibold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-success'}`}>{Math.round(netAvailabilityHours)}h</div><div className="mt-1 text-xs text-muted-foreground">Net availability remaining</div></div>
                             <div className="rounded-2xl border border-border/60 bg-muted/20 p-4"><div className="text-2xl font-semibold tabular-nums">{Math.round(capacityData.totals.totalAssignedCompletedHours)}h</div><div className="mt-1 text-xs text-muted-foreground">Logged hours inside the sprint</div></div>
                           </div>
                         </CardContent>
@@ -1469,7 +1469,7 @@ export function SprintView() {
                             <div className="text-[13px] font-medium truncate">{team.name}</div>
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                               <span>{teamSprints.length} Sprints</span>
-                              {activeCount > 0 && <span className="text-emerald-600 font-medium">• {activeCount} Active</span>}
+                              {activeCount > 0 && <span className="text-success font-medium">• {activeCount} Active</span>}
                             </div>
                           </div>
                           <div className="h-6 w-6 rounded-md bg-secondary/50 flex items-center justify-center text-[10px]">→</div>
@@ -1492,7 +1492,7 @@ export function SprintView() {
                       </div>
                       <div className="p-3">
                         <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Availability</p>
-                        <p className={`text-sm font-bold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-emerald-600'}`}>
+                        <p className={`text-sm font-bold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : 'text-success'}`}>
                           {netAvailabilityHours}h
                         </p>
                       </div>
@@ -1548,7 +1548,7 @@ export function SprintView() {
 
                             {/* Balance */}
                             <div className="text-right">
-                              <span className={`text-xs font-bold tabular-nums ${isOverloaded ? 'text-destructive' : 'text-emerald-600'}`}>
+                              <span className={`text-xs font-bold tabular-nums ${isOverloaded ? 'text-destructive' : 'text-success'}`}>
                                 {isOverloaded ? '' : '+'}{Math.round(freeHours)}h
                               </span>
                             </div>

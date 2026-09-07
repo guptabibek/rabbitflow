@@ -133,7 +133,7 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
                   void handleToggle(fav.entityType, fav.entityId)
                 }}
               >
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                <Star className="h-3 w-3 fill-yellow-400 text-warning" />
               </button>
             </div>
           )

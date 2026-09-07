@@ -579,6 +579,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     }
 
     if (startDate && dueDate && new Date(dueDate).getTime() < new Date(startDate).getTime()) {
+      // Show the fields being complained about, the same way missing required
+      // fields do below. A message about dates is not much use on a tab that
+      // does not contain them.
+      setActiveTab('metadata')
       toast.error('Due date cannot be earlier than start date')
       return
     }
@@ -752,13 +756,13 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="px-5 pt-3">
           <TabsList className="h-8 w-full justify-start bg-muted/30 rounded-md">
-            <TabsTrigger value="basic" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="basic" data-testid="create-work-item-tab-basic" className="text-xs h-7 data-[state=active]:bg-background">
               Basic
             </TabsTrigger>
-            <TabsTrigger value="metadata" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="metadata" data-testid="create-work-item-tab-metadata" className="text-xs h-7 data-[state=active]:bg-background">
               Metadata
             </TabsTrigger>
-            <TabsTrigger value="fields" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
+            <TabsTrigger value="fields" data-testid="create-work-item-tab-fields" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
               Fields
               {/* Surfaces the requirement before the user presses Create, rather
                   than after a rejected submit. */}
@@ -771,10 +775,10 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="links" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="links" data-testid="create-work-item-tab-links" className="text-xs h-7 data-[state=active]:bg-background">
               Links
             </TabsTrigger>
-            <TabsTrigger value="labels" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="labels" data-testid="create-work-item-tab-labels" className="text-xs h-7 data-[state=active]:bg-background">
               Labels
             </TabsTrigger>
           </TabsList>
@@ -1096,11 +1100,27 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Due Date</Label>
+                  {/*
+                    No `min={startDate}` here.
+
+                    It reads like a helpful constraint, but it made the form
+                    impossible to submit and impossible to diagnose. Setting a
+                    due date before the start date — or, more easily, moving the
+                    start date later than a due date already chosen — leaves this
+                    control natively `:invalid`. The browser then refuses to fire
+                    a submit event at all: no request, no toast, no message. The
+                    Create button simply stops working. Because the field lives
+                    on a tab, the native validation bubble usually cannot even be
+                    shown, so Chrome gives up silently.
+
+                    It also made the explicit check in `handleSubmit` dead code,
+                    which is the check that can actually explain the problem.
+                    Ordering is enforced there instead.
+                  */}
                   <Input
                     type="date"
                     className="h-8 text-xs"
                     value={dueDate}
-                    min={startDate || undefined}
                     onChange={(event) => setDueDate(event.target.value)}
                     data-testid="create-work-item-due-date-input"
                   />
@@ -1369,7 +1389,9 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   if (isScreenMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
+      // Same test hook as the dialog branch: callers care that the create
+      // surface is open, not which presentation it chose.
+      <div className="flex h-full min-h-0 flex-col bg-background" data-testid="create-work-item-surface">
         {/* No gradient: a decorative wash across a form header adds nothing a
             hairline does not, and it fought the page behind it. */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">

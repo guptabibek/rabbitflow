@@ -239,7 +239,7 @@ export function LabelsManagement({
                       ))}
                     </div>
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)} disabled={!canManageLabels}>
-                      <Check className="h-3 w-3 text-green-500" />
+                      <Check className="h-3 w-3 text-success" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Cancel editing" onClick={() => setEditingId(null)}>
                       <X className="h-3 w-3" />

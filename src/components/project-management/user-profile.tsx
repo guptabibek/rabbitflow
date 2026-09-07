@@ -15,9 +15,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Camera, Lock, Settings, Shield, User } from 'lucide-react'
+import { Bell, Camera, Lock, Settings, Shield, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { NotificationPreferences } from './notification-preferences'
 
 interface UserProfileProps {
   open: boolean
@@ -157,6 +158,12 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
                 <Settings className="h-3.5 w-3.5" /> Profile
               </TabsTrigger>
               <TabsTrigger
+                value="notifications"
+                className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-sm"
+              >
+                <Bell className="h-3.5 w-3.5" /> Notifications
+              </TabsTrigger>
+              <TabsTrigger
                 value="security"
                 className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-sm"
               >
@@ -236,6 +243,10 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
+          </TabsContent>
+
+          <TabsContent value="notifications" className="p-4 mt-0 sm:p-6">
+            <NotificationPreferences />
           </TabsContent>
 
           <TabsContent value="security" className="p-4 mt-0 space-y-4 sm:p-6">

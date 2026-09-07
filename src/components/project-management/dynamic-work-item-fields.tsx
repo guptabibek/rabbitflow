@@ -223,7 +223,10 @@ export function DynamicWorkItemFields({
                         onChange(field.key, next === EMPTY_SELECT ? null : next)
                       }
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger
+                        className="w-full"
+                        data-testid={`work-item-field-${field.key}`}
+                      >
                         <SelectValue
                           placeholder={field.placeholder || 'Select'}
                         />

@@ -50,6 +50,14 @@ export function NotificationBell() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const openWorkItem = useAppStore((s) => s.openWorkItem)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Read inside the SSE handler so a change of either does not tear down and
+  // rebuild the connection.
+  const openRef = useRef(open)
+  const lastCountRef = useRef(0)
+
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
 
   const fetchNotifications = useCallback(async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -115,13 +123,84 @@ export function NotificationBell() {
     }
   }, [])
 
-  // Fetch on mount and poll every 30s
+  /*
+    Live unread count over SSE, with a slow poll behind it as a safety net.
+
+    This used to refetch the list *and* the count on a 30s interval — 240
+    requests an hour from every open tab, whether or not anything had changed.
+    `/api/notifications/stream` already existed and pushed exactly this count;
+    nothing subscribed to it.
+
+    The list is only refetched when the count actually moves and the popover is
+    on screen. Opening the popover fetches it anyway, so a badge change while
+    the panel is shut costs nothing.
+  */
   useEffect(() => {
     void fetchNotifications()
+
+    let source: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let attempts = 0
+    let disposed = false
+
+    const connect = () => {
+      if (disposed) return
+
+      source = new EventSource('/api/notifications/stream')
+
+      source.onopen = () => {
+        attempts = 0
+      }
+
+      source.onmessage = (event) => {
+        let payload: { type?: string; count?: number }
+
+        try {
+          payload = JSON.parse(event.data) as { type?: string; count?: number }
+        } catch {
+          return
+        }
+
+        if (payload.type !== 'unread_count' || typeof payload.count !== 'number') return
+
+        const next = payload.count
+        setUnreadCount(next)
+
+        if (next !== lastCountRef.current) {
+          lastCountRef.current = next
+          if (openRef.current) void fetchNotifications()
+        }
+      }
+
+      source.onerror = () => {
+        source?.close()
+        source = null
+
+        if (disposed) return
+
+        /*
+          The route closes the stream every five minutes by design, so a
+          disconnect is routine rather than a fault. Reconnect with capped
+          backoff regardless, so a genuine outage cannot turn this into a
+          tight reconnect loop.
+        */
+        attempts += 1
+        reconnectTimer = setTimeout(connect, Math.min(30_000, 1_000 * 2 ** Math.min(attempts, 5)))
+      }
+    }
+
+    connect()
+
+    // For browsers or proxies that drop SSE entirely, so the badge still
+    // converges rather than freezing at its mount value.
     pollRef.current = setInterval(() => {
       void fetchNotifications()
-    }, 30000)
+    }, 300_000)
+
     return () => {
+      disposed = true
+      source?.close()
+      if (reconnectTimer) clearTimeout(reconnectTimer)
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [fetchNotifications])

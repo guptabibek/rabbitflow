@@ -22,6 +22,7 @@ import {
   type WorkItemSectionDefinition,
 } from '@/store/app-store'
 import { WorkItemTypeManagement } from '@/components/project-management/work-item-type-management'
+import { AreasManagement } from '@/components/project-management/areas-management'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -227,7 +228,9 @@ export function AdminConfigPanel() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const [selectedTypeId, setSelectedTypeId] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'types' | 'states' | 'fields' | 'planning'>('types')
+  const [activeTab, setActiveTab] = useState<'types' | 'states' | 'fields' | 'areas' | 'planning'>(
+    'types'
+  )
 
   const [stateDrafts, setStateDrafts] = useState<State[]>([])
   const [newStateName, setNewStateName] = useState('')
@@ -1079,10 +1082,11 @@ export function AdminConfigPanel() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
         <div className="overflow-x-auto">
-          <TabsList className="mb-3 grid h-auto w-full min-w-[44rem] grid-cols-4 rounded-xl bg-muted/20 p-1 md:w-auto">
+          <TabsList className="mb-3 grid h-auto w-full min-w-[52rem] grid-cols-5 rounded-xl bg-muted/20 p-1 md:w-auto">
             <TabsTrigger value="types" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Work Item Types</TabsTrigger>
             <TabsTrigger value="states" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">State Management</TabsTrigger>
             <TabsTrigger value="fields" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Field Management</TabsTrigger>
+            <TabsTrigger value="areas" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Areas</TabsTrigger>
             <TabsTrigger value="planning" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Planning Config</TabsTrigger>
           </TabsList>
         </div>
@@ -1669,6 +1673,10 @@ export function AdminConfigPanel() {
             </Card>
             {renderLivePreviewPanel()}
           </div>
+        </TabsContent>
+
+        <TabsContent value="areas" className="mt-0">
+          <AreasManagement />
         </TabsContent>
 
         <TabsContent value="planning" className="mt-0 space-y-4">

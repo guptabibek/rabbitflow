@@ -120,7 +120,8 @@ function MiniStackedBar({ segments }: {
  * The previous version gave each number a 36px tinted icon square and its own
  * shadowed card, so a row of four spent 160px of height and most of its ink on
  * decoration — the icon colours were chosen per call site and carried no
- * meaning, and `bg-red-500/10` ignored the theme entirely.
+ * meaning, and the raw Tailwind palette tints they used ignored the theme
+ * entirely. Every colour here now comes from a semantic token.
  *
  * The signature is unchanged so all fifteen call sites keep working; `iconBg`
  * is accepted and deliberately ignored, and `iconColor` now tints only the
@@ -168,7 +169,7 @@ function BurndownChart({ data }: {
           <div key={i} className="flex-1 min-w-0 flex flex-col items-center gap-px h-full justify-end">
             <div className="w-full flex items-end gap-px h-full">
               <div
-                className="flex-1 bg-blue-500/30 rounded-t min-h-[1px] transition-all"
+                className="flex-1 bg-info/30 rounded-t min-h-[1px] transition-all"
                 style={{ height: `${(d.ideal / maxVal) * 100}%` }}
                 title={`Ideal: ${d.ideal}`}
               />
@@ -190,7 +191,7 @@ function BurndownChart({ data }: {
           <span className="text-muted-foreground">Remaining</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-2 w-4 rounded bg-blue-500/30" />
+          <div className="h-2 w-4 rounded bg-info/30" />
           <span className="text-muted-foreground">Ideal</span>
         </div>
       </div>
@@ -300,9 +301,9 @@ const priorityColorMap: Record<string, string> = {
 }
 
 const healthColors: Record<string, { bg: string; text: string; label: string }> = {
-  healthy: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', label: 'Healthy' },
-  'at-risk': { bg: 'bg-amber-500/10', text: 'text-amber-500', label: 'At Risk' },
-  critical: { bg: 'bg-red-500/10', text: 'text-red-500', label: 'Critical' },
+  healthy: { bg: 'bg-success/10', text: 'text-success', label: 'Healthy' },
+  'at-risk': { bg: 'bg-warning/10', text: 'text-warning', label: 'At Risk' },
+  critical: { bg: 'bg-danger/10', text: 'text-danger', label: 'Critical' },
 }
 
 // ---------------------------------------------------------------------------
@@ -604,8 +605,8 @@ export function ReportsView() {
                         label="Open Bugs"
                         value={(executive as { totals?: { openBugs?: number } }).totals?.openBugs ?? 0}
                         icon={Bug}
-                        iconBg="bg-red-500/10"
-                        iconColor="text-red-500"
+                        iconBg="bg-danger/10"
+                        iconColor="text-danger"
                       />
                       <StatCard
                         label="Projects"
@@ -683,7 +684,7 @@ export function ReportsView() {
                                 <div className="flex gap-4 text-[11px] text-muted-foreground flex-shrink-0">
                                   <span>{project.completedIssues}/{project.totalIssues}</span>
                                   {project.openBugs > 0 && (
-                                    <span className="text-red-400">{project.openBugs} bugs</span>
+                                    <span className="text-danger">{project.openBugs} bugs</span>
                                   )}
                                 </div>
                               </div>
@@ -703,7 +704,7 @@ export function ReportsView() {
                       <CardContent className="px-4 pb-4">
                         <TrendLine
                           data={(bugMetrics as { trend?: Array<{ date: string; count: number }> }).trend || []}
-                          colorClass="bg-red-500"
+                          colorClass="bg-danger"
                         />
                       </CardContent>
                     </Card>
@@ -882,8 +883,8 @@ export function ReportsView() {
                         label="Created"
                         value={(completion as { summary?: { created?: number } }).summary?.created ?? 0}
                         icon={ArrowUpRight}
-                        iconBg="bg-blue-500/10"
-                        iconColor="text-blue-500"
+                        iconBg="bg-info/10"
+                        iconColor="text-info"
                         description={`Last ${dayRange} days`}
                       />
                       <StatCard
@@ -897,8 +898,8 @@ export function ReportsView() {
                         label="Completion Rate"
                         value={`${(completion as { summary?: { rate?: number } }).summary?.rate ?? 0}%`}
                         icon={Target}
-                        iconBg="bg-amber-500/10"
-                        iconColor="text-amber-500"
+                        iconBg="bg-warning/10"
+                        iconColor="text-warning"
                       />
                     </div>
                   )}
@@ -920,11 +921,11 @@ export function ReportsView() {
                                 {display.map((d, i) => (
                                   <div key={i} className="flex-1 min-w-0 flex items-end gap-px h-full">
                                     <div
-                                      className="flex-1 bg-blue-500/40 rounded-t min-h-[1px]"
+                                      className="flex-1 bg-info/40 rounded-t min-h-[1px]"
                                       style={{ height: `${(d.created / max) * 100}%` }}
                                     />
                                     <div
-                                      className="flex-1 bg-emerald-500 rounded-t min-h-[1px]"
+                                      className="flex-1 bg-success rounded-t min-h-[1px]"
                                       style={{ height: `${(d.completed / max) * 100}%` }}
                                     />
                                   </div>
@@ -932,11 +933,11 @@ export function ReportsView() {
                               </div>
                               <div className="flex gap-4 text-[11px]">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="h-2 w-4 rounded bg-blue-500/40" />
+                                  <div className="h-2 w-4 rounded bg-info/40" />
                                   <span className="text-muted-foreground">Created</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <div className="h-2 w-4 rounded bg-emerald-500" />
+                                  <div className="h-2 w-4 rounded bg-success" />
                                   <span className="text-muted-foreground">Completed</span>
                                 </div>
                               </div>
@@ -1105,7 +1106,7 @@ export function ReportsView() {
                             label: b.range,
                             value: b.count,
                           }))}
-                          colorClass="bg-amber-500"
+                          colorClass="bg-warning"
                         />
                       </CardContent>
                     </Card>
@@ -1116,7 +1117,7 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                          <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                           Blocked Items
                           <Badge variant="outline" className="text-[10px] ml-1">
                             {(blocked as { count?: number })?.count ?? 0}
@@ -1129,7 +1130,7 @@ export function ReportsView() {
                             <div className="space-y-2">
                               {((blocked as { blockedItems: Array<{ issue: { key: string; title: string; status: string }; blockedBy: { key: string; title: string } }> }).blockedItems || []).slice(0, 15).map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded bg-muted/20">
-                                  <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 flex-shrink-0" />
+                                  <AlertTriangle className="h-3 w-3 text-warning mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0">
                                     <p className="text-[11px] font-medium truncate">
                                       <span className="text-muted-foreground font-mono">{item.issue.key}</span>{' '}
@@ -1151,7 +1152,7 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <GitBranch className="h-3.5 w-3.5 text-orange-500" />
+                          <GitBranch className="h-3.5 w-3.5 text-chart-2" />
                           Reopened Items
                           <Badge variant="outline" className="text-[10px] ml-1">
                             {(reopened as { count?: number })?.count ?? 0}
@@ -1164,7 +1165,7 @@ export function ReportsView() {
                             <div className="space-y-2">
                               {((reopened as { items: Array<{ key?: string; title?: string; reopenedAt: string }> }).items).slice(0, 15).map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded bg-muted/20">
-                                  <GitBranch className="h-3 w-3 text-orange-500 mt-0.5 flex-shrink-0" />
+                                  <GitBranch className="h-3 w-3 text-chart-2 mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0">
                                     <p className="text-[11px] font-medium truncate">
                                       <span className="text-muted-foreground font-mono">{item.key}</span>{' '}
@@ -1200,10 +1201,10 @@ export function ReportsView() {
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <StatCard label="Total Bugs" value={bm.summary.totalBugs} icon={Bug} iconBg="bg-red-500/10" iconColor="text-red-500" />
-                      <StatCard label="Open Bugs" value={bm.summary.openBugs} icon={AlertTriangle} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
+                      <StatCard label="Total Bugs" value={bm.summary.totalBugs} icon={Bug} iconBg="bg-danger/10" iconColor="text-danger" />
+                      <StatCard label="Open Bugs" value={bm.summary.openBugs} icon={AlertTriangle} iconBg="bg-warning/10" iconColor="text-warning" />
                       <StatCard label="Resolved" value={bm.summary.resolvedBugs} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
-                      <StatCard label="Avg Resolution" value={`${bm.summary.avgResolutionDays}d`} icon={Timer} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
+                      <StatCard label="Avg Resolution" value={`${bm.summary.avgResolutionDays}d`} icon={Timer} iconBg="bg-info/10" iconColor="text-info" />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1212,7 +1213,7 @@ export function ReportsView() {
                           <CardTitle className="text-sm font-medium">Bug Trend</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-4">
-                          <TrendLine data={bm.trend} colorClass="bg-red-500" />
+                          <TrendLine data={bm.trend} colorClass="bg-danger" />
                         </CardContent>
                       </Card>
 
@@ -1225,10 +1226,10 @@ export function ReportsView() {
                             segments={bm.bySeverity.map((s) => ({
                               label: s.severity,
                               value: s.count,
-                              colorClass: s.severity === 'critical' ? 'bg-red-600' :
-                                s.severity === 'high' ? 'bg-orange-500' :
-                                s.severity === 'medium' ? 'bg-amber-500' :
-                                s.severity === 'low' ? 'bg-emerald-500' : 'bg-muted-foreground/30',
+                              colorClass: s.severity === 'critical' ? 'bg-danger' :
+                                s.severity === 'high' ? 'bg-chart-2' :
+                                s.severity === 'medium' ? 'bg-warning' :
+                                s.severity === 'low' ? 'bg-success' : 'bg-muted-foreground/30',
                             }))}
                           />
                         </CardContent>
@@ -1242,7 +1243,7 @@ export function ReportsView() {
                       <CardContent className="px-4 pb-4">
                         <MiniBarChart
                           data={bm.byPriority.map((p) => ({ label: p.priority, value: p.count }))}
-                          colorClass="bg-red-500/70"
+                          colorClass="bg-danger/70"
                         />
                       </CardContent>
                     </Card>
@@ -1269,32 +1270,32 @@ export function ReportsView() {
                         label="Deployment Freq"
                         value={`${d.deploymentFrequency.perWeek}/wk`}
                         icon={Zap}
-                        iconBg="bg-emerald-500/10"
-                        iconColor="text-emerald-500"
+                        iconBg="bg-success/10"
+                        iconColor="text-success"
                         description={`${d.deploymentFrequency.total} deployments`}
                       />
                       <StatCard
                         label="Lead Time"
                         value={`${d.leadTimeForChanges.avgDays}d`}
                         icon={Clock}
-                        iconBg="bg-blue-500/10"
-                        iconColor="text-blue-500"
+                        iconBg="bg-info/10"
+                        iconColor="text-info"
                         description="Creation to done"
                       />
                       <StatCard
                         label="Change Failure"
                         value={`${d.changeFailureRate.rate}%`}
                         icon={AlertTriangle}
-                        iconBg="bg-amber-500/10"
-                        iconColor="text-amber-500"
+                        iconBg="bg-warning/10"
+                        iconColor="text-warning"
                         description={`${d.changeFailureRate.bugsCreated} bugs / ${d.changeFailureRate.totalCompleted} completed`}
                       />
                       <StatCard
                         label="MTTR"
                         value={`${d.mttr.days}d`}
                         icon={Timer}
-                        iconBg="bg-purple-500/10"
-                        iconColor="text-purple-500"
+                        iconBg="bg-chart-5/10"
+                        iconColor="text-chart-5"
                         description={`${d.mttr.resolvedCount} bugs resolved`}
                       />
                     </div>
@@ -1308,7 +1309,7 @@ export function ReportsView() {
                           <div className="space-y-1.5">
                             {d.deploymentFrequency.deployments.map((dep, i) => (
                               <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted/20 text-[11px]">
-                                <Zap className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                <Zap className="h-3 w-3 text-success flex-shrink-0" />
                                 <span className="font-medium">{dep.name}</span>
                                 {dep.date && (
                                   <span className="text-muted-foreground ml-auto">
@@ -1339,9 +1340,9 @@ export function ReportsView() {
                               <Badge
                                 variant="outline"
                                 className={`text-[10px] border-0 ${
-                                  metric.rating === 'Elite' ? 'bg-emerald-500/10 text-emerald-500' :
-                                  metric.rating === 'High' ? 'bg-blue-500/10 text-blue-500' :
-                                  'bg-amber-500/10 text-amber-500'
+                                  metric.rating === 'Elite' ? 'bg-success/10 text-success' :
+                                  metric.rating === 'High' ? 'bg-info/10 text-info' :
+                                  'bg-warning/10 text-warning'
                                 }`}
                               >
                                 {metric.rating}
@@ -1372,16 +1373,16 @@ export function ReportsView() {
                   velocityHistory?: Array<{ sprintName: string; completedPoints: number; committedPoints: number }>
                 }
                 const confColors: Record<string, string> = {
-                  high: 'text-emerald-500 bg-emerald-500/10',
-                  medium: 'text-amber-500 bg-amber-500/10',
-                  low: 'text-red-500 bg-red-500/10',
+                  high: 'text-success bg-success/10',
+                  medium: 'text-warning bg-warning/10',
+                  low: 'text-danger bg-danger/10',
                 }
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard label="Avg Velocity" value={`${f.avgVelocity} pts`} icon={TrendingUp} iconBg="bg-primary/10" iconColor="text-primary" />
-                      <StatCard label="Remaining Work" value={`${f.totalRemainingPoints} pts`} icon={Layers} iconBg="bg-amber-500/10" iconColor="text-amber-500" description={`${f.totalRemainingItems} items`} />
-                      <StatCard label="Predicted Sprints" value={f.predictedSprints ?? '—'} icon={Target} iconBg="bg-blue-500/10" iconColor="text-blue-500" description="To complete backlog" />
+                      <StatCard label="Remaining Work" value={`${f.totalRemainingPoints} pts`} icon={Layers} iconBg="bg-warning/10" iconColor="text-warning" description={`${f.totalRemainingItems} items`} />
+                      <StatCard label="Predicted Sprints" value={f.predictedSprints ?? '—'} icon={Target} iconBg="bg-info/10" iconColor="text-info" description="To complete backlog" />
                       <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
@@ -1392,8 +1393,8 @@ export function ReportsView() {
                               </Badge>
                               <p className="text-[11px] text-muted-foreground">{f.predictability}% predictable</p>
                             </div>
-                            <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                              <Gauge className="h-4 w-4 text-purple-500" />
+                            <div className="h-9 w-9 rounded-lg bg-chart-5/10 flex items-center justify-center">
+                              <Gauge className="h-4 w-4 text-chart-5" />
                             </div>
                           </div>
                         </CardContent>
@@ -1436,9 +1437,9 @@ export function ReportsView() {
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <StatCard label="Estimated" value={`${tt.summary.totalEstimated}h`} icon={Clock} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
+                      <StatCard label="Estimated" value={`${tt.summary.totalEstimated}h`} icon={Clock} iconBg="bg-info/10" iconColor="text-info" />
                       <StatCard label="Completed" value={`${tt.summary.totalCompleted}h`} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
-                      <StatCard label="Remaining" value={`${tt.summary.totalRemaining}h`} icon={Timer} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
+                      <StatCard label="Remaining" value={`${tt.summary.totalRemaining}h`} icon={Timer} iconBg="bg-warning/10" iconColor="text-warning" />
                       <StatCard label="Items Tracked" value={tt.summary.itemCount} icon={Layers} iconBg="bg-primary/10" iconColor="text-primary" />
                     </div>
 
@@ -1504,7 +1505,7 @@ export function ReportsView() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <StatCard label="Total Activities" value={a.pagination.total} icon={Activity} iconBg="bg-primary/10" iconColor="text-primary" description={`Last ${dayRange} days`} />
-                      <StatCard label="Action Types" value={a.actionSummary.length} icon={Shield} iconBg="bg-purple-500/10" iconColor="text-purple-500" />
+                      <StatCard label="Action Types" value={a.actionSummary.length} icon={Shield} iconBg="bg-chart-5/10" iconColor="text-chart-5" />
                       <StatCard label="Active Users" value={a.userSummary.length} icon={Users} iconBg="bg-type-story-bg" iconColor="text-type-story" />
                     </div>
 

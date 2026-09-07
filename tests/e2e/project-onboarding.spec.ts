@@ -24,7 +24,15 @@ test.describe('Projects And Onboarding', () => {
   test('admin can create, edit, search, and delete a project from the dashboard', async ({ page, seed }) => {
     const projectName = makeProjectName('dashboard-project')
     const projectKey = makeProjectKey()
-    const updatedName = `${projectName} Updated`
+    /*
+      A wholly different name, not `${projectName} Updated`.
+
+      Search is a substring match, so a new name containing the old one still
+      matches the old one — and the "searching the previous name now finds
+      nothing" assertion below could never pass, whatever the empty-state copy
+      happened to say.
+    */
+    const updatedName = makeProjectName('dashboard-project-renamed')
     const updatedDescription = `${E2E_PREFIX}: updated project description`
 
     const createResponse = await createProject(page, {
@@ -44,7 +52,9 @@ test.describe('Projects And Onboarding', () => {
     expect(updatedProject?.description).toBe(updatedDescription)
 
     await page.getByTestId('dashboard-project-search-input').fill(projectName)
-    await expect(page.getByText('No projects found')).toBeVisible()
+    // The empty state names the term that found nothing, rather than saying
+    // "No projects found" and leaving the user to work out why.
+    await expect(page.getByText(/No projects match/i)).toBeVisible()
 
     await page.getByTestId('dashboard-project-search-input').fill(updatedName)
     await expect(page.locator('[data-testid^="dashboard-project-card-"]').filter({ hasText: updatedName })).toHaveCount(1)
@@ -83,12 +93,15 @@ test.describe('Projects And Onboarding', () => {
     const createdIssue = await seed.findIssueByTitle(projectId, issueTitle)
     expect(createdIssue?.title).toBe(issueTitle)
 
-    const doneState = await seed.getDoneState(projectId)
-    expect(doneState?.name).toBeTruthy()
+    // Assign and advance one legal step through the UI. Done is six hops away
+    // and the workflow rejects the jump, so the save here proves the edit path
+    // rather than the state machine.
+    const nextState = await seed.getAllowedNextState(createdIssue!.id)
+    expect(nextState).not.toBeNull()
 
     await openWorkItemFromList(page, issueTitle)
     await selectRadixOption(page, 'work-item-assignee-trigger', accounts.member.name)
-    await selectRadixOption(page, 'work-item-state-trigger', doneState!.name)
+    await selectRadixOption(page, 'work-item-state-trigger', nextState!.name)
 
     const saveResponsePromise = page.waitForResponse(
       (response) => /\/api\/issues\//.test(response.url()) && response.request().method() === 'PUT'
@@ -101,7 +114,13 @@ test.describe('Projects And Onboarding', () => {
 
     const updatedIssue = await seed.findIssueByTitle(projectId, issueTitle)
     expect(updatedIssue?.assignee?.name).toBe(accounts.member.name)
-    expect(updatedIssue?.stateRecord?.name).toBe(doneState!.name)
+    expect(updatedIssue?.stateRecord?.name).toBe(nextState!.name)
+
+    // The checklist's "Complete your first work item" step needs an issue that
+    // actually reached Done. That is a precondition for the progress assertion
+    // below, not the behaviour under test, so it is set through the fixture.
+    const doneState = await seed.completeIssue(createdIssue!.id)
+    expect(doneState.name).toBeTruthy()
 
     await closeEmbeddedWorkItem(page)
 

@@ -369,3 +369,75 @@ export async function getNotificationByTitle(email: string, title: string) {
     },
   })
 }
+/**
+ * A state the issue can legally move to in one step.
+ *
+ * The workflow is a real state machine: `New → Development in Progress → …`,
+ * and `PUT /api/issues/:id` rejects anything else with "Invalid workflow
+ * transition". Tests that want to prove a state change saves should ask for a
+ * reachable target rather than jumping to Done, which is several hops away and
+ * fails for reasons that have nothing to do with what they are testing.
+ *
+ * Falls back to any other state mapped to the type when a project has no
+ * explicit transitions, which is the same "allow anything mapped" rule the
+ * server applies in that case.
+ */
+export async function getAllowedNextState(issueId: string) {
+  const issue = await db.issue.findUniqueOrThrow({
+    where: { id: issueId },
+    select: { projectId: true, stateId: true, workItemType: true },
+  })
+
+  const type = await db.workItemTypeDefinition.findFirst({
+    where: { projectId: issue.projectId, key: issue.workItemType },
+    select: { id: true },
+  })
+
+  if (!type || !issue.stateId) return null
+
+  const transition = await db.stateTransition.findFirst({
+    where: {
+      projectId: issue.projectId,
+      workItemTypeId: type.id,
+      fromStateId: issue.stateId,
+      isEnabled: true,
+    },
+    orderBy: { order: 'asc' },
+    select: { toState: true },
+  })
+
+  if (transition) return transition.toState
+
+  const mapping = await db.workItemTypeStateMapping.findFirst({
+    where: { workItemTypeId: type.id, stateId: { not: issue.stateId } },
+    select: { state: true },
+  })
+
+  return mapping?.state ?? null
+}
+
+/**
+ * Put an issue into the project's Done state directly.
+ *
+ * The workflow is a state machine, so reaching Done from New takes six legal
+ * hops. Where "a completed work item exists" is a *precondition* rather than
+ * the thing under test — the onboarding checklist, for instance — driving all
+ * six through the UI adds minutes and failure surface without testing more.
+ * The transition rules themselves are covered by the API tests.
+ */
+export async function completeIssue(issueId: string) {
+  const issue = await db.issue.findUniqueOrThrow({
+    where: { id: issueId },
+    select: { projectId: true },
+  })
+
+  const done = await getDoneState(issue.projectId)
+  if (!done) throw new Error(`Project ${issue.projectId} has no Done state`)
+
+  await db.issue.update({
+    where: { id: issueId },
+    data: { stateId: done.id, status: 'done' },
+  })
+
+  return done
+}

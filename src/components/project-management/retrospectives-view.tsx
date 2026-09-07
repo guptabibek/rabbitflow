@@ -63,9 +63,9 @@ type RetroDetail = Retro & {
 }
 
 const CATEGORIES = [
-  { key: 'went_well', label: 'What went well', icon: Smile, color: 'text-green-500', bg: 'bg-green-500/10' },
-  { key: 'to_improve', label: 'To improve', icon: CloudRain, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-  { key: 'action_item', label: 'Action items', icon: Lightbulb, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  { key: 'went_well', label: 'What went well', icon: Smile, color: 'text-success', bg: 'bg-success/10' },
+  { key: 'to_improve', label: 'To improve', icon: CloudRain, color: 'text-warning', bg: 'bg-warning/10' },
+  { key: 'action_item', label: 'Action items', icon: Lightbulb, color: 'text-info', bg: 'bg-info/10' },
 ] as const
 
 export function RetrospectivesView() {

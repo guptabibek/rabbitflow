@@ -598,7 +598,7 @@ export function AutomationRuleBuilder() {
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
                   </button>
-                  <Zap className={`h-4 w-4 ${rule.isActive ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+                  <Zap className={`h-4 w-4 ${rule.isActive ? 'text-warning' : 'text-muted-foreground'}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{rule.name}</span>
@@ -697,13 +697,13 @@ export function AutomationRuleBuilder() {
                                 className="flex items-center gap-2 rounded bg-muted/50 px-2 py-1 text-xs"
                               >
                                 {log.status === 'success' ? (
-                                  <Badge className="h-4 bg-green-500/10 text-green-600 text-[9px]">OK</Badge>
+                                  <Badge className="h-4 bg-success/10 text-success text-[9px]">OK</Badge>
                                 ) : (
                                   <Badge variant="destructive" className="h-4 text-[9px]">FAIL</Badge>
                                 )}
                                 <span className="font-mono text-muted-foreground">{log.triggeredBy ?? ''}</span>
                                 {log.error && (
-                                  <span className="truncate text-red-500">{log.error}</span>
+                                  <span className="truncate text-danger">{log.error}</span>
                                 )}
                                 <span className="ml-auto text-muted-foreground">
                                   {new Date(log.createdAt).toLocaleString()}

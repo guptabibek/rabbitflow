@@ -396,7 +396,7 @@ export function RecurringTaskManager() {
           {tasks.map((task) => (
             <Card key={task.id}>
               <CardContent className="flex items-center gap-3 p-3">
-                <Repeat className={`h-4 w-4 flex-shrink-0 ${task.isActive ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                <Repeat className={`h-4 w-4 flex-shrink-0 ${task.isActive ? 'text-info' : 'text-muted-foreground'}`} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{task.templateTitle}</span>

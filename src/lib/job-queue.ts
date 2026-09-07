@@ -1,4 +1,5 @@
 import { Queue, Worker, type ConnectionOptions } from 'bullmq'
+import { createThrottledErrorLogger } from '@/lib/log-throttle'
 
 /**
  * Durable execution for side effects that used to be fired and forgotten.
@@ -15,6 +16,11 @@ import { Queue, Worker, type ConnectionOptions } from 'bullmq'
  */
 
 export const JOB_QUEUE_NAME = 'side-effects'
+
+// Module-scoped so the suppression window spans reconnects rather than
+// resetting with each new queue or worker instance.
+const logQueueError = createThrottledErrorLogger('Side effect queue connection error')
+const logWorkerError = createThrottledErrorLogger('Side effect worker error')
 
 export type SideEffectJob =
   | { kind: 'webhook'; projectId: string; event: string; data: Record<string, unknown> }
@@ -83,9 +89,7 @@ function getQueue(): Queue<SideEffectJob> {
 
     // Without a listener an ioredis connection error is an unhandled 'error'
     // event, which crashes the process.
-    queue.on('error', (error) => {
-      console.error('Side effect queue connection error:', error.message)
-    })
+    queue.on('error', logQueueError)
   }
   return queue
 }
@@ -220,9 +224,7 @@ export function startSideEffectWorker(): Worker<SideEffectJob> | null {
     )
   })
 
-  workerInstance.on('error', (error) => {
-    console.error('Side effect worker error:', error)
-  })
+  workerInstance.on('error', logWorkerError)
 
   return workerInstance
 }

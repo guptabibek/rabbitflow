@@ -35,21 +35,21 @@ const ACTION_CARDS = [
     description: 'Create projects, onboard users, and manage organization-wide membership from the main dashboard.',
     href: '/dashboard',
     icon: Users,
-    accent: 'from-sky-500/20 via-sky-500/10 to-transparent',
+    accent: 'from-info/20 via-sky-500/10 to-transparent',
   },
   {
     title: 'Admin Panel',
     description: 'Manage work item types, state machines, and planning field configuration in a dedicated admin workspace.',
     href: '/admin/panel',
     icon: Building2,
-    accent: 'from-emerald-500/20 via-emerald-500/10 to-transparent',
+    accent: 'from-success/20 via-emerald-500/10 to-transparent',
   },
   {
     title: 'Admin Security',
     description: 'Review active sessions, enforce MFA, offboard users, and inspect the security audit timeline.',
     href: '/admin/security',
     icon: Shield,
-    accent: 'from-amber-500/20 via-amber-500/10 to-transparent',
+    accent: 'from-warning/20 via-amber-500/10 to-transparent',
   },
 ]
 

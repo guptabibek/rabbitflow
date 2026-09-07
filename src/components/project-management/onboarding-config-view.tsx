@@ -135,7 +135,7 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-emerald-500">{data.completionRate}%</div>
+            <div className="text-3xl font-bold text-success">{data.completionRate}%</div>
             <div className="text-sm text-muted-foreground">
               Completion rate ({data.completedUsers} users)
             </div>
@@ -163,8 +163,8 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
                 <div key={stepKey} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-muted-foreground">{stepKey}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-emerald-500">{stats.completed} completed</span>
-                    <span className="text-amber-500">{stats.dismissed} skipped</span>
+                    <span className="text-success">{stats.completed} completed</span>
+                    <span className="text-warning">{stats.dismissed} skipped</span>
                   </div>
                 </div>
               ))}

@@ -291,14 +291,39 @@ export function ListView() {
             onActionComplete={async () => {
               if (!currentProject) return
               try {
-                const res = await fetch(`/api/backlog?projectId=${currentProject.id}`)
+                /*
+                  `/api/issues`, not `/api/backlog`.
+
+                  The backlog route answers with `{ projectId, total, tree }` —
+                  an object — and this handler pushed it straight into the store
+                  as the issue list. Every later `issues.filter(...)` then threw
+                  `issues.filter is not a function` and the whole view fell into
+                  the error boundary, so completing any bulk action from this
+                  list took the list down with it.
+
+                  This endpoint returns the flat array the store expects, and is
+                  the same one the workspace loads from.
+                */
+                const res = await fetch(
+                  `/api/issues?projectId=${currentProject.id}&pageSize=200&includeTotal=true`
+                )
                 if (!res.ok) {
-                  throw new Error(await getApiErrorMessage(res, 'Failed to refresh backlog'))
+                  throw new Error(await getApiErrorMessage(res, 'Failed to refresh work items'))
                 }
 
-                setIssues(await res.json())
+                const payload: unknown = await res.json()
+                if (!Array.isArray(payload)) {
+                  throw new Error('Work items returned malformed data')
+                }
+
+                setIssues(payload, {
+                  total: Number(res.headers.get('x-total-count')) || payload.length,
+                  pageSize: 200,
+                })
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : 'Failed to refresh backlog')
+                toast.error(
+                  error instanceof Error ? error.message : 'Failed to refresh work items'
+                )
               }
             }}
           />

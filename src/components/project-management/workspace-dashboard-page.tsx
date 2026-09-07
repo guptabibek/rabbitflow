@@ -272,19 +272,25 @@ export function WorkspaceDashboardPage() {
     }
   }
 
-  const handleDeleteProject = async () => {
-    if (!editProjectId) {
+  /*
+    `projectId` lets the card menu delete without first opening the edit dialog.
+    Called with no argument it falls back to the dialog's own target, which is
+    how the Delete button inside the edit dialog still works.
+  */
+  const handleDeleteProject = async (projectId?: string) => {
+    const targetId = projectId ?? editProjectId
+    if (!targetId) {
       return
     }
 
-    const targetProject = projects.find((project) => project.id === editProjectId)
+    const targetProject = projects.find((project) => project.id === targetId)
     if (!targetProject || !confirm(`Delete project "${targetProject.name}"?`)) {
       return
     }
 
     setIsDeletingProject(true)
     try {
-      const response = await fetch(`/api/projects/${editProjectId}`, {
+      const response = await fetch(`/api/projects/${targetId}`, {
         method: 'DELETE',
       })
 
@@ -294,7 +300,7 @@ export function WorkspaceDashboardPage() {
         return
       }
 
-      const nextProjects = projects.filter((project) => project.id !== editProjectId)
+      const nextProjects = projects.filter((project) => project.id !== targetId)
       setLocalProjects(nextProjects)
       setProjects(nextProjects)
       setShowEditProject(false)
@@ -605,8 +611,9 @@ export function WorkspaceDashboardPage() {
                           variant="destructive"
                           onClick={(event) => {
                             event.stopPropagation()
-                            openEditProject(project)
+                            void handleDeleteProject(project.id)
                           }}
+                          data-testid={`dashboard-project-delete-${project.id}`}
                         >
                           <Trash2 />
                           Delete project
@@ -816,7 +823,10 @@ export function WorkspaceDashboardPage() {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={handleDeleteProject}
+                // Wrapped, not passed directly: `handleDeleteProject` takes an
+                // optional id, and a bare reference would hand it the click
+                // event as the project to delete.
+                onClick={() => void handleDeleteProject()}
                 disabled={isUpdatingProject || isDeletingProject}
                 data-testid="dashboard-delete-project-button"
               >

@@ -64,7 +64,12 @@ export default function AdminPanelPage() {
         fetch(`/api/rbac?projectId=${projectId}`),
       ])
 
-      if (issuesRes.ok) setIssues(await issuesRes.json())
+      // Guarded: a non-array here poisons every `issues.filter(...)` downstream
+      // and takes the view down with it.
+      if (issuesRes.ok) {
+        const payload: unknown = await issuesRes.json()
+        setIssues(Array.isArray(payload) ? payload : [])
+      }
       if (labelsRes.ok) setLabels(await labelsRes.json())
       if (iterationsRes.ok) setIterations(await iterationsRes.json())
       if (statesRes.ok) setStates(await statesRes.json())

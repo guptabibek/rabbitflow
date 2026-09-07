@@ -580,7 +580,7 @@ export default function AdminSecurityPage() {
                         <div className="mt-1 text-[11px] text-muted-foreground">Role: {user.globalRole}</div>
                         <div className="mt-1">
                           {user.isActive ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border-0">Active</Badge>
+                            <Badge className="bg-success/10 text-success border-0">Active</Badge>
                           ) : (
                             <Badge variant="destructive">Offboarded</Badge>
                           )}
@@ -590,13 +590,13 @@ export default function AdminSecurityPage() {
                         {!user.isActive ? (
                           <Badge variant="outline">Unavailable</Badge>
                         ) : user.mfaEnabled || user.mfaReenrollRequired ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 border-0">Enabled</Badge>
+                          <Badge className="bg-success/10 text-success border-0">Enabled</Badge>
                         ) : (
                           <Badge variant="outline">Disabled</Badge>
                         )}
                         {user.mfaReenrollRequired ? (
                           <div className="mt-1">
-                            <Badge className="bg-amber-500/10 text-amber-600 border-0">Re-enroll required</Badge>
+                            <Badge className="bg-warning/10 text-warning border-0">Re-enroll required</Badge>
                           </div>
                         ) : null}
                       </td>
@@ -730,11 +730,11 @@ export default function AdminSecurityPage() {
                               Revoked
                             </Badge>
                           ) : (
-                            <Badge className="border-0 bg-emerald-500/10 text-emerald-600">Active</Badge>
+                            <Badge className="border-0 bg-success/10 text-success">Active</Badge>
                           )}
                           {session.mfaBypassed ? (
                             <div>
-                              <Badge className="border-0 bg-amber-500/10 text-amber-600">MFA bypassed</Badge>
+                              <Badge className="border-0 bg-warning/10 text-warning">MFA bypassed</Badge>
                             </div>
                           ) : null}
                           {session.mfaVerifiedAt ? (

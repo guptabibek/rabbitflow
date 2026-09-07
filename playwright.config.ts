@@ -19,6 +19,23 @@ export default defineConfig({
     video: 'retain-on-failure',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
+    /*
+      Run against a browser that is already on the machine.
+
+      Playwright's own build is a ~280 MB download from its CDN, which on a slow
+      or filtered connection stalls part-way and leaves a half-extracted
+      directory that still reports itself as installed. Setting
+      E2E_BROWSER_CHANNEL=chrome (or msedge) runs the suite against the
+      installed browser instead, which is enough for these tests.
+
+      It lives on the top-level `use` so the `setup` project — which has no
+      `use` block of its own and generates the shared auth states — picks it up
+      too. CI leaves it unset and uses the pinned Playwright build, so the
+      version the pipeline tests against stays reproducible.
+    */
+    ...(process.env.E2E_BROWSER_CHANNEL
+      ? { channel: process.env.E2E_BROWSER_CHANNEL }
+      : {}),
   },
   projects: [
     {

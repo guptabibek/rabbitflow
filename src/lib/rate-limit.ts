@@ -95,10 +95,33 @@ function incrementLocal(key: string, windowSeconds: number) {
   }
 }
 
+/*
+  Escape hatch for automated runs, and only for those.
+
+  Registration allows five attempts an hour per IP. A single E2E pass spends
+  three of them, so the second run of the suite on one machine starts failing
+  with 429s that look like product faults — the whole auth spec goes red for an
+  hour with no indication why.
+
+  The `NODE_ENV` guard is the point: a production build ignores the variable
+  entirely, so this cannot be switched on against real users by setting an
+  environment variable on a deployed instance.
+*/
+function rateLimitsDisabled(): boolean {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.E2E_DISABLE_RATE_LIMITS === 'true'
+  )
+}
+
 export async function checkRateLimit(
   rule: RateLimitRule,
   identifier: string
 ): Promise<RateLimitResult> {
+  if (rateLimitsDisabled()) {
+    return { allowed: true, remaining: rule.limit, retryAfterSeconds: 0 }
+  }
+
   const key = `ratelimit:${rule.name}:${identifier}`
 
   const result =

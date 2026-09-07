@@ -4,12 +4,14 @@ import {
   closeEmbeddedWorkItem,
   createWorkItem,
   expectToast,
+  fillRequiredScope,
   openDashboard,
   openSidebarView,
   openWorkItemFromList,
   selectProjectFromDashboard,
   selectRadixOption,
   selectWorkItemCheckboxByTitle,
+  selectWorkItemType,
   visibleWorkItemRow,
 } from './support/ui'
 
@@ -26,7 +28,6 @@ test.describe('Work Item Flows', () => {
     const betaTitle = makeIssueTitle('beta')
     const gammaTitle = makeIssueTitle('gamma')
     const memberUser = await seed.getUserByEmail(accounts.member.email)
-    const doneState = await seed.getDoneState(project.id)
 
     await openDashboard(page)
     await page.getByTestId('dashboard-project-search-input').fill(project.name)
@@ -46,9 +47,15 @@ test.describe('Work Item Flows', () => {
     await expect(visibleWorkItemRow(page, betaTitle)).toHaveCount(0)
     await page.getByTestId('work-items-search-input').fill('')
 
+    // A state one legal hop away. Jumping straight to Done is rejected by the
+    // workflow, which is correct — but it is not what this test is checking.
+    const alphaBeforeUpdate = await seed.findIssueByTitle(project.id, alphaTitle)
+    const nextState = await seed.getAllowedNextState(alphaBeforeUpdate!.id)
+    expect(nextState).not.toBeNull()
+
     await openWorkItemFromList(page, alphaTitle)
     await selectRadixOption(page, 'work-item-assignee-trigger', accounts.member.name)
-    await selectRadixOption(page, 'work-item-state-trigger', doneState!.name)
+    await selectRadixOption(page, 'work-item-state-trigger', nextState!.name)
 
     const updateResponsePromise = page.waitForResponse(
       (response) => /\/api\/issues\//.test(response.url()) && response.request().method() === 'PUT'
@@ -61,7 +68,7 @@ test.describe('Work Item Flows', () => {
 
     const alphaIssue = await seed.findIssueByTitle(project.id, alphaTitle)
     expect(alphaIssue?.assignee?.id).toBe(memberUser?.id)
-    expect(alphaIssue?.stateRecord?.name).toBe(doneState?.name)
+    expect(alphaIssue?.stateRecord?.name).toBe(nextState?.name)
 
     await closeEmbeddedWorkItem(page)
 
@@ -98,16 +105,23 @@ test.describe('Work Item Flows', () => {
 
     await openWorkItemFromList(page, alphaTitle)
 
-    const dialogPromise = page.waitForEvent('dialog')
+    /*
+      Accept the confirm() from a listener, not from an awaited promise.
+
+      Attaching any 'dialog' listener turns off Playwright's auto-dismiss, so
+      the native dialog stays on screen until something accepts it — and while
+      it is up, the click that opened it cannot settle. Awaiting the click
+      before awaiting the dialog therefore deadlocks: the click times out, then
+      the dialog and the DELETE both time out behind it.
+    */
+    page.once('dialog', (dialog) => void dialog.accept())
+
     const deleteResponsePromise = page.waitForResponse(
       (response) => /\/api\/issues\//.test(response.url()) && response.request().method() === 'DELETE'
     )
 
     await page.getByTestId('work-item-more-options-button').click()
     await page.getByTestId('work-item-delete-button').click()
-
-    const dialog = await dialogPromise
-    await dialog.accept()
 
     const deleteResponse = await deleteResponsePromise
     expect(deleteResponse.ok()).toBeTruthy()
@@ -125,6 +139,11 @@ test.describe('Work Item Flows', () => {
     const invalidTitle = makeIssueTitle('invalid-dates')
     await page.getByTestId('work-items-new-button').click()
     await page.getByTestId('create-work-item-title-input').fill(invalidTitle)
+    // Required fields are checked before the date rule, so leaving Scope empty
+    // would fail on Scope and never exercise what this test is about.
+    await fillRequiredScope(page)
+    // Dates live on the Planning tab, not alongside the title.
+    await page.getByTestId('create-work-item-tab-metadata').click()
     await page.getByTestId('create-work-item-start-date-input').fill('2026-04-10')
     await page.getByTestId('create-work-item-due-date-input').fill('2026-04-01')
     await page.getByTestId('create-work-item-submit-button').click()
@@ -149,8 +168,13 @@ test.describe('Work Item Flows', () => {
     })
 
     await page.getByTestId('work-items-new-button').click()
+    // Task plus Scope, so nothing is missing. Otherwise the first click is
+    // spent on a required-field warning and the duplicate-submit guard — the
+    // thing under test — is never reached.
+    await selectWorkItemType(page, 'task')
     await page.getByTestId('create-work-item-title-input').fill(delayedTitle)
-    await page.getByTestId('create-work-item-description-input').fill(`${E2E_PREFIX}: delayed submission`) 
+    await page.getByTestId('create-work-item-description-input').fill(`${E2E_PREFIX}: delayed submission`)
+    await fillRequiredScope(page)
 
     const createResponsePromise = page.waitForResponse(
       (response) => response.url().includes('/api/issues') && response.request().method() === 'POST'

@@ -347,11 +347,11 @@ export function TestPlanManager() {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'passed':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'failed':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       case 'blocked':
-        return <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+        return <AlertCircle className="h-3.5 w-3.5 text-chart-2" />
       case 'skipped':
         return <Clock className="h-3.5 w-3.5 text-muted-foreground" />
       default:
@@ -362,11 +362,11 @@ export function TestPlanManager() {
   const priorityColor = (p: string) => {
     switch (p) {
       case 'critical':
-        return 'text-red-600 bg-red-500/10'
+        return 'text-danger bg-danger/10'
       case 'high':
-        return 'text-orange-600 bg-orange-500/10'
+        return 'text-chart-2 bg-chart-2/10'
       case 'medium':
-        return 'text-yellow-600 bg-yellow-500/10'
+        return 'text-warning bg-warning/10'
       default:
         return 'text-muted-foreground bg-muted/50'
     }
@@ -374,10 +374,10 @@ export function TestPlanManager() {
 
   const planStatusColor = (s: string) => {
     switch (s) {
-      case 'active': return 'bg-green-500/10 text-green-600'
-      case 'completed': return 'bg-blue-500/10 text-blue-600'
+      case 'active': return 'bg-success/10 text-success'
+      case 'completed': return 'bg-info/10 text-info'
       case 'archived': return 'bg-muted text-muted-foreground'
-      default: return 'bg-yellow-500/10 text-yellow-600'
+      default: return 'bg-warning/10 text-warning'
     }
   }
 
@@ -596,11 +596,11 @@ export function TestPlanManager() {
                 </div>
                 <div className="flex gap-2">
                   <Badge variant="outline" className="text-xs gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    <CheckCircle2 className="h-3 w-3 text-success" />
                     {summary.passed} passed
                   </Badge>
                   <Badge variant="outline" className="text-xs gap-1">
-                    <XCircle className="h-3 w-3 text-red-500" />
+                    <XCircle className="h-3 w-3 text-danger" />
                     {summary.failed} failed
                   </Badge>
                   <Badge variant="outline" className="text-xs gap-1">

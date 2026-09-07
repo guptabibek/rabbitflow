@@ -864,6 +864,7 @@ export default function HomePage() {
           size="sm"
           className="max-w-[15rem] gap-1.5 px-1.5 font-medium"
           aria-label={`Current project: ${currentProject.name}. Switch project`}
+          data-testid="workspace-project-switcher"
         >
           <span
             aria-hidden="true"

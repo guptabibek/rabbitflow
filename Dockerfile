@@ -45,6 +45,7 @@ RUN install -d -o nextjs -g nextjs \
     /app/var/uploads \
     /app/var/uploads/attachments \
     /app/var/uploads/avatars \
+  && sed -i 's/\r$//' /entrypoint.sh \
   && chmod +x /entrypoint.sh
 
 EXPOSE 3000

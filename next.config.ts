@@ -26,6 +26,19 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
+  /*
+    Hosts allowed to load `/_next/*` dev resources.
+
+    Next's dev server serves its client chunks only to its own origin unless a
+    host is listed here. The E2E suite drives the app on `127.0.0.1` while the
+    dev server's origin is `localhost`, so every chunk was blocked: the page
+    rendered from the server and looked correct, React never hydrated, and the
+    login form fell back to a native GET submit that produced no API call at
+    all. Nothing failed loudly — the only trace was one warning in the dev log.
+
+    Development-only; production builds ignore it.
+  */
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   // Do not advertise the framework or its version.
   poweredByHeader: false,
   experimental: {
