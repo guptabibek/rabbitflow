@@ -91,6 +91,13 @@ the first time. Each was reproduced before being changed.
 | 6 | **Workers flooded the log when Redis was down** | ~4 multi-line `AggregateError` stacks every 30 s, sustained, per worker — several MB a day from one dependency being down | `createThrottledErrorLogger`: first occurrence logged, repeats collapsed into a periodic summary; a different error still prints immediately |
 | 7 | **CI proved nothing about MFA encryption** | The two SEC-014 tests skip themselves without `MFA_ENCRYPTION_KEY`, which CI never set — green, having tested nothing. With a key but no enrolment requirement they fail instead | Both variables set in the CI job; the suite now runs 79/79 with none skipped |
 | 8 | **Next dev blocked its own client chunks** | E2E drives `127.0.0.1` while the dev server's origin is `localhost`, so every `/_next/*` chunk was refused. Pages rendered server-side and looked correct, React never hydrated, and forms fell back to native GET submits. One line in the dev log was the only trace | `allowedDevOrigins` in `next.config.ts` (development-only) |
+| 9 | **Migrations could never run in the image** | With the entrypoint finally executing (#1), every start failed on `sh: 1: prisma: not found`. The runtime image has no `node_modules/.bin` for npx to resolve, and copying `node_modules/prisma` across was not enough either — the CLI's own dependencies (`effect` among them) are not in the standalone trace, so it then failed with `Cannot find module 'effect'` | The Dockerfile installs the CLI into `/opt/prisma-cli` at the version pinned in `package-lock.json`; the entrypoint invokes its entry point directly with an explicit `--schema` |
+| 10 | **The bootstrap seed could not have worked** | `RUN_BOOTSTRAP_SEED=true` — the development compose default — would have failed three ways: the image ran Node 20 while the script needs `--experimental-strip-types` (22.6+), `src/lib/domain` was never copied into the runner, and `bcryptjs` is inlined into the server bundle rather than emitted as a package | Base image moved to Node 22, the six domain files and `bcryptjs` are copied in, and a seed failure now warns and continues instead of crash-looping the stack. CI moved to Node 22 to match |
+
+Both paths were verified by building the image and running it against a real
+Postgres: 22 migrations applied, `/api/health/ready` returned
+`{"status":"ready","checks":{"database":"ok"}}`, and with seeding enabled the
+administrator row was created.
 
 **Design-system drift closed.** Raw Tailwind palette classes went from 203 to
 **0** across `src`. They are now semantic tokens (`success`, `warning`,
