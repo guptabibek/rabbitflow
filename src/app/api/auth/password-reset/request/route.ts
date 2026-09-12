@@ -55,14 +55,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+      The detail goes to the log, not to the response.
+
+      This endpoint is unauthenticated, and the SMTP failures reaching it name
+      the relay host and say whether the rejection was the credentials, the
+      server's IP, or DNS. That is exactly what an operator needs and exactly
+      what an anonymous caller should not be told about the mail setup.
+    */
     console.error('Password reset request error:', error)
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Failed to send password reset OTP'
 
     return NextResponse.json(
-      { error: message },
+      { error: 'Could not send the reset code right now. Please try again shortly.' },
       { status: 500 }
     )
   }
