@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
+import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
 
@@ -34,16 +36,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
 
-    const auth = await requireProjectPermission(request, projectId, 'workitem:read')
+    const auth = await requireProjectPermission(request, projectId, 'workitem:read', undefined, {
+      allowScoped: true,
+    })
     if (!auth.ok) return auth.response
 
-    const where: Record<string, unknown> = {}
+    const areaScope = await getAreaAccessScope(
+      projectId,
+      auth.actor.projectRole,
+      'workitem:read',
+      auth.actor.extraPermissions
+    )
+    const issueScope = applyAreaScopeFilter<Prisma.IssueWhereInput>({ projectId }, areaScope)
+    const where: Prisma.ApprovalRequestWhereInput = {
+      issue: { is: issueScope },
+    }
 
     if (issueId) {
       where.issueId = issueId
-    } else if (pending) {
+    }
+    if (pending) {
       where.status = 'pending'
-      where.issue = { projectId }
     }
 
     const approvals = await db.approvalRequest.findMany({

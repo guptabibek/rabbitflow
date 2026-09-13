@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndMarkBreachedTimers } from '@/lib/domain/sla-engine'
-import { purgeExpiredAuthChallenges, secretsMatch } from '@/lib/auth-otp'
+import { purgeExpiredAuthChallenges } from '@/lib/auth-otp'
+import { getAuthorizedCronSecret } from '@/lib/cron-auth'
 import { applyRetentionPolicies } from '@/lib/domain/retention'
-
-const CRON_SECRET = process.env.CRON_SECRET
 
 /**
  * POST /api/cron
@@ -19,8 +18,8 @@ const CRON_SECRET = process.env.CRON_SECRET
  */
 export async function POST(request: NextRequest) {
   try {
-    const secret = request.headers.get('x-cron-secret')
-    if (!CRON_SECRET || !secret || !secretsMatch(CRON_SECRET, secret)) {
+    const cronSecret = getAuthorizedCronSecret(request)
+    if (!cronSecret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
       const baseUrl = request.nextUrl.origin
       const response = await fetch(`${baseUrl}/api/recurring-tasks/execute`, {
         method: 'POST',
-        headers: { 'x-cron-secret': CRON_SECRET },
+        headers: { 'x-cron-secret': cronSecret },
       })
       results.recurringTasks = await response.json()
     } catch (error) {

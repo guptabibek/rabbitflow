@@ -4,10 +4,8 @@ import { db } from '@/lib/db'
 import { formatProjectIssueKey } from '@/lib/domain/issue-key-format'
 import { getMaxProjectIssueNumber, lockProjectIssueSequence } from '@/lib/domain/issue-key-sequence'
 import { attachSlaTimers } from '@/lib/domain/sla-engine'
-import { secretsMatch } from '@/lib/auth-otp'
+import { getAuthorizedCronSecret } from '@/lib/cron-auth'
 import { computeNextRun } from '../route'
-
-const CRON_SECRET = process.env.CRON_SECRET
 
 // POST /api/recurring-tasks/execute
 // Called by an external cron scheduler (e.g. Vercel Cron, crontab, GitHub Actions)
@@ -17,8 +15,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 export async function POST(request: NextRequest) {
   try {
     // Verify cron secret
-    const secret = request.headers.get('x-cron-secret')
-    if (!CRON_SECRET || !secret || !secretsMatch(CRON_SECRET, secret)) {
+    if (!getAuthorizedCronSecret(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

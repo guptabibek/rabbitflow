@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { requireProjectPermission } from '@/lib/domain/auth'
 
 // GET /api/sla-timers?issueId=xxx&projectId=xxx
@@ -13,15 +15,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 })
     }
 
-    const auth = await requireProjectPermission(request, projectId, 'workitem:read')
+    const auth = await requireProjectPermission(request, projectId, 'workitem:read', undefined, {
+      allowScoped: true,
+    })
     if (!auth.ok) return auth.response
 
-    const where: Record<string, unknown> = {}
+    const areaScope = await getAreaAccessScope(
+      projectId,
+      auth.actor.projectRole,
+      'workitem:read',
+      auth.actor.extraPermissions
+    )
+    const issueScope = applyAreaScopeFilter<Prisma.IssueWhereInput>({ projectId }, areaScope)
+    const where: Prisma.SlaTimerWhereInput = {
+      issue: { is: issueScope },
+    }
     if (issueId) {
       where.issueId = issueId
     } else {
       // Get running/breached/paused timers for project
-      where.issue = { projectId }
       where.status = { in: ['running', 'breached', 'paused'] }
     }
 

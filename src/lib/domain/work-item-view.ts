@@ -1,4 +1,4 @@
-import type { Issue, WorkItemTypeDefinition } from '../../store/app-store'
+import type { Issue, State, WorkItemTypeDefinition } from '../../store/app-store'
 
 export const UNASSIGNED_VALUE = '__none__'
 
@@ -71,6 +71,83 @@ export function getWorkItemTypeDefinition(
   typeKey: string
 ) {
   return workItemTypes.find((workItemType) => workItemType.key === typeKey) ?? null
+}
+
+type TypeStateMapping = {
+  workItemTypeId: string
+  stateId: string
+  order: number
+}
+
+type StateTransition = {
+  workItemTypeId: string
+  fromStateId: string
+  toStateId: string
+  order: number
+  isEnabled: boolean
+}
+
+/**
+ * Return only the states that the update API can accept from the current state.
+ *
+ * A project's state list is shared by every work-item type, while mappings and
+ * transition edges are type-specific. Showing the project-wide list makes
+ * invalid workflow transitions look selectable and leaves the API to reject
+ * the user's choice after they press Save.
+ *
+ * Projects with no enabled transition graph retain the server's compatibility
+ * behavior: any state mapped to the type is available. Once a graph exists,
+ * the current state and its enabled outgoing edges are the complete set.
+ */
+export function getAvailableWorkItemStates({
+  states,
+  typeStateMappings,
+  stateTransitions,
+  workItemTypeId,
+  currentStateId,
+}: {
+  states: State[]
+  typeStateMappings: TypeStateMapping[]
+  stateTransitions: StateTransition[]
+  workItemTypeId: string | null | undefined
+  currentStateId: string | null | undefined
+}) {
+  if (!workItemTypeId) {
+    return currentStateId ? states.filter((state) => state.id === currentStateId) : []
+  }
+
+  const stateById = new Map(states.map((state) => [state.id, state]))
+  const mappings = typeStateMappings
+    .filter((mapping) => mapping.workItemTypeId === workItemTypeId)
+    .sort((left, right) => left.order - right.order)
+  const mappedStates = mappings
+    .map((mapping) => stateById.get(mapping.stateId))
+    .filter((state): state is State => Boolean(state))
+
+  const typeTransitions = stateTransitions.filter(
+    (transition) => transition.workItemTypeId === workItemTypeId && transition.isEnabled
+  )
+
+  if (!currentStateId || typeTransitions.length === 0) {
+    return mappedStates
+  }
+
+  const availableStateIds = new Set([
+    currentStateId,
+    ...typeTransitions
+      .filter((transition) => transition.fromStateId === currentStateId)
+      .sort((left, right) => left.order - right.order)
+      .map((transition) => transition.toStateId),
+  ])
+
+  const available = mappedStates.filter((state) => availableStateIds.has(state.id))
+  const currentState = stateById.get(currentStateId)
+
+  if (currentState && !available.some((state) => state.id === currentState.id)) {
+    return [currentState, ...available]
+  }
+
+  return available
 }
 
 export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft): PatchPayload | null {

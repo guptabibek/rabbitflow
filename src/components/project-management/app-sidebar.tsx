@@ -65,7 +65,6 @@ type ViewType =
   | 'dependency-graph'
   | 'activity'
   | 'teams'
-  | 'settings'
   | 'webhooks'
   | 'automations'
   | 'imports'

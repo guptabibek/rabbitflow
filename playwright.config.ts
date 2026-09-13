@@ -10,7 +10,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // The development server compiles routes on demand. Letting Playwright use
+  // every local CPU can overload that single server and turn project-card
+  // clicks into unrelated navigation timeouts. Two workers matches CI and
+  // keeps local results reproducible.
+  workers: 2,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: E2E_BASE_URL,
@@ -60,5 +64,10 @@ export default defineConfig({
           timeout: 180_000,
           stdout: 'pipe',
           stderr: 'pipe',
+          // Registration is disabled by default in production, while the auth
+          // E2E project deliberately covers the opt-in registration journey.
+          env: {
+            ALLOW_SELF_REGISTRATION: process.env.ALLOW_SELF_REGISTRATION ?? 'true',
+          },
         },
 })

@@ -577,7 +577,12 @@ export async function PUT(
         return NextResponse.json(
           {
             error: 'Invalid workflow transition',
-            details: { fromStateId: currentIssue.stateId, toStateId: targetState.id },
+            details: {
+              fromStateId: currentIssue.stateId,
+              toStateId: targetState.id,
+              userMessage:
+                'That state is no longer available from the current workflow state. Refresh the item and choose one of the available State options.',
+            },
           },
           { status: 400 }
         )
@@ -825,6 +830,10 @@ export async function PUT(
         throw new Error('Updated issue could not be reloaded')
       }
 
+      if (updatedIssue.status !== currentIssue.status) {
+        await handleSlaStatusChange(id, currentIssue.status, updatedIssue.status, tx)
+      }
+
       return updatedIssue
     })
 
@@ -871,11 +880,6 @@ export async function PUT(
         action: 'work_item_updated',
         details: { key: currentIssue.key, ...details },
       })
-    }
-
-    // SLA timer state transitions on status change
-    if (issue.status !== currentIssue.status) {
-      void handleSlaStatusChange(id, currentIssue.status, issue.status)
     }
 
     if (

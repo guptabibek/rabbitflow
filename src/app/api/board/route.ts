@@ -176,6 +176,8 @@ export async function PATCH(request: NextRequest) {
           details: {
             from: { status: issue.status, stateId: issue.stateId },
             to: { status: data.toStatus, stateId: targetState.id },
+            userMessage:
+              'This item cannot move directly to that board column. Open it and choose one of the available State options first.',
           },
         },
         { status: 400 }

@@ -163,7 +163,6 @@ type ViewType =
   | 'dependency-graph'
   | 'activity'
   | 'teams'
-  | 'settings'
   | 'documents'
   | 'objectives'
   | 'retrospectives'
@@ -181,7 +180,7 @@ type ViewType =
 
 const ALL_VIEWS: readonly ViewType[] = [
   'dashboard', 'backlog', 'board', 'sprints', 'list', 'reports', 'roadmap',
-  'portfolio', 'calendar', 'dependency-graph', 'activity', 'teams', 'settings',
+  'portfolio', 'calendar', 'dependency-graph', 'activity', 'teams',
   'documents', 'objectives', 'retrospectives', 'approvals', 'webhooks',
   'automations', 'imports', 'recurring-tasks', 'test-plans', 'sla', 'api-tokens',
   'branding', 'acl', 'onboarding-config',
@@ -214,7 +213,6 @@ const VIEW_META: Record<ViewType, { label: string; section?: string }> = {
   documents: { label: 'Documents', section: 'Analyse' },
   retrospectives: { label: 'Retros', section: 'Analyse' },
   teams: { label: 'Teams', section: 'Settings' },
-  settings: { label: 'Settings', section: 'Settings' },
   webhooks: { label: 'Webhooks', section: 'Settings' },
   automations: { label: 'Automations', section: 'Settings' },
   imports: { label: 'Import', section: 'Settings' },

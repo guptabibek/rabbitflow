@@ -50,12 +50,12 @@ export function isQueueConfigured(): boolean {
 function getConnection(): ConnectionOptions {
   const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL
 
-  // Fail fast rather than retrying forever. BullMQ's default reconnect strategy
-  // retries indefinitely, which keeps the Node event loop alive and turns a
-  // Redis outage into a hung process rather than a degraded one. Callers already
-  // fall back to inline execution, so a quick failure is strictly better.
+  // BullMQ workers require maxRetriesPerRequest=null for blocking commands.
+  // Reconnection still fails fast: retryStrategy stops after the first failed
+  // connection and the offline queue is disabled, so callers can fall back to
+  // inline execution instead of leaving commands pending indefinitely.
   const shared = {
-    maxRetriesPerRequest: 1,
+    maxRetriesPerRequest: null,
     enableOfflineQueue: false,
     retryStrategy: () => null,
     connectTimeout: 3000,

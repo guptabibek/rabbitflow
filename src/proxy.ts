@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
+import { isScheduledJobRoute } from '@/lib/scheduled-job-routes'
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET
@@ -14,10 +15,15 @@ export default async function proxy(request: NextRequest) {
   const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
   // Covers /api/health, /api/health/live and /api/health/ready.
   const isPublicHealthRoute = pathname === '/api/health' || pathname.startsWith('/api/health/')
+  // These machine-to-machine endpoints authenticate with x-cron-secret in
+  // their route handlers. Requiring a browser session here prevents the
+  // scheduler from ever reaching that dedicated authentication check.
+  const usesScheduledJobAuthentication = isScheduledJobRoute(pathname)
 
   // Public auth APIs, no auth required.
   if (
     isPublicHealthRoute ||
+    usesScheduledJobAuthentication ||
     pathname === '/api/auth/login' ||
     pathname === '/api/auth/register' ||
     pathname === '/api/auth/logout' ||

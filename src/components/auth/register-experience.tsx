@@ -32,9 +32,10 @@ function toErrorMessage(value: unknown, fallback: string): string {
 
 type RegisterExperienceProps = {
   branding: ResolvedProjectBranding
+  registrationEnabled: boolean
 }
 
-export function RegisterExperience({ branding }: RegisterExperienceProps) {
+export function RegisterExperience({ branding, registrationEnabled }: RegisterExperienceProps) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -70,8 +71,16 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
   return (
     <AuthShell
       branding={branding}
-      title={`Create your ${branding.displayName} account`}
-      description="Set up your identity once and continue into the workspace immediately after registration."
+      title={
+        registrationEnabled
+          ? `Create your ${branding.displayName} account`
+          : 'Account registration is managed by your administrator'
+      }
+      description={
+        registrationEnabled
+          ? 'Set up your identity once and continue into the workspace immediately after registration.'
+          : `Ask your ${branding.displayName} administrator to create an account for you.`
+      }
       footer={
         <div className="text-center">
           <span className="text-muted-foreground">Already have an account? </span>
@@ -81,6 +90,7 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
         </div>
       }
     >
+      {registrationEnabled ? (
       <form onSubmit={handleRegister} className="space-y-5" data-testid="register-form">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -128,6 +138,11 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
           Create Account
         </Button>
       </form>
+      ) : (
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground" data-testid="registration-disabled-message">
+          Self-service registration is unavailable. Contact your administrator for access.
+        </div>
+      )}
     </AuthShell>
   )
 }

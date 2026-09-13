@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/states'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn, getApiErrorMessage } from '@/lib/utils'
 import { IssueCard } from './issue-card'
 
 const COLUMNS = [
@@ -241,8 +241,7 @@ export function KanbanBoard() {
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to move work item')
+        toast.error(await getApiErrorMessage(response, 'Failed to move work item'))
         return
       }
 

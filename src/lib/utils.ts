@@ -113,10 +113,18 @@ export async function getApiErrorMessage(response: Response, fallback: string) {
       const payload = await parseJsonResponse<{
         error?: unknown
         message?: unknown
+        details?: { userMessage?: unknown }
       } | null>(response, null)
 
       if (!payload) {
         return fallback
+      }
+
+      if (
+        typeof payload.details?.userMessage === 'string' &&
+        payload.details.userMessage.trim()
+      ) {
+        return payload.details.userMessage
       }
 
       if (typeof payload.error === 'string' && payload.error.trim()) {

@@ -43,6 +43,7 @@ import { useAppStore } from '@/store/app-store'
 import {
   UNASSIGNED_VALUE,
   buildWorkItemPatchPayload,
+  getAvailableWorkItemStates,
   getWorkItemTypeDefinition,
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
@@ -108,6 +109,12 @@ export type WorkItemBootstrapPayload = {
     teams: Team[]
     states: State[]
     workItemTypes: WorkItemTypeDefinition[]
+    typeStateMappings: Array<{
+      workItemTypeId: string
+      stateId: string
+      order: number
+      isInitial: boolean
+    }>
     stateTransitions: Array<{
       id: string
       workItemTypeId: string
@@ -535,6 +542,24 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       })
       .sort((left, right) => left.order - right.order)
   }, [activeTypeDefinition?.id, context.stateTransitions, context.states, issue.stateRecord?.id, issue.stateRecord?.name])
+
+  const availableStates = useMemo(
+    () =>
+      getAvailableWorkItemStates({
+        states: context.states,
+        typeStateMappings: context.typeStateMappings ?? [],
+        stateTransitions: context.stateTransitions ?? [],
+        workItemTypeId: activeTypeDefinition?.id,
+        currentStateId: issue.stateRecord?.id,
+      }),
+    [
+      activeTypeDefinition?.id,
+      context.stateTransitions,
+      context.states,
+      context.typeStateMappings,
+      issue.stateRecord?.id,
+    ]
+  )
 
   const nextApprovalRequestToken = useMemo(
     () => (approvalRequestPrefill?.token ?? 0) + 1,
@@ -1129,12 +1154,17 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     <SelectValue placeholder="State" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                    {context.states.map((state) => (
+                    {!issue.stateRecord && <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>}
+                    {availableStates.map((state) => (
                       <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {issue.stateRecord && availableStates.length === 1 ? (
+                  <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
+                    No workflow transition is available from this state.
+                  </p>
+                ) : null}
               </div>
 
               {/* Assigned To */}

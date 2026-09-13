@@ -131,7 +131,7 @@ administrator row was created.
 | # | Gap | Detail | Est. |
 |---|---|---|---|
 | **B1** | **Six native `confirm()` dialogs remain** | `issue-detail-dialog`, `member-management`, `sprint-management`, `team-management`, `workspace-dashboard-page`, `admin/security`. The repo already has `ConfirmDestructiveDialog` and uses it in eight other places. Native dialogs are unstyled, block the event loop, and cannot explain consequences | 1.5 d |
-| **B2** | **The state picker offers transitions the server rejects** | The work-item state dropdown lists every state. Choosing one the workflow forbids fails only on save, with "Invalid workflow transition" | 1 d |
+| **B2 — closed 2026-09-13** | **State picker and workflow transitions** | The picker now exposes only the current state and enabled outgoing states mapped to the selected work-item type. An eight-state User Story matrix verifies exact UI options, valid persistence, and invalid API rejection | Done |
 | **B3** | Idempotency keys (API-005) | A retried `POST /api/issues` after a timeout still creates a duplicate. Updates are protected by the version field; creates are not | 1.5 d |
 | **B4** | Component tests (TEST-004) | No testing library installed. 270 unit tests cover domain logic; none renders a form or a view | 3 d |
 | **B5** | OpenAPI (API-007) | Zod schemas exist on every route and can generate the spec | 1 d |

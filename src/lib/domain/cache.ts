@@ -20,6 +20,7 @@ export async function invalidateWorkItemCaches(projectId: string) {
     `board:${projectId}:*`,
     `backlog:${projectId}:*`,
     `dashboard:${projectId}:*`,
+    `project:${projectId}:bootstrap:*`,
     `work-item-detail:${projectId}:*`,
     `reports:*:${projectId}:*`
   )

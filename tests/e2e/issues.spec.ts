@@ -1,5 +1,12 @@
 import { test, expect } from './fixtures/app.fixture'
-import { AUTH_STATES, E2E_PREFIX, makeIssueTitle, makeProjectName } from './support/env'
+import {
+  AUTH_STATES,
+  E2E_PREFIX,
+  E2E_TEST_PASSWORD,
+  makeIssueTitle,
+  makeProjectName,
+  makeSignupEmail,
+} from './support/env'
 import {
   closeEmbeddedWorkItem,
   createWorkItem,
@@ -13,12 +20,146 @@ import {
   selectWorkItemCheckboxByTitle,
   selectWorkItemType,
   visibleWorkItemRow,
+  login,
 } from './support/ui'
 
 test.use({ storageState: AUTH_STATES.admin })
 
 test.describe('Work Item Flows', () => {
   test.describe.configure({ mode: 'parallel' })
+
+  test('user story state picker exposes every legal edge and no invalid transitions', async ({ page, seed }) => {
+    const project = await seed.createProjectFixture({ name: makeProjectName('story-workflow') })
+    const workflow = await seed.getTypeWorkflow(project.id, 'story')
+    const browserErrors: string[] = []
+    const serverFailures: string[] = []
+
+    page.on('pageerror', (error) => browserErrors.push(error.message))
+    page.on('response', (response) => {
+      if (response.status() >= 500) {
+        serverFailures.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+      }
+    })
+
+    const issuesByState = new Map<string, Awaited<ReturnType<typeof seed.createIssueFixture>>>()
+    for (const mapping of workflow.stateMappings) {
+      const category = mapping.state.category.trim().toLowerCase()
+      const status = category === 'completed' ? 'done' : category === 'in progress' ? 'in_progress' : 'backlog'
+      const issue = await seed.createIssueFixture({
+        projectId: project.id,
+        title: makeIssueTitle(`story-${mapping.order}`),
+        workItemType: 'story',
+        status,
+        stateId: mapping.stateId,
+      })
+      issuesByState.set(mapping.stateId, issue)
+    }
+
+    for (const mapping of workflow.stateMappings) {
+      const issue = issuesByState.get(mapping.stateId)!
+      const outgoingIds = workflow.stateTransitions
+        .filter((transition) => transition.fromStateId === mapping.stateId)
+        .map((transition) => transition.toStateId)
+      const expectedIds = new Set([mapping.stateId, ...outgoingIds])
+      const expectedNames = workflow.stateMappings
+        .filter((candidate) => expectedIds.has(candidate.stateId))
+        .map((candidate) => candidate.state.name)
+
+      await page.goto(`/work-items/${issue.id}`)
+      const stateTrigger = page.getByTestId('work-item-state-trigger')
+      await expect(stateTrigger).toBeVisible()
+      await stateTrigger.click()
+
+      await expect(page.getByRole('option')).toHaveCount(expectedNames.length)
+      expect(await page.getByRole('option').allTextContents()).toEqual(expectedNames)
+      await page.keyboard.press('Escape')
+    }
+
+    const initial = workflow.stateMappings.find((mapping) => mapping.isInitial) ?? workflow.stateMappings[0]
+    const initialIssue = issuesByState.get(initial.stateId)!
+    const unreachable = workflow.stateMappings.find(
+      (mapping) =>
+        mapping.stateId !== initial.stateId &&
+        !workflow.stateTransitions.some(
+          (transition) =>
+            transition.fromStateId === initial.stateId && transition.toStateId === mapping.stateId
+        )
+    )
+    expect(unreachable).toBeTruthy()
+
+    const invalidResponse = await page.request.put(`/api/issues/${initialIssue.id}`, {
+      data: { stateId: unreachable!.stateId, version: initialIssue.version },
+    })
+    expect(invalidResponse.status()).toBe(400)
+    const invalidPayload = await invalidResponse.json()
+    expect(invalidPayload.error).toBe('Invalid workflow transition')
+    expect(invalidPayload.details.userMessage).toMatch(/choose one of the available State options/i)
+
+    const next = workflow.stateTransitions.find(
+      (transition) =>
+        transition.fromStateId === initial.stateId && transition.toStateId !== initial.stateId
+    )
+    expect(next).toBeTruthy()
+    const nextState = workflow.stateMappings.find((mapping) => mapping.stateId === next!.toStateId)!.state
+
+    await page.goto(`/work-items/${initialIssue.id}`)
+    await selectRadixOption(page, 'work-item-state-trigger', nextState.name)
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/issues/${initialIssue.id}`) &&
+        response.request().method() === 'PUT'
+    )
+    await page.getByTestId('work-item-save-button').click()
+    expect((await saveResponsePromise).status()).toBe(200)
+    await expectToast(page, /work item saved/i)
+
+    const updated = await seed.findIssueByTitle(project.id, initialIssue.title)
+    expect(updated?.stateId).toBe(nextState.id)
+    expect(browserErrors).toEqual([])
+    expect(serverFailures).toEqual([])
+  })
+
+  test('state controls match transition permissions for every project role', async ({ browser, seed }) => {
+    const project = await seed.createProjectFixture({ name: makeProjectName('workflow-roles') })
+    const workflow = await seed.getTypeWorkflow(project.id, 'story')
+    const initial = workflow.stateMappings.find((mapping) => mapping.isInitial) ?? workflow.stateMappings[0]
+    const roleCases = [
+      ['PM', true],
+      ['Dev', true],
+      ['QA', true],
+      ['DevOps', false],
+      ['Viewer', false],
+    ] as const
+
+    for (const [role, canTransition] of roleCases) {
+      const email = makeSignupEmail(`workflow-${role}`)
+      await seed.ensureUserAccount({ email, name: `E2E ${role}` })
+      await seed.addProjectMember({ projectId: project.id, email, role })
+      const issue = await seed.createIssueFixture({
+        projectId: project.id,
+        title: makeIssueTitle(`workflow-${role}`),
+        workItemType: 'story',
+        status: 'backlog',
+        stateId: initial.stateId,
+      })
+      const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+      const rolePage = await context.newPage()
+
+      try {
+        await login(rolePage, email, E2E_TEST_PASSWORD)
+        await rolePage.goto(`/work-items/${issue.id}`)
+        const stateTrigger = rolePage.getByTestId('work-item-state-trigger')
+        await expect(stateTrigger).toBeVisible()
+        if (canTransition) {
+          await expect(stateTrigger).toBeEnabled()
+        } else {
+          await expect(stateTrigger).toBeDisabled()
+        }
+      } finally {
+        await context.close()
+      }
+    }
+  })
 
   test('issues support create, search, assign, bulk operations, status updates, and delete', async ({ page, seed, accounts }) => {
     const project = await seed.createProjectFixture({ name: makeProjectName('issue-lifecycle') })

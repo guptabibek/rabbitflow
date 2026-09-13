@@ -81,11 +81,10 @@ services:
       - -c
       - |
         set -eu
-        apk add --no-cache curl > /dev/null 2>&1
         cat <<EOF | crontab -
         SHELL=/bin/sh
         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        */2 * * * * /usr/bin/curl -sf -X POST -H 'x-cron-secret: $${CRON_SECRET}' "$${APP_INTERNAL_URL}/api/cron" > /proc/1/fd/1 2>&1
+        */2 * * * * /usr/bin/wget -qO- -T 60 --post-data='' --header='x-cron-secret: $${CRON_SECRET}' "$${APP_INTERNAL_URL}/api/cron" > /proc/1/fd/1 2>&1
         EOF
         echo "Cron scheduler started (every 2 min)"
         crond -f -l 6
@@ -115,7 +114,14 @@ services:
     command:
       - -c
       - |
+        case "$${APP_DOMAIN}" in
+          *://*|*/*|*:*)
+            echo "APP_DOMAIN must be a hostname without a URL scheme, path, or port" >&2
+            exit 1
+            ;;
+        esac
         envsubst '$$APP_DOMAIN' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
+        nginx -t -c /tmp/nginx.conf
         exec nginx -c /tmp/nginx.conf -g 'daemon off;'
     read_only: true
     tmpfs:

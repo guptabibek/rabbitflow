@@ -1297,6 +1297,7 @@ model SlaTimer {
 
   @@index([issueId])
   @@index([status, targetAt])
+  @@unique([issueId, policyId, timerType])
 }
 
 model TestPlan {

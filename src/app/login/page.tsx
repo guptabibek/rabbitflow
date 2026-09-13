@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Sign In - ${branding.displayName}`,
     description:
       branding.loginSubcopy || `Secure access to ${branding.displayName} across planning, delivery, and reporting.`,
-    icons: branding.faviconUrl ? { icon: branding.faviconUrl } : undefined,
+    ...(branding.faviconUrl ? { icons: { icon: branding.faviconUrl } } : {}),
   }
 }
 

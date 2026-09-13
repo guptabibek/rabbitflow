@@ -42,8 +42,10 @@ type CreateIssueInput = {
   assigneeEmail?: string
   title?: string
   description?: string
+  workItemType?: string
   status?: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
   priority?: 'lowest' | 'low' | 'medium' | 'high' | 'highest'
+  stateId?: string
 }
 
 type CreateNotificationInput = {
@@ -252,8 +254,10 @@ export async function createIssueFixture({
   assigneeEmail,
   title = makeIssueTitle('issue'),
   description = `${E2E_PREFIX}: seeded issue`,
+  workItemType = 'task',
   status = 'todo',
   priority = 'medium',
+  stateId,
 }: CreateIssueInput) {
   const [project, reporter, assignee, state, existingCount] = await Promise.all([
     db.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, key: true } }),
@@ -262,7 +266,7 @@ export async function createIssueFixture({
       ? db.user.findUnique({ where: { email: assigneeEmail }, select: { id: true } })
       : Promise.resolve(null),
     db.state.findFirst({
-      where: { projectId, category: status },
+      where: stateId ? { id: stateId, projectId } : { projectId, category: status },
       orderBy: { order: 'asc' },
       select: { id: true },
     }),
@@ -277,7 +281,7 @@ export async function createIssueFixture({
       key: `${project.key}-${issueNumber}`,
       title,
       description,
-      workItemType: 'task',
+      workItemType,
       status,
       priority,
       reporterId: reporter.id,
@@ -366,6 +370,27 @@ export async function getNotificationByTitle(email: string, title: string) {
     where: {
       userId: user.id,
       title,
+    },
+  })
+}
+
+export async function getTypeWorkflow(projectId: string, workItemType: string) {
+  return db.workItemTypeDefinition.findUniqueOrThrow({
+    where: {
+      projectId_key: {
+        projectId,
+        key: workItemType,
+      },
+    },
+    include: {
+      stateMappings: {
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        include: { state: true },
+      },
+      stateTransitions: {
+        where: { isEnabled: true },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      },
     },
   })
 }

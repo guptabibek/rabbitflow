@@ -384,24 +384,11 @@ type OmitResult = {
   write: Omit<PreparedFieldWrite, 'fieldDefinitionId' | 'projectId'>
 }
 
-export async function prepareCustomFieldWrites(
-  projectId: string,
-  typeKey: string,
+export function prepareCustomFieldWritesForDefinition(
+  typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>,
   customFields: Record<string, WorkItemFieldInput> | undefined,
   mode: 'create' | 'update'
 ) {
-  // Returned as a validation failure rather than thrown, so the caller reports
-  // 400 like every other bad-input case on this path.
-  let typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>
-  try {
-    typeDefinition = await getProjectWorkItemTypeDefinition(projectId, typeKey)
-  } catch (error) {
-    if (error instanceof UnknownWorkItemTypeError) {
-      return { ok: false as const, error: error.message }
-    }
-    throw error
-  }
-
   const fieldMap = new Map(typeDefinition.fields.map((field) => [field.key, field]))
   const payload = customFields ?? {}
 
@@ -431,7 +418,7 @@ export async function prepareCustomFieldWrites(
 
     writes.push({
       fieldDefinitionId: field.id,
-      projectId,
+      projectId: typeDefinition.projectId,
       ...result.write,
     })
   }
@@ -441,6 +428,27 @@ export async function prepareCustomFieldWrites(
     typeDefinition,
     writes,
   }
+}
+
+export async function prepareCustomFieldWrites(
+  projectId: string,
+  typeKey: string,
+  customFields: Record<string, WorkItemFieldInput> | undefined,
+  mode: 'create' | 'update'
+) {
+  // Returned as a validation failure rather than thrown, so the caller reports
+  // 400 like every other bad-input case on this path.
+  let typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>
+  try {
+    typeDefinition = await getProjectWorkItemTypeDefinition(projectId, typeKey)
+  } catch (error) {
+    if (error instanceof UnknownWorkItemTypeError) {
+      return { ok: false as const, error: error.message }
+    }
+    throw error
+  }
+
+  return prepareCustomFieldWritesForDefinition(typeDefinition, customFields, mode)
 }
 
 export function customFieldValuesToRecord(
