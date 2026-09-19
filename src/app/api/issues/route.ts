@@ -367,11 +367,12 @@ export async function POST(request: NextRequest) {
         })
       : await getInitialStateForType(data.projectId, preparedFields.typeDefinition.key)
 
-    const effectiveStatus = data.status
-      ? data.status
-      : selectedState
-        ? statusFromStateCategory(selectedState.category)
-        : 'backlog'
+    // A workflow state is the source of truth whenever the type has one. Accepting
+    // an independently supplied board status first could persist contradictions such
+    // as state "Development in Progress" with status "backlog".
+    const effectiveStatus = selectedState
+      ? statusFromStateCategory(selectedState.category)
+      : data.status ?? 'backlog'
 
     const issue = await db.$transaction(async (tx) => {
       await lockProjectIssueSequence(tx, data.projectId)

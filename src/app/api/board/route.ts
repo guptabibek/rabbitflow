@@ -250,6 +250,9 @@ export async function PATCH(request: NextRequest) {
         columnOrder: true,
         completedDate: true,
         version: true,
+        stateRecord: {
+          select: { id: true, name: true, color: true, category: true, order: true },
+        },
       },
     })
 

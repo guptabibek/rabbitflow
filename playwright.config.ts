@@ -68,6 +68,7 @@ export default defineConfig({
           // E2E project deliberately covers the opt-in registration journey.
           env: {
             ALLOW_SELF_REGISTRATION: process.env.ALLOW_SELF_REGISTRATION ?? 'true',
+            E2E_DISABLE_RATE_LIMITS: 'true',
           },
         },
 })

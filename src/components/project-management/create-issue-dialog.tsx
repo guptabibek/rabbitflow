@@ -1,7 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useAppStore, type WorkItemType } from '@/store/app-store'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  readWorkItemCreationPreferences,
+  useAppStore,
+  type WorkItemTemplate,
+  type WorkItemType,
+} from '@/store/app-store'
 import { DynamicWorkItemFields } from '@/components/project-management/dynamic-work-item-fields'
 import {
   Dialog,
@@ -13,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Select,
   SelectContent,
@@ -22,8 +28,10 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   ArrowLeft,
+  BookmarkPlus,
   Bug,
   CheckCircle2,
   CircleDot,
@@ -31,18 +39,11 @@ import {
   Layers,
   Rocket,
   Star,
+  Trash2,
   X,
   AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-const STATUS_OPTIONS = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'To Do' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'in_review', label: 'In Review' },
-  { value: 'done', label: 'Done' },
-]
 
 const PRIORITY_OPTIONS = [
   { value: 'lowest', label: 'Lowest', color: 'text-priority-lowest' },
@@ -198,20 +199,42 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     issues,
     iterations,
     labels,
+    lastWorkItemTypeByProject,
+    removeWorkItemTemplate,
+    saveWorkItemTemplate,
     setCreateIssueOpen,
+    setLastWorkItemType,
     states,
     teams,
     updateIssue,
     users,
+    workItemTemplatesByProject,
     workItemTypes,
   } = useAppStore()
 
   const typeOptions = useMemo(() => workItemTypes, [workItemTypes])
+  const initializedProjectIdRef = useRef<string | null>(null)
+  const userSelectedTypeRef = useRef(false)
+  const persistedCreationPreferences = readWorkItemCreationPreferences()
+  const runtimeProjectTemplates = currentProject
+    ? workItemTemplatesByProject[currentProject.id] ?? []
+    : []
+  const projectTemplates = runtimeProjectTemplates.length > 0
+    ? runtimeProjectTemplates
+    : currentProject
+      ? persistedCreationPreferences.workItemTemplatesByProject[currentProject.id] ?? []
+      : []
+  const rememberedWorkItemType = currentProject
+    ? lastWorkItemTypeByProject[currentProject.id]
+      ?? persistedCreationPreferences.lastWorkItemTypeByProject[currentProject.id]
+    : undefined
+  const defaultWorkItemType = typeOptions.some((type) => type.key === rememberedWorkItemType)
+    ? rememberedWorkItemType ?? ''
+    : typeOptions[0]?.key ?? ''
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [workItemType, setWorkItemType] = useState<WorkItemType>(typeOptions[0]?.key || '')
-  const [status, setStatus] = useState('backlog')
+  const [workItemType, setWorkItemType] = useState<WorkItemType>('')
   const [priority, setPriority] = useState('medium')
   const [severity, setSeverity] = useState(UNASSIGNED_VALUE)
   const [storyPoints, setStoryPoints] = useState('')
@@ -236,8 +259,23 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
   const [typeScopedStates, setTypeScopedStates] = useState<typeof states>([])
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateError, setTemplateError] = useState<string | null>(null)
   const isScreenMode = mode === 'screen'
   const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
+
+  const clearFieldError = (key: string) => {
+    setFieldErrors((previous) => {
+      if (!previous[key]) return previous
+      const next = { ...previous }
+      delete next[key]
+      return next
+    })
+  }
 
   const activeTypeDefinition = useMemo(
     () => typeOptions.find((type) => type.key === workItemType) ?? typeOptions[0] ?? null,
@@ -279,10 +317,21 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     typeOptions.find((type) => type.key === typeKey)?.hierarchyLevel ?? 999
 
   useEffect(() => {
-    if (!typeOptions.some((type) => type.key === workItemType)) {
-      setWorkItemType(typeOptions[0]?.key || '')
+    const projectId = currentProject?.id ?? null
+    if (initializedProjectIdRef.current !== projectId) {
+      initializedProjectIdRef.current = projectId
+      userSelectedTypeRef.current = false
+      setWorkItemType(defaultWorkItemType)
+      return
     }
-  }, [typeOptions, workItemType])
+
+    if (
+      (!userSelectedTypeRef.current && workItemType !== defaultWorkItemType) ||
+      !typeOptions.some((type) => type.key === workItemType)
+    ) {
+      setWorkItemType(defaultWorkItemType)
+    }
+  }, [currentProject?.id, defaultWorkItemType, typeOptions, workItemType])
 
   useEffect(() => {
     setCustomFields((previous) =>
@@ -463,8 +512,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const resetForm = () => {
     setTitle('')
     setDescription('')
-    setWorkItemType(typeOptions[0]?.key || '')
-    setStatus('backlog')
+    setWorkItemType(defaultWorkItemType)
     setPriority('medium')
     setSeverity(UNASSIGNED_VALUE)
     setStoryPoints('')
@@ -487,6 +535,91 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     setIsLinkTypeManual(false)
     setSearchLink('')
     setActiveTab('basic')
+    setFieldErrors({})
+    setSubmitError(null)
+    setSelectedTemplateId('')
+    setIsSaveTemplateOpen(false)
+    setTemplateName('')
+    setTemplateError(null)
+  }
+
+  const handleWorkItemTypeChange = (value: WorkItemType) => {
+    if (!typeOptions.some((type) => type.key === value)) return
+    userSelectedTypeRef.current = true
+    setWorkItemType(value)
+    if (currentProject) {
+      setLastWorkItemType(currentProject.id, value)
+    }
+    clearFieldError('workItemType')
+  }
+
+  const applyTemplate = (templateId: string) => {
+    const template = projectTemplates.find((entry) => entry.id === templateId)
+    if (!template) return
+
+    setSelectedTemplateId(template.id)
+    const nextType = typeOptions.some((type) => type.key === template.workItemType)
+      ? template.workItemType
+      : defaultWorkItemType
+    handleWorkItemTypeChange(nextType)
+    setDescription(template.description)
+    setPriority(template.priority)
+    setSeverity(template.severity)
+    setStoryPoints(template.storyPoints)
+    setEstimatedHours(template.estimatedHours)
+    setAssigneeId(
+      template.assigneeId === UNASSIGNED_VALUE || users.some((user) => user.id === template.assigneeId)
+        ? template.assigneeId
+        : UNASSIGNED_VALUE
+    )
+    setAreaId(
+      template.areaId === UNASSIGNED_VALUE || areas.some((area) => area.id === template.areaId)
+        ? template.areaId
+        : UNASSIGNED_VALUE
+    )
+    setSelectedLabels(template.labelIds.filter((id) => labels.some((label) => label.id === id)))
+    setCustomFields(template.customFields)
+    setFieldErrors({})
+    setSubmitError(null)
+  }
+
+  const saveCurrentTemplate = () => {
+    if (!currentProject) return
+
+    const name = templateName.trim()
+    if (!name) {
+      setTemplateError('Enter a template name.')
+      return
+    }
+
+    const template: WorkItemTemplate = {
+      id: crypto.randomUUID(),
+      name,
+      workItemType,
+      description,
+      priority,
+      severity,
+      storyPoints,
+      estimatedHours,
+      assigneeId,
+      areaId,
+      labelIds: selectedLabels,
+      customFields,
+    }
+    saveWorkItemTemplate(currentProject.id, template)
+    setSelectedTemplateId(template.id)
+    setTemplateName('')
+    setTemplateError(null)
+    setIsSaveTemplateOpen(false)
+    toast.success(`Template “${name}” saved`)
+  }
+
+  const removeSelectedTemplate = () => {
+    if (!currentProject || !selectedTemplateId) return
+    const template = projectTemplates.find((entry) => entry.id === selectedTemplateId)
+    removeWorkItemTemplate(currentProject.id, selectedTemplateId)
+    setSelectedTemplateId('')
+    if (template) toast.success(`Template “${template.name}” removed`)
   }
 
   const resolveAutoLinkType = (issueId: string, linkType: string) => {
@@ -571,73 +704,68 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!currentProject || !selectedType) return
+    if (!currentProject) return
+
+    setSubmitError(null)
 
     if (!canCreateWorkItems) {
-      toast.error('You do not have permission to create work items')
+      setSubmitError('You do not have permission to create work items.')
       return
     }
 
+    const nextFieldErrors: Record<string, string> = {}
+    if (!selectedType) nextFieldErrors.workItemType = 'Choose a work item type.'
+    if (!title.trim()) nextFieldErrors.title = 'Title is required.'
     if (startDate && dueDate && new Date(dueDate).getTime() < new Date(startDate).getTime()) {
-      // Show the fields being complained about, the same way missing required
-      // fields do below. A message about dates is not much use on a tab that
-      // does not contain them.
-      setActiveTab('metadata')
-      toast.error('Due date cannot be earlier than start date')
-      return
+      nextFieldErrors.dueDate = 'Due date cannot be earlier than start date.'
     }
 
-    // Check required custom fields before contacting the server, and take the
-    // user to the tab that holds them. Reporting all of them at once means a
-    // form with two missing fields is fixed in one pass rather than two
-    // round-trips.
-    if (missingRequiredFields.length > 0) {
-      setActiveTab('fields')
-      const names = missingRequiredFields.map((field) => field.label).join(', ')
-      toast.error(
-        missingRequiredFields.length === 1
-          ? `${names} is required — see the Fields tab`
-          : `These fields are required: ${names}`
-      )
-      return
+    for (const field of missingRequiredFields) {
+      nextFieldErrors[`custom.${field.key}`] = `${field.label} is required.`
     }
 
     const storyPointsResult = parseOptionalIntegerInput(storyPoints, 'Story points', MAX_STORY_POINTS)
-    if (storyPointsResult.error) {
-      toast.error(storyPointsResult.error)
-      return
-    }
+    if (storyPointsResult.error) nextFieldErrors.storyPoints = storyPointsResult.error
 
     const estimatedHoursResult = parseOptionalDecimalInput(
       estimatedHours,
       'Estimated hours',
       MAX_HOURS
     )
-    if (estimatedHoursResult.error) {
-      toast.error(estimatedHoursResult.error)
-      return
-    }
+    if (estimatedHoursResult.error) nextFieldErrors.estimatedHours = estimatedHoursResult.error
 
     const remainingHoursResult = parseOptionalDecimalInput(
       remainingHours,
       'Remaining hours',
       MAX_HOURS
     )
-    if (remainingHoursResult.error) {
-      toast.error(remainingHoursResult.error)
-      return
-    }
+    if (remainingHoursResult.error) nextFieldErrors.remainingHours = remainingHoursResult.error
 
     const completedHoursResult = parseOptionalDecimalInput(
       completedHours,
       'Completed hours',
       MAX_HOURS
     )
-    if (completedHoursResult.error) {
-      toast.error(completedHoursResult.error)
+    if (completedHoursResult.error) nextFieldErrors.completedHours = completedHoursResult.error
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      const errorKeys = Object.keys(nextFieldErrors)
+      const nextTab = errorKeys.some((key) => key === 'title' || key === 'workItemType')
+        ? 'basic'
+        : errorKeys.some((key) => !key.startsWith('custom.'))
+          ? 'metadata'
+          : 'fields'
+      setActiveTab(nextTab)
+      window.setTimeout(() => {
+        document
+          .querySelector<HTMLElement>('[data-testid="create-work-item-form"] [aria-invalid="true"]')
+          ?.focus()
+      }, 0)
       return
     }
 
+    setFieldErrors({})
     setIsLoading(true)
     try {
       const response = await fetch('/api/issues', {
@@ -648,7 +776,6 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           title,
           description,
           workItemType,
-          status,
           priority,
           severity: severity === UNASSIGNED_VALUE ? undefined : severity,
           storyPoints: storyPointsResult.value,
@@ -673,7 +800,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to create work item')
+        setSubmitError(error.error || 'Failed to create work item. Review your entries and try again.')
         return
       }
 
@@ -700,7 +827,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
         )
 
         if (failedRelations) {
-          toast.error('Work item created, but one or more links could not be saved')
+          toast.warning('Work item created, but one or more links could not be saved')
         }
       }
 
@@ -733,7 +860,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
         )
 
         if (failedHierarchyUpdates) {
-          toast.error('Work item created, but one or more child hierarchy links could not be saved')
+          toast.warning('Work item created, but one or more child hierarchy links could not be saved')
         }
       }
 
@@ -741,7 +868,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
       handleOpenChange(false)
     } catch (caughtError) {
       console.error('Failed to create work item:', caughtError)
-      toast.error('Failed to create work item')
+      setSubmitError('Failed to create work item. Check your connection and try again.')
     } finally {
       setIsLoading(false)
     }
@@ -751,27 +878,53 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     return null
   }
 
+  const basicErrorCount = Object.keys(fieldErrors).filter(
+    (key) => key === 'title' || key === 'workItemType'
+  ).length
+  const planningErrorCount = Object.keys(fieldErrors).filter(
+    (key) => key !== 'title' && key !== 'workItemType' && !key.startsWith('custom.')
+  ).length
+  const typeDetailsErrorCount = Object.keys(fieldErrors).filter((key) =>
+    key.startsWith('custom.')
+  ).length
+  const validationMessages = Array.from(new Set(Object.values(fieldErrors)))
+
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="create-work-item-form">
+    <form
+      noValidate
+      onSubmit={handleSubmit}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      data-testid="create-work-item-form"
+    >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="px-5 pt-3">
           <TabsList className="h-8 w-full justify-start bg-muted/30 rounded-md">
-            <TabsTrigger value="basic" data-testid="create-work-item-tab-basic" className="text-xs h-7 data-[state=active]:bg-background">
+            <TabsTrigger value="basic" data-testid="create-work-item-tab-basic" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
               Basic
+              {basicErrorCount > 0 ? (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium tabular-nums text-destructive-foreground" aria-label={`${basicErrorCount} basic field error${basicErrorCount === 1 ? '' : 's'}`}>
+                  {basicErrorCount}
+                </span>
+              ) : null}
             </TabsTrigger>
-            <TabsTrigger value="metadata" data-testid="create-work-item-tab-metadata" className="text-xs h-7 data-[state=active]:bg-background">
-              Metadata
+            <TabsTrigger value="metadata" data-testid="create-work-item-tab-metadata" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
+              Planning
+              {planningErrorCount > 0 ? (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium tabular-nums text-destructive-foreground" aria-label={`${planningErrorCount} planning field error${planningErrorCount === 1 ? '' : 's'}`}>
+                  {planningErrorCount}
+                </span>
+              ) : null}
             </TabsTrigger>
             <TabsTrigger value="fields" data-testid="create-work-item-tab-fields" className="text-xs h-7 gap-1.5 data-[state=active]:bg-background">
-              Fields
+              Type details
               {/* Surfaces the requirement before the user presses Create, rather
                   than after a rejected submit. */}
-              {missingRequiredFields.length > 0 && (
+              {Math.max(missingRequiredFields.length, typeDetailsErrorCount) > 0 && (
                 <span
                   className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium tabular-nums text-destructive-foreground"
-                  aria-label={`${missingRequiredFields.length} required field${missingRequiredFields.length === 1 ? '' : 's'} still empty`}
+                  aria-label={`${Math.max(missingRequiredFields.length, typeDetailsErrorCount)} type detail field${Math.max(missingRequiredFields.length, typeDetailsErrorCount) === 1 ? '' : 's'} requiring attention`}
                 >
-                  {missingRequiredFields.length}
+                  {Math.max(missingRequiredFields.length, typeDetailsErrorCount)}
                 </span>
               )}
             </TabsTrigger>
@@ -783,6 +936,22 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
             </TabsTrigger>
           </TabsList>
         </div>
+
+        {validationMessages.length > 0 ? (
+          <Alert variant="destructive" className="mx-5 mt-3 shrink-0" data-testid="create-work-item-validation-summary">
+            <AlertCircle className="size-4" />
+            <AlertTitle>
+              Review {validationMessages.length} field {validationMessages.length === 1 ? 'error' : 'errors'}.
+            </AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc space-y-0.5 pl-4">
+                {validationMessages.map((message) => (
+                  <li key={message}>{message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         {/*
           A form field is only as usable as its line length. In screen mode
@@ -803,8 +972,16 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 <Label htmlFor="work-item-type" className="mb-1.5 block text-xs">
                   Type
                 </Label>
-                <Select value={workItemType} onValueChange={setWorkItemType}>
-                  <SelectTrigger id="work-item-type" data-testid="create-work-item-type-trigger">
+                <Select
+                  value={workItemType}
+                  onValueChange={handleWorkItemTypeChange}
+                >
+                  <SelectTrigger
+                    id="work-item-type"
+                    data-testid="create-work-item-type-trigger"
+                    aria-invalid={Boolean(fieldErrors.workItemType)}
+                    aria-describedby={fieldErrors.workItemType ? 'create-work-item-type-error' : undefined}
+                  >
                     <SelectValue placeholder="Select work item type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -819,6 +996,11 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     ))}
                   </SelectContent>
                 </Select>
+                {fieldErrors.workItemType ? (
+                  <p id="create-work-item-type-error" className="mt-1 text-xs text-destructive">
+                    {fieldErrors.workItemType}
+                  </p>
+                ) : null}
                 {/*
                   The read-only tile that used to sit here restated the value
                   of the select immediately above it — the same word, the same
@@ -833,17 +1015,130 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 ) : null}
               </div>
 
+              <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-48 flex-1 space-y-1.5">
+                    <Label className="text-xs">Personal template</Label>
+                    <Select value={selectedTemplateId} onValueChange={applyTemplate}>
+                      <SelectTrigger
+                        className="h-8 text-xs"
+                        data-testid="create-work-item-template-trigger"
+                        aria-label="Personal template"
+                      >
+                        <SelectValue placeholder="Choose a saved template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projectTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Popover open={isSaveTemplateOpen} onOpenChange={(open) => {
+                    setIsSaveTemplateOpen(open)
+                    if (!open) setTemplateError(null)
+                  }}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        data-testid="create-work-item-save-template-button"
+                      >
+                        <BookmarkPlus />
+                        Save current
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="space-y-3">
+                      <div>
+                        <p className="text-sm font-medium">Save personal template</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Saves the type and common planning fields for this project on this device.
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="work-item-template-name" className="text-xs">Template name</Label>
+                        <Input
+                          id="work-item-template-name"
+                          value={templateName}
+                          onChange={(event) => {
+                            setTemplateName(event.target.value)
+                            setTemplateError(null)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              saveCurrentTemplate()
+                            }
+                          }}
+                          aria-invalid={Boolean(templateError)}
+                          aria-describedby={templateError ? 'work-item-template-name-error' : undefined}
+                          data-testid="create-work-item-template-name-input"
+                        />
+                        {templateError ? (
+                          <p id="work-item-template-name-error" className="text-xs text-destructive">
+                            {templateError}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full"
+                        onClick={saveCurrentTemplate}
+                        data-testid="create-work-item-template-confirm-button"
+                      >
+                        Save template
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
+
+                  {selectedTemplateId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={removeSelectedTemplate}
+                      aria-label="Remove selected personal template"
+                      data-testid="create-work-item-remove-template-button"
+                    >
+                      <Trash2 />
+                    </Button>
+                  ) : null}
+                </div>
+                {projectTemplates.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Save a setup you use often, then apply it to future work items.
+                  </p>
+                ) : null}
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="title" className="text-xs">Title *</Label>
                 <Input
                   id="title"
                   value={title}
-                  onChange={(event) => setTitle(event.target.value)}
+                  onChange={(event) => {
+                    setTitle(event.target.value)
+                    clearFieldError('title')
+                  }}
                   placeholder={`Enter ${selectedType?.name.toLowerCase() || 'work item'} title`}
                   className="h-9 text-sm"
+                  autoFocus
                   required
                   data-testid="create-work-item-title-input"
+                  aria-invalid={Boolean(fieldErrors.title)}
+                  aria-describedby={fieldErrors.title ? 'create-work-item-title-error' : undefined}
                 />
+                {fieldErrors.title ? (
+                  <p id="create-work-item-title-error" className="text-xs text-destructive">
+                    {fieldErrors.title}
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-1.5">
@@ -859,22 +1154,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Status</Label>
-                  <Select value={status} onValueChange={setStatus}>
-                    <SelectTrigger className="h-8 text-xs" data-testid="create-work-item-status-trigger">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="max-w-xs">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Priority</Label>
                   <Select value={priority} onValueChange={setPriority}>
@@ -898,7 +1178,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                 <div className="space-y-1.5">
                   <Label className="text-xs">State</Label>
                   <Select value={stateId} onValueChange={setStateId}>
-                    <SelectTrigger className="h-8 text-xs">
+                    <SelectTrigger className="h-8 text-xs" data-testid="create-work-item-state-trigger">
                       <SelectValue placeholder="No state" />
                     </SelectTrigger>
                     <SelectContent>
@@ -997,7 +1277,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Story Points</Label>
+                  <Label htmlFor="create-story-points" className="text-xs">Story Points</Label>
                   <div className="flex gap-1.5 mt-1 flex-wrap">
                     {[1, 2, 3, 5, 8, 13, 21].map((points) => (
                       <Button
@@ -1017,6 +1297,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     ))}
                   </div>
                   <Input
+                    id="create-story-points"
                     className="h-8 text-xs"
                     type="number"
                     inputMode="numeric"
@@ -1024,12 +1305,19 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     max={MAX_STORY_POINTS}
                     placeholder="Custom value 0-100"
                     value={storyPoints}
-                    onChange={(event) => setStoryPoints(sanitizeIntegerInput(event.target.value))}
+                    onChange={(event) => {
+                      setStoryPoints(sanitizeIntegerInput(event.target.value))
+                      clearFieldError('storyPoints')
+                    }}
+                    aria-invalid={Boolean(fieldErrors.storyPoints)}
+                    aria-describedby={fieldErrors.storyPoints ? 'create-story-points-error' : undefined}
                   />
+                  {fieldErrors.storyPoints ? <p id="create-story-points-error" className="text-xs text-destructive">{fieldErrors.storyPoints}</p> : null}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Estimated Hours</Label>
+                  <Label htmlFor="create-estimated-hours" className="text-xs">Estimated Hours</Label>
                   <Input
+                    id="create-estimated-hours"
                     className="h-8 text-xs"
                     type="number"
                     inputMode="decimal"
@@ -1038,12 +1326,19 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     step="0.1"
                     placeholder="e.g. 16"
                     value={estimatedHours}
-                    onChange={(event) => setEstimatedHours(sanitizeDecimalInput(event.target.value))}
+                    onChange={(event) => {
+                      setEstimatedHours(sanitizeDecimalInput(event.target.value))
+                      clearFieldError('estimatedHours')
+                    }}
+                    aria-invalid={Boolean(fieldErrors.estimatedHours)}
+                    aria-describedby={fieldErrors.estimatedHours ? 'create-estimated-hours-error' : undefined}
                   />
+                  {fieldErrors.estimatedHours ? <p id="create-estimated-hours-error" className="text-xs text-destructive">{fieldErrors.estimatedHours}</p> : null}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Remaining Hours</Label>
+                  <Label htmlFor="create-remaining-hours" className="text-xs">Remaining Hours</Label>
                   <Input
+                    id="create-remaining-hours"
                     className="h-8 text-xs"
                     type="number"
                     inputMode="decimal"
@@ -1052,12 +1347,19 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     step="0.1"
                     placeholder="e.g. 10"
                     value={remainingHours}
-                    onChange={(event) => setRemainingHours(sanitizeDecimalInput(event.target.value))}
+                    onChange={(event) => {
+                      setRemainingHours(sanitizeDecimalInput(event.target.value))
+                      clearFieldError('remainingHours')
+                    }}
+                    aria-invalid={Boolean(fieldErrors.remainingHours)}
+                    aria-describedby={fieldErrors.remainingHours ? 'create-remaining-hours-error' : undefined}
                   />
+                  {fieldErrors.remainingHours ? <p id="create-remaining-hours-error" className="text-xs text-destructive">{fieldErrors.remainingHours}</p> : null}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Completed Hours</Label>
+                  <Label htmlFor="create-completed-hours" className="text-xs">Completed Hours</Label>
                   <Input
+                    id="create-completed-hours"
                     className="h-8 text-xs"
                     type="number"
                     inputMode="decimal"
@@ -1066,8 +1368,14 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     step="0.1"
                     placeholder="e.g. 6"
                     value={completedHours}
-                    onChange={(event) => setCompletedHours(sanitizeDecimalInput(event.target.value))}
+                    onChange={(event) => {
+                      setCompletedHours(sanitizeDecimalInput(event.target.value))
+                      clearFieldError('completedHours')
+                    }}
+                    aria-invalid={Boolean(fieldErrors.completedHours)}
+                    aria-describedby={fieldErrors.completedHours ? 'create-completed-hours-error' : undefined}
                   />
+                  {fieldErrors.completedHours ? <p id="create-completed-hours-error" className="text-xs text-destructive">{fieldErrors.completedHours}</p> : null}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Parent</Label>
@@ -1089,8 +1397,9 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Start Date</Label>
+                  <Label htmlFor="create-start-date" className="text-xs">Start Date</Label>
                   <Input
+                    id="create-start-date"
                     type="date"
                     className="h-8 text-xs"
                     value={startDate}
@@ -1099,7 +1408,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Due Date</Label>
+                  <Label htmlFor="create-due-date" className="text-xs">Due Date</Label>
                   {/*
                     No `min={startDate}` here.
 
@@ -1118,12 +1427,19 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                     Ordering is enforced there instead.
                   */}
                   <Input
+                    id="create-due-date"
                     type="date"
                     className="h-8 text-xs"
                     value={dueDate}
-                    onChange={(event) => setDueDate(event.target.value)}
+                    onChange={(event) => {
+                      setDueDate(event.target.value)
+                      clearFieldError('dueDate')
+                    }}
                     data-testid="create-work-item-due-date-input"
+                    aria-invalid={Boolean(fieldErrors.dueDate)}
+                    aria-describedby={fieldErrors.dueDate ? 'create-due-date-error' : undefined}
                   />
+                  {fieldErrors.dueDate ? <p id="create-due-date-error" className="text-xs text-destructive">{fieldErrors.dueDate}</p> : null}
                 </div>
               </div>
             </TabsContent>
@@ -1152,9 +1468,14 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
                   iterations={iterations}
                   areas={areas}
                   teams={teams}
-                  onChange={(key, value) =>
+                  errors={Object.fromEntries(
+                    Object.entries(fieldErrors)
+                      .filter(([key]) => key.startsWith('custom.'))
+                      .map(([key, value]) => [key.slice('custom.'.length), value])
+                  )}
+                  onChange={(key, value) => {
                     setCustomFields((previous) => ({ ...previous, [key]: value }))
-                  }
+                  }}
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">No custom fields for this type.</p>
@@ -1363,7 +1684,15 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
         </div>
       </Tabs>
 
-      <div className="flex justify-end gap-2 px-4 py-3 border-t border-border flex-shrink-0 sm:px-5">
+      <div className="space-y-3 border-t border-border px-4 py-3 sm:px-5">
+        {submitError ? (
+          <Alert variant="destructive" data-testid="create-work-item-submit-error">
+            <AlertCircle aria-hidden="true" />
+            <AlertTitle>Work item was not created</AlertTitle>
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        ) : null}
+        <div className="flex justify-end gap-2">
         <Button
           type="button"
           variant="outline"
@@ -1378,11 +1707,12 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           type="submit"
           size="sm"
           className="h-8 text-xs"
-          disabled={isLoading || !title.trim() || !selectedType || !canCreateWorkItems}
+          disabled={isLoading || !selectedType || !canCreateWorkItems}
           data-testid="create-work-item-submit-button"
         >
           {isLoading ? 'Creating...' : `Create ${selectedType?.name || 'Work Item'}`}
         </Button>
+        </div>
       </div>
     </form>
   )

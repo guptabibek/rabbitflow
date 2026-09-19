@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { EmptyState, ErrorState } from '@/components/ui/states'
+import { EmptyState, ErrorState, InlineAlert } from '@/components/ui/states'
 import { ConfirmDestructiveDialog } from './confirm-destructive-dialog'
 import { Check, CornerDownRight, FolderTree, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { getApiErrorMessage, parseJsonResponse } from '@/lib/utils'
@@ -61,10 +61,14 @@ export function AreasManagement() {
   const [newName, setNewName] = useState('')
   const [newParent, setNewParent] = useState<string>(ROOT_VALUE)
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [newNameError, setNewNameError] = useState<string | null>(null)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [editNameError, setEditNameError] = useState<string | null>(null)
 
   const [pendingDelete, setPendingDelete] = useState<Area | null>(null)
 
@@ -116,8 +120,14 @@ export function AreasManagement() {
 
   const handleCreate = async () => {
     const name = newName.trim()
-    if (!projectId || !name) return
+    if (!projectId) return
+    if (!name) {
+      setNewNameError('Enter an area name.')
+      return
+    }
 
+    setNewNameError(null)
+    setCreateError(null)
     setCreating(true)
 
     try {
@@ -132,7 +142,7 @@ export function AreasManagement() {
       })
 
       if (!response.ok) {
-        toast.error(await getApiErrorMessage(response, 'Could not create the area'))
+        setCreateError(await getApiErrorMessage(response, 'Could not create the area'))
         return
       }
 
@@ -141,7 +151,7 @@ export function AreasManagement() {
       toast.success(`Area "${name}" created`)
       await load()
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : 'Could not create the area')
+      setCreateError(caught instanceof Error ? caught.message : 'Could not create the area')
     } finally {
       setCreating(false)
     }
@@ -150,11 +160,18 @@ export function AreasManagement() {
   const handleRename = async (area: Area) => {
     const name = editName.trim()
 
-    if (!name || name === area.name) {
+    if (!name) {
+      setEditNameError('Enter an area name.')
+      return
+    }
+
+    if (name === area.name) {
       setEditingId(null)
       return
     }
 
+    setEditNameError(null)
+    setRenameError(null)
     setSavingId(area.id)
 
     try {
@@ -165,7 +182,7 @@ export function AreasManagement() {
       })
 
       if (!response.ok) {
-        toast.error(await getApiErrorMessage(response, 'Could not rename the area'))
+        setRenameError(await getApiErrorMessage(response, 'Could not rename the area'))
         return
       }
 
@@ -173,7 +190,7 @@ export function AreasManagement() {
       toast.success('Area renamed')
       await load()
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : 'Could not rename the area')
+      setRenameError(caught instanceof Error ? caught.message : 'Could not rename the area')
     } finally {
       setSavingId(null)
     }
@@ -184,14 +201,14 @@ export function AreasManagement() {
       const response = await fetch(`/api/areas/${area.id}`, { method: 'DELETE' })
 
       if (!response.ok) {
-        toast.error(await getApiErrorMessage(response, 'Could not delete the area'))
-        return
+        return await getApiErrorMessage(response, 'Could not delete the area')
       }
 
       toast.success(`Area "${area.name}" deleted`)
       await load()
+      return true
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : 'Could not delete the area')
+      return caught instanceof Error ? caught.message : 'Could not delete the area'
     }
   }
 
@@ -210,19 +227,36 @@ export function AreasManagement() {
     <div className="space-y-4">
       {canManage ? (
         <div className="rounded-xl border bg-card/70 p-4">
+          {createError ? (
+            <div className="mb-3" data-testid="area-create-error">
+              <InlineAlert tone="danger">{createError}</InlineAlert>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="new-area-name">Area name</Label>
               <Input
                 id="new-area-name"
                 value={newName}
-                onChange={(event) => setNewName(event.target.value)}
+                onChange={(event) => {
+                  setNewName(event.target.value)
+                  setNewNameError(null)
+                  setCreateError(null)
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && newName.trim() && !creating) void handleCreate()
+                  if (event.key === 'Enter' && !creating) void handleCreate()
                 }}
                 placeholder="Payments, Platform, Mobile…"
                 maxLength={120}
+                aria-invalid={Boolean(newNameError)}
+                aria-describedby={newNameError ? 'new-area-name-error' : undefined}
+                data-testid="area-create-name-input"
               />
+              {newNameError ? (
+                <p id="new-area-name-error" className="text-xs text-destructive">
+                  {newNameError}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-1.5 sm:w-56">
@@ -242,7 +276,7 @@ export function AreasManagement() {
               </Select>
             </div>
 
-            <Button onClick={() => void handleCreate()} disabled={creating || !newName.trim()}>
+            <Button onClick={() => void handleCreate()} disabled={creating} data-testid="area-create-submit">
               <Plus className="mr-1.5 h-4 w-4" />
               {creating ? 'Adding…' : 'Add area'}
             </Button>
@@ -276,7 +310,13 @@ export function AreasManagement() {
           size="sm"
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border">
+        <div className="space-y-3">
+          {renameError ? (
+            <div data-testid="area-rename-error">
+              <InlineAlert tone="danger">{renameError}</InlineAlert>
+            </div>
+          ) : null}
+          <div className="overflow-hidden rounded-xl border">
           <div className="divide-y">
             {ordered.map((area) => {
               const depth = depthOf(area)
@@ -307,15 +347,24 @@ export function AreasManagement() {
                     {isEditing ? (
                       <Input
                         value={editName}
-                        onChange={(event) => setEditName(event.target.value)}
+                        onChange={(event) => {
+                          setEditName(event.target.value)
+                          setEditNameError(null)
+                          setRenameError(null)
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') void handleRename(area)
-                          if (event.key === 'Escape') setEditingId(null)
+                          if (event.key === 'Escape') {
+                            setEditingId(null)
+                            setEditNameError(null)
+                            setRenameError(null)
+                          }
                         }}
                         className="h-8 max-w-xs"
                         maxLength={120}
                         autoFocus
                         aria-label={`Rename ${area.name}`}
+                        aria-invalid={Boolean(editNameError)}
                       />
                     ) : (
                       <span className="truncate text-sm text-foreground">{area.name}</span>
@@ -346,7 +395,11 @@ export function AreasManagement() {
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
-                            onClick={() => setEditingId(null)}
+                            onClick={() => {
+                              setEditingId(null)
+                              setEditNameError(null)
+                              setRenameError(null)
+                            }}
                             aria-label={`Cancel renaming ${area.name}`}
                           >
                             <X className="h-4 w-4" />
@@ -361,6 +414,8 @@ export function AreasManagement() {
                             onClick={() => {
                               setEditingId(area.id)
                               setEditName(area.name)
+                              setEditNameError(null)
+                              setRenameError(null)
                             }}
                             aria-label={`Rename ${area.name}`}
                           >
@@ -379,9 +434,13 @@ export function AreasManagement() {
                       )}
                     </div>
                   ) : null}
+                  {isEditing && editNameError ? (
+                    <p className="text-xs text-destructive">{editNameError}</p>
+                  ) : null}
                 </div>
               )
             })}
+          </div>
           </div>
         </div>
       )}
@@ -408,10 +467,7 @@ export function AreasManagement() {
             </>
           ) : null
         }
-        onConfirm={async () => {
-          if (pendingDelete) await handleDelete(pendingDelete)
-          setPendingDelete(null)
-        }}
+        onConfirm={() => (pendingDelete ? handleDelete(pendingDelete) : false)}
       />
     </div>
   )

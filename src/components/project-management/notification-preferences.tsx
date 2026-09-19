@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorState } from '@/components/ui/states'
@@ -74,6 +73,7 @@ export function NotificationPreferences() {
   // Keyed `channel:category` so two switches can be in flight at once without
   // either disabling the other.
   const [saving, setSaving] = useState<Set<string>>(new Set())
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -108,6 +108,11 @@ export function NotificationPreferences() {
 
   const toggle = async (channel: ChannelId, category: CategoryId, enabled: boolean) => {
     const key = `${channel}:${category}`
+    setSaveErrors((previous) => {
+      const next = { ...previous }
+      delete next[key]
+      return next
+    })
 
     // Optimistic: the switch moves under the finger, and reverts only if the
     // write is refused.
@@ -126,12 +131,16 @@ export function NotificationPreferences() {
       })
 
       if (!response.ok) {
+        const message = await getApiErrorMessage(response, 'Could not save that preference')
         setMatrix((previous) =>
           previous
             ? { ...previous, [channel]: { ...previous[channel], [category]: !enabled } }
             : previous
         )
-        toast.error(await getApiErrorMessage(response, 'Could not save that preference'))
+        setSaveErrors((previous) => ({
+          ...previous,
+          [key]: message,
+        }))
       }
     } catch (caught) {
       setMatrix((previous) =>
@@ -139,7 +148,10 @@ export function NotificationPreferences() {
           ? { ...previous, [channel]: { ...previous[channel], [category]: !enabled } }
           : previous
       )
-      toast.error(caught instanceof Error ? caught.message : 'Could not save that preference')
+      setSaveErrors((previous) => ({
+        ...previous,
+        [key]: caught instanceof Error ? caught.message : 'Could not save that preference',
+      }))
     } finally {
       setSaving((previous) => {
         const next = new Set(previous)
@@ -207,6 +219,14 @@ export function NotificationPreferences() {
             <div className="min-w-0 flex-1">
               <p className="type-body font-medium text-foreground">{category.label}</p>
               <p className="type-meta text-muted-foreground">{category.description}</p>
+              {CHANNELS.map((channel) => {
+                const message = saveErrors[`${channel.id}:${category.id}`]
+                return message ? (
+                  <p key={channel.id} role="alert" className="mt-1 text-xs text-danger">
+                    {channel.label} change was not saved: {message}
+                  </p>
+                ) : null
+              })}
             </div>
 
             <div className="flex shrink-0 gap-6">

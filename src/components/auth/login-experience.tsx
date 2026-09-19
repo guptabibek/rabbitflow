@@ -9,6 +9,7 @@ import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InlineAlert } from '@/components/ui/states'
 import { type ResolvedProjectBranding } from '@/lib/domain/project-branding'
 
 function toErrorMessage(value: unknown, fallback: string): string {
@@ -53,6 +54,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
   const [resetOtp, setResetOtp] = useState('')
   const [resetPassword, setResetPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const resetMfaState = () => {
     setMfaCode('')
@@ -65,6 +67,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
     resetMfaState()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/login', {
@@ -79,16 +82,16 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
         if (data?.code === 'PASSWORD_RESET_REQUIRED') {
           setResetEmail(email.trim())
           setMode('reset-request')
-          toast.error('You must reset your password before signing in.')
+          setFormError('You must reset your password before signing in.')
           return
         }
 
         if (data?.code === 'ACCOUNT_LOCKED') {
-          toast.error(toErrorMessage(data?.error, 'Account temporarily locked'))
+          setFormError(toErrorMessage(data?.error, 'Account temporarily locked'))
           return
         }
 
-        toast.error(toErrorMessage(data?.error, 'Login failed'))
+        setFormError(toErrorMessage(data?.error, 'Login failed'))
         return
       }
 
@@ -113,7 +116,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
       router.push('/dashboard')
       router.refresh()
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -121,6 +124,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
 
   const handleMfaVerify = async (event: React.FormEvent) => {
     event.preventDefault()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/mfa/verify', {
@@ -138,14 +142,14 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
           resetMfaState()
           setMode('login')
         }
-        toast.error(toErrorMessage(payload?.error, 'MFA verification failed'))
+        setFormError(toErrorMessage(payload?.error, 'MFA verification failed'))
         return
       }
 
       router.push('/dashboard')
       router.refresh()
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -153,6 +157,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
 
   const handleRequestPasswordReset = async (event: React.FormEvent) => {
     event.preventDefault()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/password-reset/request', {
@@ -163,14 +168,14 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        toast.error(toErrorMessage(payload?.error, 'Failed to send password reset OTP'))
+        setFormError(toErrorMessage(payload?.error, 'Failed to send password reset OTP'))
         return
       }
 
       toast.success('If the account exists, an OTP has been sent to your email')
       setMode('reset-confirm')
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -178,6 +183,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
 
   const handleConfirmPasswordReset = async (event: React.FormEvent) => {
     event.preventDefault()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/password-reset/confirm', {
@@ -192,7 +198,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        toast.error(toErrorMessage(payload?.error, 'Failed to reset password'))
+        setFormError(toErrorMessage(payload?.error, 'Failed to reset password'))
         return
       }
 
@@ -203,7 +209,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
       resetMfaState()
       setMode('login')
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -230,6 +236,11 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
       description={descriptions[mode]}
       footer={null}
     >
+      {formError ? (
+        <InlineAlert className="mb-4" tone="danger" title="Unable to continue.">
+          {formError}
+        </InlineAlert>
+      ) : null}
       {mode === 'login' && (
         <form onSubmit={handleLogin} className="space-y-5" data-testid="login-form">
           <div className="space-y-1.5">
@@ -239,7 +250,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => { setEmail(event.target.value); setFormError(null) }}
               required
               autoFocus
               autoComplete="email"
@@ -253,7 +264,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               type="password"
               placeholder="********"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => { setPassword(event.target.value); setFormError(null) }}
               required
               autoComplete="current-password"
               data-testid="login-password-input"
@@ -271,6 +282,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
                 resetMfaState()
                 setResetEmail(email)
                 setMode('reset-request')
+                setFormError(null)
               }}
               data-testid="login-forgot-password-button"
             >
@@ -304,9 +316,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               pattern="[0-9]*"
               placeholder="123456"
               value={mfaCode}
-              onChange={(event) =>
-                setMfaCode(event.target.value.replace(/\D/g, '').slice(0, MFA_CODE_MAX_LENGTH))
-              }
+              onChange={(event) => { setMfaCode(event.target.value.replace(/\D/g, '').slice(0, MFA_CODE_MAX_LENGTH)); setFormError(null) }}
               required
               minLength={MFA_CODE_MIN_LENGTH}
               maxLength={MFA_CODE_MAX_LENGTH}
@@ -326,6 +336,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               onClick={() => {
                 resetMfaState()
                 setMode('login')
+                setFormError(null)
               }}
             >
               Back to sign in
@@ -343,7 +354,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               type="email"
               placeholder="you@example.com"
               value={resetEmail}
-              onChange={(event) => setResetEmail(event.target.value)}
+              onChange={(event) => { setResetEmail(event.target.value); setFormError(null) }}
               required
               autoFocus
               autoComplete="email"
@@ -361,6 +372,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               onClick={() => {
                 resetMfaState()
                 setMode('login')
+                setFormError(null)
               }}
             >
               Back to sign in
@@ -378,7 +390,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
                 id="confirm-email"
                 type="email"
                 value={resetEmail}
-                onChange={(event) => setResetEmail(event.target.value)}
+                onChange={(event) => { setResetEmail(event.target.value); setFormError(null) }}
                 required
                 autoComplete="email"
               />
@@ -391,9 +403,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
                 pattern="[0-9]*"
                 placeholder="123456"
                 value={resetOtp}
-                onChange={(event) =>
-                  setResetOtp(event.target.value.replace(/\D/g, '').slice(0, RESET_OTP_LENGTH))
-                }
+                onChange={(event) => { setResetOtp(event.target.value.replace(/\D/g, '').slice(0, RESET_OTP_LENGTH)); setFormError(null) }}
                 required
                 minLength={RESET_OTP_LENGTH}
                 maxLength={RESET_OTP_LENGTH}
@@ -410,7 +420,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               type="password"
               placeholder="At least 8 characters"
               value={resetPassword}
-              onChange={(event) => setResetPassword(event.target.value)}
+              onChange={(event) => { setResetPassword(event.target.value); setFormError(null) }}
               required
               minLength={8}
               autoComplete="new-password"
@@ -421,7 +431,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
             <Button type="submit" className="w-full" loading={isLoading} data-testid="password-reset-confirm-submit-button">
               Reset Password
             </Button>
-            <Button type="button" variant="outline" className="w-full" onClick={() => setMode('login')}>
+            <Button type="button" variant="outline" className="w-full" onClick={() => { setMode('login'); setFormError(null) }}>
               Back to sign in
             </Button>
           </div>

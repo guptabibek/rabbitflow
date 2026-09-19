@@ -7,7 +7,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
-import { MessageSquare, UserPlus } from 'lucide-react'
+import { MessageSquare, TriangleAlert, UserPlus } from 'lucide-react'
+import type { BoardStatus } from '@/lib/domain/work-item-view'
+import { WorkItemMoveMenu } from '@/components/project-management/work-item-move-menu'
 import {
   PriorityIndicator,
   TypeIcon,
@@ -16,9 +18,18 @@ import {
 interface IssueCardProps {
   issue: Issue
   isDragging?: boolean
+  moveOptions?: Array<{ id: BoardStatus; label: string }>
+  onMove?: (status: BoardStatus) => void
+  isMoving?: boolean
 }
 
-export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCardProps) {
+export const IssueCard = memo(function IssueCard({
+  issue,
+  isDragging,
+  moveOptions = [],
+  onMove,
+  isMoving = false,
+}: IssueCardProps) {
   const openWorkItem = useAppStore((s) => s.openWorkItem)
 
   const {
@@ -38,6 +49,19 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
   const dragging = isSortableDragging || isDragging
   const assigneeName = issue.assignee?.name ?? null
   const comments = issue._count?.comments ?? 0
+  const blockingItems = Array.from(
+    new Map(
+      [
+        ...(issue.sourceRelations ?? [])
+          .filter((relation) => relation.relationType === 'blocked_by')
+          .map((relation) => relation.targetIssue),
+        ...(issue.targetRelations ?? [])
+          .filter((relation) => relation.relationType === 'blocks')
+          .map((relation) => relation.sourceIssue),
+      ].map((blockingIssue) => [blockingIssue.id, blockingIssue])
+    ).values()
+  )
+  const blockingSummary = blockingItems.map((blockingIssue) => blockingIssue.key).join(', ')
 
   return (
     <article
@@ -46,7 +70,7 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
       {...attributes}
       {...listeners}
       aria-roledescription="Draggable card"
-      aria-label={`${issue.key}: ${issue.title}`}
+      aria-label={`${issue.key}: ${issue.title}${blockingItems.length > 0 ? `. Blocked by ${blockingSummary}` : ''}`}
       tabIndex={0}
       className={cn(
         'group cursor-pointer rounded-md border border-border bg-card p-2.5',
@@ -69,6 +93,25 @@ export const IssueCard = memo(function IssueCard({ issue, isDragging }: IssueCar
             scale a tinted "Medium" pill was the loudest thing on the board and
             it out-shouted the title. */}
         <PriorityIndicator priority={issue.priority} showLabel={false} />
+        {blockingItems.length > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning-bg px-1.5 py-px text-[10px] font-medium text-warning">
+                <TriangleAlert className="size-3" aria-hidden="true" />
+                Blocked
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Blocked by {blockingSummary}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {onMove && moveOptions.length > 0 && !isDragging ? (
+          <WorkItemMoveMenu
+            issueKey={issue.key}
+            options={moveOptions}
+            onMove={onMove}
+            disabled={isMoving}
+          />
+        ) : null}
       </div>
 
       <p className="mb-2 line-clamp-3 text-[13px] font-medium leading-snug text-foreground">

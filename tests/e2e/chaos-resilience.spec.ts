@@ -11,6 +11,30 @@ test.describe('Chaos Resilience', () => {
 
   test.use({ storageState: AUTH_STATES.admin })
 
+  test('project directory shows a retryable load failure instead of an empty organization', async ({ page }) => {
+    let failProjects = true
+    await page.route('**/api/projects', async (route) => {
+      if (route.request().method() === 'GET' && failProjects) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Injected project directory failure' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.goto('/dashboard')
+    await expect(page.getByRole('heading', { name: 'Projects did not load' })).toBeVisible()
+    await expect(page.getByText('Injected project directory failure')).toBeVisible()
+
+    failProjects = false
+    await page.getByRole('button', { name: 'Retry projects' }).click()
+    await expect(page.getByTestId('dashboard-project-search-input')).toBeAttached()
+    await expect(page.getByRole('heading', { name: 'Projects did not load' })).toHaveCount(0)
+  })
+
   test('workspace initialization fails closed with retry instead of forcing a false logout', async ({ page }) => {
     let failProjects = true
 
@@ -39,7 +63,7 @@ test.describe('Chaos Resilience', () => {
     failProjects = false
     await page.getByTestId('home-init-retry-button').click()
     await expect(page.getByTestId('home-init-error')).toHaveCount(0)
-    await expect(page).toHaveURL(/\/$/)
+    await expect(page).toHaveURL(/\/projects\/[^/]+\/overview$/)
 
     await page.unroute('**/api/projects')
   })

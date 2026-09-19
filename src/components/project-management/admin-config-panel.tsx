@@ -46,6 +46,7 @@ import {
   type WorkItemStateCategory,
 } from '@/lib/domain/state-categories'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
 
 type TypeStateMappingRecord = {
   stateId: string
@@ -249,6 +250,7 @@ export function AdminConfigPanel() {
   const [planningLoading, setPlanningLoading] = useState(false)
   const [planningSaving, setPlanningSaving] = useState(false)
   const [planningFields, setPlanningFields] = useState<PlanningFieldDraft[]>([])
+  const [configError, setConfigError] = useState<string | null>(null)
   const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
   const selectedType = useMemo(
@@ -272,6 +274,7 @@ export function AdminConfigPanel() {
 
       setStateConfigLoading(true)
       setPlanningLoading(true)
+      setConfigError(null)
 
       try {
         const [stateResponse, fieldResponse, planningResponse] = await Promise.all([
@@ -375,7 +378,7 @@ export function AdminConfigPanel() {
         }
 
         console.error(error)
-        toast.error(error instanceof Error ? error.message : 'Failed to load type configuration')
+        setConfigError(error instanceof Error ? error.message : 'Failed to load type configuration')
         setMappedStates([])
         setStateTransitions({})
         setFieldMappings([])
@@ -551,8 +554,9 @@ export function AdminConfigPanel() {
   }
 
   const saveStateOrdering = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -590,19 +594,24 @@ export function AdminConfigPanel() {
       toast.success('State order saved')
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to save state order')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save state order')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const createState = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
-    if (!currentProject || !newStateName.trim()) {
+    if (!currentProject) {
+      return
+    }
+    if (!newStateName.trim()) {
+      setConfigError('State name is required.')
       return
     }
 
@@ -623,7 +632,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to create state')
+        setConfigError(errorPayload.error || 'Failed to create state')
         return
       }
 
@@ -640,15 +649,16 @@ export function AdminConfigPanel() {
       toast.success('State created')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to create state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to create state')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const updateStateRow = async (state: State) => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -668,22 +678,23 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to update state')
+        setConfigError(errorPayload.error || 'Failed to update state')
         return
       }
 
       toast.success('State updated')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to update state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to update state')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const deleteState = async (stateId: string) => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -692,7 +703,7 @@ export function AdminConfigPanel() {
       const response = await fetch(`/api/states/${stateId}`, { method: 'DELETE' })
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to delete state')
+        setConfigError(errorPayload.error || 'Failed to delete state')
         return
       }
 
@@ -712,7 +723,7 @@ export function AdminConfigPanel() {
       toast.success('State deleted')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to delete state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to delete state')
     } finally {
       setStateConfigSaving(false)
     }
@@ -797,15 +808,16 @@ export function AdminConfigPanel() {
   }
 
   const saveTypeStateMachine = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
     if (!selectedType) return
 
     if (mappedStates.length === 0) {
-      toast.error('At least one state must be mapped to the selected type')
+      setConfigError('At least one state must be mapped to the selected type.')
       return
     }
 
@@ -838,7 +850,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save state machine')
+        setConfigError(errorPayload.error || 'Failed to save state machine')
         return
       }
 
@@ -846,15 +858,16 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save state machine')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save state machine')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const saveFieldMappings = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -879,7 +892,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save field mappings')
+        setConfigError(errorPayload.error || 'Failed to save field mappings')
         return
       }
 
@@ -887,15 +900,16 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save field mappings')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save field mappings')
     } finally {
       setFieldConfigSaving(false)
     }
   }
 
   const savePlanningConfiguration = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -927,7 +941,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save planning configuration')
+        setConfigError(errorPayload.error || 'Failed to save planning configuration')
         return
       }
 
@@ -935,7 +949,7 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save planning configuration')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save planning configuration')
     } finally {
       setPlanningSaving(false)
     }
@@ -1079,6 +1093,22 @@ export function AdminConfigPanel() {
           </div>
         </div>
       </div>
+
+      {configError ? (
+        <InlineAlert
+          tone="danger"
+          title="Configuration not saved."
+          action={
+            selectedType ? (
+              <Button size="sm" variant="outline" onClick={() => void fetchTypeConfiguration(selectedType.id)}>
+                Reload configuration
+              </Button>
+            ) : undefined
+          }
+        >
+          {configError}
+        </InlineAlert>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
         <div className="overflow-x-auto">

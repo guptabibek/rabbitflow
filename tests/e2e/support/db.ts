@@ -46,6 +46,9 @@ type CreateIssueInput = {
   status?: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
   priority?: 'lowest' | 'low' | 'medium' | 'high' | 'highest'
   stateId?: string
+  iterationId?: string | null
+  storyPoints?: number | null
+  estimatedHours?: number | null
 }
 
 type CreateNotificationInput = {
@@ -234,7 +237,16 @@ export async function createLabelFixture(projectId: string, name = makeProjectNa
   })
 }
 
-export async function createSprintFixture(projectId: string, teamId?: string | null) {
+export async function createSprintFixture(
+  projectId: string,
+  teamId?: string | null,
+  overrides: {
+    goal?: string | null
+    status?: string
+    startDate?: Date | null
+    endDate?: Date | null
+  } = {}
+) {
   const name = makeProjectName('sprint')
   return db.iteration.create({
     data: {
@@ -243,7 +255,10 @@ export async function createSprintFixture(projectId: string, teamId?: string | n
       name,
       path: name,
       iterationType: 'sprint',
-      status: 'Planned',
+      status: overrides.status ?? 'Planned',
+      goal: overrides.goal ?? null,
+      startDate: overrides.startDate ?? null,
+      endDate: overrides.endDate ?? null,
     },
   })
 }
@@ -258,6 +273,9 @@ export async function createIssueFixture({
   status = 'todo',
   priority = 'medium',
   stateId,
+  iterationId,
+  storyPoints,
+  estimatedHours,
 }: CreateIssueInput) {
   const [project, reporter, assignee, state, existingCount] = await Promise.all([
     db.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, key: true } }),
@@ -287,6 +305,9 @@ export async function createIssueFixture({
       reporterId: reporter.id,
       assigneeId: assignee?.id ?? null,
       stateId: state?.id ?? null,
+      iterationId: iterationId ?? null,
+      storyPoints: storyPoints ?? null,
+      estimatedHours: estimatedHours ?? null,
       columnOrder: issueNumber * 10,
     },
   })

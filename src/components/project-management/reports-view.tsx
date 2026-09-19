@@ -656,6 +656,10 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Project Health</CardTitle>
+                        <p className="text-xs text-muted-foreground">
+                          Critical above 30% open bugs, or below 10% complete with no active work.
+                          At risk above 15% open bugs or below 30% complete.
+                        </p>
                       </CardHeader>
                       <CardContent className="px-4 pb-4">
                         <div className="space-y-2">

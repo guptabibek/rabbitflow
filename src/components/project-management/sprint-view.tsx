@@ -73,6 +73,18 @@ import { format, differenceInDays } from 'date-fns'
 import { toast } from 'sonner'
 import { PIE_COLORS as PIE_COLORS_TOKENS } from '@/lib/ui-tokens'
 import type { Iteration } from '@/store/app-store'
+import { InlineAlert } from '@/components/ui/states'
+import { WorkItemMoveMenu } from '@/components/project-management/work-item-move-menu'
+import {
+  getAvailableBoardStatuses,
+  type BoardStatus,
+} from '@/lib/domain/work-item-view'
+import {
+  ALL_SPRINT_TEAMS,
+  hasWorkspaceSprintRoute,
+  parseWorkspaceSprintRoute,
+  writeWorkspaceSprintRoute,
+} from '@/lib/domain/workspace-sprint-route'
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    CONSTANTS
@@ -130,7 +142,7 @@ const STATUS_BADGE: Record<string, string> = {
   done: 'bg-status-done-bg text-status-done', cancelled: 'bg-status-cancelled-bg text-status-cancelled',
 }
 const PIE_COLORS = PIE_COLORS_TOKENS
-const ALL_TEAMS_VALUE = '__all_teams__'
+const ALL_TEAMS_VALUE = ALL_SPRINT_TEAMS
 
 function normalizeIterationStatus(value: string | null | undefined): 'planning' | 'active' | 'completed' {
   const normalized = value?.trim().toLowerCase()
@@ -265,7 +277,7 @@ type CapacityData = {
    SPRINT CARD
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function SprintCardContent({ issue }: { issue: Issue }) {
+function SprintCardContent({ issue, action }: { issue: Issue; action?: React.ReactNode }) {
   const Icon = TYPE_ICONS[issue.workItemType] || CheckCircle2
   const color = TYPE_COLORS[issue.workItemType] || 'text-muted-foreground'
   const bg = TYPE_BG[issue.workItemType] || 'bg-muted'
@@ -279,11 +291,14 @@ function SprintCardContent({ issue }: { issue: Issue }) {
           </div>
           <span className="font-mono text-[11px] text-muted-foreground font-medium">{issue.key}</span>
         </div>
-        {(issue.priority === 'high' || issue.priority === 'highest') && (
-          <Badge variant="outline" className="h-4 text-[9px] px-1 border-danger/40 text-danger">
-            {issue.priority === 'highest' ? '!!!' : '!!'}
-          </Badge>
-        )}
+        <div className="flex items-center gap-1">
+          {(issue.priority === 'high' || issue.priority === 'highest') && (
+            <Badge variant="outline" className="h-4 text-[9px] px-1 border-danger/40 text-danger">
+              {issue.priority === 'highest' ? '!!!' : '!!'}
+            </Badge>
+          )}
+          {action}
+        </div>
       </div>
       <p className="text-sm font-medium leading-snug line-clamp-2 mb-3">{issue.title}</p>
       {issue.labels && issue.labels.length > 0 && (
@@ -325,21 +340,43 @@ function SprintCardContent({ issue }: { issue: Issue }) {
   )
 }
 
-function DraggableCard({ issue, onClick }: { issue: Issue; onClick: () => void }) {
+function DraggableCard({
+  issue,
+  onClick,
+  moveOptions,
+  onMove,
+  isMoving,
+}: {
+  issue: Issue
+  onClick: () => void
+  moveOptions: Array<{ id: BoardStatus; label: string }>
+  onMove: (status: BoardStatus) => void
+  isMoving: boolean
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: issue.id, data: { status: issue.status } })
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 } : undefined
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} onClick={onClick}
       className={`p-3 rounded-lg border bg-card mb-2 cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:border-primary/30 ${isDragging ? 'opacity-30 shadow-xl ring-2 ring-primary/20 scale-95' : ''}`}>
-      <SprintCardContent issue={issue} />
+      <SprintCardContent
+        issue={issue}
+        action={
+          <WorkItemMoveMenu
+            issueKey={issue.key}
+            options={moveOptions}
+            onMove={onMove}
+            disabled={isMoving}
+          />
+        }
+      />
     </div>
   )
 }
 
-function DroppableColumn({ id, label, color, count, children }: { id: string; label: string; color: string; count: number; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id, data: { type: 'column' } })
+function DroppableColumn({ id, label, color, count, children, dropAllowed = true }: { id: string; label: string; color: string; count: number; children: React.ReactNode; dropAllowed?: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id, data: { type: 'column' }, disabled: !dropAllowed })
   return (
-    <div ref={setNodeRef} className={`flex h-full min-h-[26rem] w-[min(340px,78vw)] flex-shrink-0 flex-col overflow-hidden rounded-2xl border bg-card/80 shadow-sm backdrop-blur transition-all duration-150 ${isOver ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/15 shadow-lg' : 'border-border/60 hover:border-border/90'}`}>
+    <div ref={setNodeRef} data-drop-disabled={!dropAllowed || undefined} className={`flex h-full min-h-[26rem] w-[min(340px,78vw)] flex-shrink-0 flex-col overflow-hidden rounded-2xl border bg-card/80 shadow-sm backdrop-blur transition-all duration-150 ${isOver && dropAllowed ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/15 shadow-lg' : 'border-border/60 hover:border-border/90'} ${!dropAllowed ? 'border-dashed opacity-45' : ''}`}>
       <div className="flex items-center gap-2.5 border-b border-border/70 px-4 py-3.5">
         <div className={`h-2.5 w-2.5 rounded-full ${color}`} />
         <span className="font-semibold text-sm">{label}</span>
@@ -412,6 +449,11 @@ export function SprintView() {
     currentProject,
     iterations,
     teams,
+    currentProjectPermissions,
+    states,
+    stateTransitions,
+    typeStateMappings,
+    workItemTypes,
     setSprintModalOpen,
     updateIssue,
     sprintViewSelectionByProject,
@@ -427,13 +469,22 @@ export function SprintView() {
     ? sprintViewSelectionByProject[currentProject.id]
     : undefined
 
+  const routeSelection = useMemo(() => {
+    if (typeof window === 'undefined' || !hasWorkspaceSprintRoute(window.location.search)) {
+      return null
+    }
+    return parseWorkspaceSprintRoute(window.location.search)
+  }, [])
+
   const initialActiveTab: 'overview' | 'board' | 'backlog' | 'capacity' =
-    projectSelection?.activeTab ?? 'backlog'
-  const initialBoardGroupBy: GroupBy = projectSelection?.boardGroupBy ?? 'none'
-  const initialBacklogGroupBy: GroupBy = projectSelection?.backlogGroupBy ?? 'story'
+    routeSelection?.activeTab ?? projectSelection?.activeTab ?? 'backlog'
+  const initialBoardGroupBy: GroupBy =
+    routeSelection?.boardGroupBy ?? projectSelection?.boardGroupBy ?? 'none'
+  const initialBacklogGroupBy: GroupBy =
+    routeSelection?.backlogGroupBy ?? projectSelection?.backlogGroupBy ?? 'story'
 
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(
-    projectSelection?.selectedSprintId ?? null
+    routeSelection?.selectedSprintId ?? projectSelection?.selectedSprintId ?? null
   )
   const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'backlog' | 'capacity'>(
     initialActiveTab
@@ -451,11 +502,17 @@ export function SprintView() {
   const analyticsLoadedRef = useRef<string | null>(null)
   const capacityLoadedRef = useRef<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string>(
-    projectSelection?.selectedTeamId ?? ALL_TEAMS_VALUE
+    routeSelection?.selectedTeamId ?? projectSelection?.selectedTeamId ?? ALL_TEAMS_VALUE
   )
   const hasInitializedTeamSelection = useRef(false)
   const [isLoading, setIsLoading] = useState(false)
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
+  const [boardMoveError, setBoardMoveError] = useState<string | null>(null)
+  const [sprintLoadError, setSprintLoadError] = useState<string | null>(null)
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null)
+  const [capacityError, setCapacityError] = useState<string | null>(null)
+  const [sprintActionError, setSprintActionError] = useState<string | null>(null)
+  const [movingIssueId, setMovingIssueId] = useState<string | null>(null)
   const [boardGroupBy, setBoardGroupBy] = useState<GroupBy>(initialBoardGroupBy)
   const [backlogGroupBy, setBacklogGroupBy] = useState<GroupBy>(initialBacklogGroupBy)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -531,15 +588,32 @@ export function SprintView() {
       return
     }
 
-    const savedSelection =
-      useAppStore.getState().sprintViewSelectionByProject[currentProject.id]
-    setSelectedTeamId(savedSelection?.selectedTeamId ?? ALL_TEAMS_VALUE)
-    setSelectedSprintId(savedSelection?.selectedSprintId ?? null)
-    setActiveTab(savedSelection?.activeTab ?? 'backlog')
-    setBoardGroupBy(savedSelection?.boardGroupBy ?? 'none')
-    setBacklogGroupBy(savedSelection?.backlogGroupBy ?? 'story')
+    const savedSelection = useAppStore.getState().sprintViewSelectionByProject[currentProject.id]
+    const requestedSelection = hasWorkspaceSprintRoute(window.location.search)
+      ? parseWorkspaceSprintRoute(window.location.search)
+      : savedSelection
+    setSelectedTeamId(requestedSelection?.selectedTeamId ?? ALL_TEAMS_VALUE)
+    setSelectedSprintId(requestedSelection?.selectedSprintId ?? null)
+    setActiveTab(requestedSelection?.activeTab ?? 'backlog')
+    setBoardGroupBy(requestedSelection?.boardGroupBy ?? 'none')
+    setBacklogGroupBy(requestedSelection?.backlogGroupBy ?? 'story')
     hasInitializedTeamSelection.current = false
   }, [currentProject?.id])
+
+  useEffect(() => {
+    const applyRouteSelection = () => {
+      const requestedSelection = parseWorkspaceSprintRoute(window.location.search)
+      hasInitializedTeamSelection.current = false
+      setSelectedTeamId(requestedSelection.selectedTeamId)
+      setSelectedSprintId(requestedSelection.selectedSprintId)
+      setActiveTab(requestedSelection.activeTab)
+      setBoardGroupBy(requestedSelection.boardGroupBy)
+      setBacklogGroupBy(requestedSelection.backlogGroupBy)
+    }
+
+    window.addEventListener('popstate', applyRouteSelection)
+    return () => window.removeEventListener('popstate', applyRouteSelection)
+  }, [])
 
   useEffect(() => {
     if (!currentProject) {
@@ -553,6 +627,20 @@ export function SprintView() {
       boardGroupBy,
       backlogGroupBy,
     })
+
+    const params = writeWorkspaceSprintRoute(window.location.search, {
+      selectedTeamId,
+      selectedSprintId,
+      activeTab,
+      boardGroupBy,
+      backlogGroupBy,
+    })
+    const query = params.toString()
+    const nextPath = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    if (nextPath !== currentPath) {
+      window.history.replaceState(window.history.state, '', nextPath)
+    }
   }, [
     activeTab,
     backlogGroupBy,
@@ -620,6 +708,7 @@ export function SprintView() {
     if (!currentProject || !targetSprintId) return
 
     setIsLoading(true)
+    setSprintLoadError(null)
     try {
       const issuesRes = await fetch(
         `/api/issues?projectId=${currentProject.id}&iterationId=${targetSprintId}`,
@@ -628,7 +717,7 @@ export function SprintView() {
 
       if (!issuesRes.ok) {
         const errorPayload = await issuesRes.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to load sprint backlog')
+        setSprintLoadError(errorPayload.error || 'Failed to load sprint backlog')
         return
       }
 
@@ -636,7 +725,7 @@ export function SprintView() {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to fetch sprint issues:', error)
-      toast.error('Failed to fetch sprint data')
+      setSprintLoadError('Failed to fetch sprint data. Check your connection and try again.')
     } finally {
       setIsLoading(false)
     }
@@ -652,6 +741,7 @@ export function SprintView() {
     }
 
     analyticsRequestRef.current = targetSprintId
+    setAnalyticsError(null)
 
     try {
       const analyticsRes = await fetch(`/api/sprints/${targetSprintId}/analytics`, {
@@ -660,7 +750,7 @@ export function SprintView() {
 
       if (!analyticsRes.ok) {
         const errorPayload = await analyticsRes.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to load sprint analytics')
+        setAnalyticsError(errorPayload.error || 'Failed to load sprint analytics')
         return
       }
 
@@ -670,7 +760,7 @@ export function SprintView() {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to fetch sprint analytics:', error)
-      toast.error('Failed to load sprint analytics')
+      setAnalyticsError('Failed to load sprint analytics. Check your connection and try again.')
     } finally {
       if (analyticsRequestRef.current === targetSprintId) {
         analyticsRequestRef.current = null
@@ -688,6 +778,7 @@ export function SprintView() {
     }
 
     capacityRequestRef.current = targetSprintId
+    setCapacityError(null)
 
     try {
       const capacityRes = await fetch(`/api/sprints/${targetSprintId}/capacity`, {
@@ -696,7 +787,7 @@ export function SprintView() {
 
       if (!capacityRes.ok) {
         const errorPayload = await capacityRes.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to load sprint capacity')
+        setCapacityError(errorPayload.error || 'Failed to load sprint capacity')
         return
       }
 
@@ -706,7 +797,7 @@ export function SprintView() {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Failed to fetch sprint capacity:', error)
-      toast.error('Failed to load sprint capacity')
+      setCapacityError('Failed to load sprint capacity. Check your connection and try again.')
     } finally {
       if (capacityRequestRef.current === targetSprintId) {
         capacityRequestRef.current = null
@@ -777,11 +868,98 @@ export function SprintView() {
   // DnD
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
+  const availableStatusesFor = useCallback(
+    (issue: Issue) => {
+      const typeDefinition = workItemTypes.find((definition) => definition.key === issue.workItemType)
+      return getAvailableBoardStatuses({
+        states,
+        typeStateMappings,
+        stateTransitions,
+        workItemTypeId: typeDefinition?.id,
+        currentStateId: issue.stateRecord?.id,
+      })
+    },
+    [stateTransitions, states, typeStateMappings, workItemTypes]
+  )
+
+  const moveOptionsFor = useCallback(
+    (issue: Issue) =>
+      BOARD_COLUMNS.filter(
+        (column) =>
+          column.id !== issue.status && availableStatusesFor(issue).includes(column.id)
+      ).map((column) => ({ id: column.id, label: column.label })),
+    [availableStatusesFor]
+  )
+
+  const moveSprintIssue = useCallback(
+    async (issue: Issue, targetStatus: BoardStatus, beforeItemId: string | null = null) => {
+      if (!currentProject) return
+
+      setBoardMoveError(null)
+      if (!currentProjectPermissions.includes('board:update')) {
+        setBoardMoveError('You do not have permission to update this sprint board.')
+        return
+      }
+
+      if (!availableStatusesFor(issue).includes(targetStatus)) {
+        setBoardMoveError(
+          `${issue.key} cannot move directly to ${BOARD_COLUMNS.find((column) => column.id === targetStatus)?.label ?? targetStatus}. Open the item to see its available workflow states.`
+        )
+        return
+      }
+
+      setMovingIssueId(issue.id)
+      try {
+        const res = await fetch('/api/board', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: currentProject.id,
+            itemId: issue.id,
+            toStatus: targetStatus,
+            beforeItemId,
+          }),
+        })
+
+        if (!res.ok) {
+          setBoardMoveError(await getApiErrorMessage(res, 'Failed to move work item'))
+          return
+        }
+
+        const updated = await res.json()
+        setSprintIssues((previous) =>
+          previous.map((candidate) =>
+            candidate.id === issue.id ? { ...candidate, ...updated } : candidate
+          )
+        )
+        updateIssue(issue.id, updated)
+        if (resolvedSelectedSprintId) {
+          void fetchSprintIssues(resolvedSelectedSprintId)
+        }
+      } catch (error) {
+        console.error('Failed to move sprint board card:', error)
+        setBoardMoveError('The work item could not be moved. Check your connection and try again.')
+      } finally {
+        setMovingIssueId(null)
+      }
+    },
+    [
+      availableStatusesFor,
+      currentProject,
+      currentProjectPermissions,
+      fetchSprintIssues,
+      resolvedSelectedSprintId,
+      updateIssue,
+    ]
+  )
+
   const handleDragEnd = async (event: DragEndEvent) => {
     setDragActiveId(null)
     const { active, over } = event
     if (!over) return
     const issueId = active.id as string
+    if (active.id === over.id) return
+
     let newStatus: string
     if (over.data.current?.type === 'column') { newStatus = over.id as string }
     else { const oi = sprintIssues.find((i) => i.id === over.id); newStatus = oi?.status || (over.id as string) }
@@ -790,37 +968,15 @@ export function SprintView() {
     const beforeItemId = over.data.current?.type === 'column' ? null : (over.id as string)
 
     if (issue.status === newStatus && beforeItemId === null) return
+    if (!BOARD_COLUMNS.some((column) => column.id === newStatus)) return
 
-    try {
-      const res = await fetch('/api/board', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: currentProject.id,
-          itemId: issueId,
-          toStatus: newStatus,
-          beforeItemId,
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to move card')
-      } else {
-        const updated = await res.json()
-        setSprintIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, ...updated } : i)))
-        updateIssue(issueId, updated)
-        if (resolvedSelectedSprintId) {
-          void fetchSprintIssues(resolvedSelectedSprintId)
-        }
-      }
-    } catch {
-      toast.error('Failed to move card')
-    }
+    await moveSprintIssue(issue, newStatus as BoardStatus, beforeItemId)
   }
 
   const handleRemoveFromSprint = async (issueId: string) => {
     const issue = sprintIssues.find((i) => i.id === issueId)
     if (!issue) return
+    setSprintActionError(null)
     try {
       const res = await fetch(`/api/issues/${issueId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iterationId: null, version: issue.version }) })
       if (!res.ok) {
@@ -829,13 +985,45 @@ export function SprintView() {
 
       const updated = await res.json()
       setSprintIssues((prev) => prev.filter((i) => i.id !== issueId))
+      setCapacityData((previous) => {
+        if (!previous || !issue.assignee) return previous
+        const estimatedHours = issue.estimatedHours ?? 0
+        const remainingHours = issue.remainingHours ?? 0
+        const completedHours = issue.completedHours ?? 0
+        const storyPoints = issue.storyPoints ?? 0
+
+        return {
+          capacities: previous.capacities.map((entry) =>
+            entry.userId === issue.assignee?.id
+              ? {
+                  ...entry,
+                  assignedEstimatedHours: Math.max(0, entry.assignedEstimatedHours - estimatedHours),
+                  assignedRemainingHours: Math.max(0, entry.assignedRemainingHours - remainingHours),
+                  assignedCompletedHours: Math.max(0, entry.assignedCompletedHours - completedHours),
+                  assignedPoints: Math.max(0, entry.assignedPoints - storyPoints),
+                  assignedItems: Math.max(0, entry.assignedItems - 1),
+                }
+              : entry
+          ),
+          totals: {
+            ...previous.totals,
+            totalAssignedEstimatedHours: Math.max(0, previous.totals.totalAssignedEstimatedHours - estimatedHours),
+            totalAssignedRemainingHours: Math.max(0, previous.totals.totalAssignedRemainingHours - remainingHours),
+            totalAssignedCompletedHours: Math.max(0, previous.totals.totalAssignedCompletedHours - completedHours),
+            totalAssignedPoints: Math.max(0, previous.totals.totalAssignedPoints - storyPoints),
+            totalAssignedItems: Math.max(0, previous.totals.totalAssignedItems - 1),
+          },
+        }
+      })
       updateIssue(issueId, updated)
       if (resolvedSelectedSprintId) {
         void fetchSprintIssues(resolvedSelectedSprintId)
+        capacityLoadedRef.current = null
+        void fetchSprintCapacity(resolvedSelectedSprintId)
       }
       toast.success(`${issue.key} removed from sprint`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove from sprint')
+      setSprintActionError(error instanceof Error ? error.message : 'Failed to remove from sprint')
     }
   }
 
@@ -843,6 +1031,7 @@ export function SprintView() {
     const issue = sprintIssues.find((i) => i.id === issueId)
     if (!issue || !issue.parentIssueId) return
 
+    setSprintActionError(null)
     try {
       const res = await fetch(`/api/issues/${issueId}`, {
         method: 'PUT',
@@ -852,7 +1041,7 @@ export function SprintView() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to remove parent link')
+        setSprintActionError(err.error || 'Failed to remove parent link')
         return
       }
 
@@ -864,12 +1053,13 @@ export function SprintView() {
       }
       toast.success('Parent link removed')
     } catch {
-      toast.error('Failed to remove parent link')
+      setSprintActionError('Failed to remove parent link. Check your connection and try again.')
     }
   }
 
-  const handleCapacitySave = useCallback(async (entries: Array<{ userId: string; hoursPerDay: number; daysOff: number }>) => {
-    if (!resolvedSelectedSprintId) return
+  const handleCapacitySave = useCallback(async (entries: Array<{ userId: string; hoursPerDay: number; daysOff: number }>): Promise<boolean> => {
+    if (!resolvedSelectedSprintId) return false
+    setCapacityError(null)
     try {
       const res = await fetch(`/api/sprints/${resolvedSelectedSprintId}/capacity`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacities: entries }) })
       if (!res.ok) {
@@ -885,8 +1075,10 @@ export function SprintView() {
       setAnalyticsSprintId(null)
       void fetchSprintCapacity(resolvedSelectedSprintId)
       void fetchSprintAnalytics(resolvedSelectedSprintId)
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update capacity')
+      setCapacityError(error instanceof Error ? error.message : 'Failed to update capacity')
+      return false
     }
   }, [fetchSprintAnalytics, fetchSprintCapacity, resolvedSelectedSprintId])
 
@@ -915,7 +1107,7 @@ export function SprintView() {
             label = 'Standalone Work'
           }
           break
-        default: key = 'all'; label = 'All'
+        default: key = 'all'; label = 'All work items'
       }
       if (!groups[key]) groups[key] = { label, issues: [] }
       groups[key].issues.push(issue)
@@ -936,10 +1128,19 @@ export function SprintView() {
       ? 'All Teams'
       : sprintTeams.find((team) => team.id === selectedTeamId)?.name ?? 'Team'
   const totalCapacityHours = Math.round(capacityData?.totals.totalCapacity ?? 0)
-  const plannedHours = Math.round(capacityData?.totals.totalAssignedEstimatedHours ?? 0)
+  const plannedHours = Math.round(
+    sprintIssues.reduce((total, issue) => total + (issue.estimatedHours ?? 0), 0)
+  )
   const netAvailabilityHours = totalCapacityHours - plannedHours
-  const assignedItemsCount = capacityData?.totals.totalAssignedItems ?? sprintIssues.length
-  const assignedPoints = capacityData?.totals.totalAssignedPoints ?? analytics?.stats.totalPoints ?? 0
+  const assignedItemsCount = sprintIssues.length
+  const assignedPoints = sprintIssues.reduce((total, issue) => total + (issue.storyPoints ?? 0), 0)
+  const unplannedIssues = sprintIssues.filter(
+    (issue) => !issue.assignee || issue.estimatedHours == null || issue.estimatedHours <= 0
+  )
+  const unassignedIssues = unplannedIssues.filter((issue) => !issue.assignee).length
+  const unestimatedIssues = unplannedIssues.filter(
+    (issue) => issue.estimatedHours == null || issue.estimatedHours <= 0
+  ).length
   const capacityUtilizationPercent =
     totalCapacityHours > 0
       ? Math.min(100, Math.round((plannedHours / totalCapacityHours) * 100))
@@ -987,7 +1188,10 @@ export function SprintView() {
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
               {sprintTeams.length > 1 ? (
                 <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                  <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/80 sm:w-[200px]">
+                  <SelectTrigger
+                    className="h-11 w-full rounded-xl border-border/70 bg-background/80 sm:w-[200px]"
+                    aria-label="Select sprint team"
+                  >
                     <SelectValue placeholder="Team" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1006,7 +1210,10 @@ export function SprintView() {
                 onValueChange={setSelectedSprintId}
                 disabled={isAllTeamsMode || sprints.length === 0}
               >
-                <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/80 text-sm font-semibold sm:w-[250px]">
+                <SelectTrigger
+                  className="h-11 w-full rounded-xl border-border/70 bg-background/80 text-sm font-semibold sm:w-[250px]"
+                  aria-label="Select sprint"
+                >
                   <SelectValue placeholder="Select Sprint" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1040,6 +1247,111 @@ export function SprintView() {
           ) : null}
         </div>
       </div>
+
+      {!isAllTeamsMode && selectedSprint && (sprintLoadError || sprintActionError) ? (
+        <div className="px-4 pb-4 md:px-6">
+          <InlineAlert
+            tone="danger"
+            title={sprintLoadError ? 'Sprint backlog unavailable.' : 'Sprint action not completed.'}
+            action={
+              sprintLoadError
+                ? <Button size="sm" variant="outline" onClick={() => void fetchSprintIssues(selectedSprint.id)}>Retry</Button>
+                : <Button size="sm" variant="outline" onClick={() => setSprintActionError(null)}>Dismiss</Button>
+            }
+          >
+            {sprintLoadError ?? sprintActionError}
+          </InlineAlert>
+        </div>
+      ) : null}
+
+      {!isAllTeamsMode && selectedSprint ? (
+        <section
+          className="border-b border-border/70 bg-background px-4 py-3 md:px-6 xl:px-8"
+          aria-labelledby="sprint-planning-summary-title"
+          data-testid="sprint-planning-summary"
+        >
+          <h2 id="sprint-planning-summary-title" className="sr-only">Sprint planning summary</h2>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <button
+              type="button"
+              className="min-w-0 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/30"
+              onClick={() => setSprintModalOpen(true)}
+              data-testid="sprint-summary-goal"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Target className="h-3 w-3" /> Sprint goal
+              </span>
+              <span className={`mt-1 block truncate text-sm font-medium ${selectedSprint.goal ? '' : 'text-warning'}`}>
+                {selectedSprint.goal || 'No goal set'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="rounded-xl border border-border/70 bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/30"
+              onClick={() => setActiveTab('backlog')}
+              data-testid="sprint-summary-backlog"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <List className="h-3 w-3" /> Sprint backlog
+              </span>
+              <span className="mt-1 block text-sm font-semibold tabular-nums">
+                {assignedItemsCount} item{assignedItemsCount === 1 ? '' : 's'} · {assignedPoints} SP
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`rounded-xl border px-3 py-2.5 text-left transition-colors hover:bg-muted/30 ${unplannedIssues.length > 0 ? 'border-warning/50 bg-warning/5' : 'border-border/70 bg-card'}`}
+              onClick={() => setActiveTab('backlog')}
+              title="Unplanned means the work item has no assignee, no estimate, or both."
+              data-testid="sprint-summary-unplanned"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <AlertTriangle className="h-3 w-3" /> Unplanned work
+              </span>
+              <span className={`mt-1 block text-sm font-semibold tabular-nums ${unplannedIssues.length > 0 ? 'text-warning' : ''}`}>
+                {unplannedIssues.length} item{unplannedIssues.length === 1 ? '' : 's'}
+              </span>
+              <span className="block truncate text-[10px] text-muted-foreground">
+                {unassignedIssues} unassigned · {unestimatedIssues} unestimated
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="rounded-xl border border-border/70 bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/30"
+              onClick={() => setActiveTab('capacity')}
+              data-testid="sprint-summary-capacity"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Users className="h-3 w-3" /> Planned / capacity
+              </span>
+              <span className={`mt-1 block text-sm font-semibold tabular-nums ${netAvailabilityHours < 0 ? 'text-destructive' : ''}`}>
+                {capacityError
+                  ? 'Capacity unavailable'
+                  : capacitySprintId !== selectedSprint.id
+                    ? 'Loading capacity…'
+                    : `${plannedHours}h / ${totalCapacityHours}h`}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`rounded-xl border px-3 py-2.5 text-left transition-colors hover:bg-muted/30 ${overloadedMembers > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-border/70 bg-card'}`}
+              onClick={() => setActiveTab('capacity')}
+              data-testid="sprint-summary-overallocation"
+            >
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Activity className="h-3 w-3" /> Over-allocation
+              </span>
+              <span className={`mt-1 block text-sm font-semibold tabular-nums ${overloadedMembers > 0 ? 'text-destructive' : 'text-success'}`}>
+                {overloadedMembers} member{overloadedMembers === 1 ? '' : 's'} over capacity
+              </span>
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 border-r border-border/60">
@@ -1111,7 +1423,11 @@ export function SprintView() {
             {/* ─── OVERVIEW TAB ──────────────────────────────────────── */}
             {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('overview') && (
               <TabsContent value="overview" className="mt-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6">
-                {analytics ? (
+                {analyticsError ? (
+                  <InlineAlert tone="danger" title="Sprint analytics unavailable." action={<Button size="sm" variant="outline" onClick={() => selectedSprint && void fetchSprintAnalytics(selectedSprint.id)}>Retry</Button>}>
+                    {analyticsError}
+                  </InlineAlert>
+                ) : analytics ? (
                   <div className="mx-auto max-w-6xl space-y-6">
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                       <StatCard title="Total Items" value={analytics.stats.totalItems} icon={Hash} />
@@ -1216,12 +1532,26 @@ export function SprintView() {
                   </div>
                 </div>
                 <div className="p-4 md:p-6">
+                  {boardMoveError ? (
+                    <InlineAlert
+                      tone="danger"
+                      title="Move not completed."
+                      className="mb-4"
+                      action={
+                        <Button size="sm" variant="outline" onClick={() => setBoardMoveError(null)}>
+                          Dismiss
+                        </Button>
+                      }
+                    >
+                      {boardMoveError}
+                    </InlineAlert>
+                  ) : null}
                   {boardGroupBy === 'none' ? (
-                    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+                    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd} onDragCancel={() => setDragActiveId(null)}>
                       <div className="flex gap-4 overflow-x-auto pb-3">
                         {boardColumns.map((col) => (
-                          <DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={col.issues.length}>
-                            {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
+                          <DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={col.issues.length} dropAllowed={!dragActiveIssue || availableStatusesFor(dragActiveIssue).includes(col.id)}>
+                            {col.issues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} moveOptions={moveOptionsFor(issue)} onMove={(status) => void moveSprintIssue(issue, status)} isMoving={movingIssueId === issue.id} />))}
                           </DroppableColumn>
                         ))}
                       </div>
@@ -1236,12 +1566,12 @@ export function SprintView() {
                             {group.label}<Badge variant="secondary" className="text-[10px] h-5">{group.issues.length}</Badge>
                           </button>
                           {!collapsedGroups.has(`board-${group.key}`) && (
-                            <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd}>
+                            <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e) => setDragActiveId(e.active.id as string)} onDragEnd={handleDragEnd} onDragCancel={() => setDragActiveId(null)}>
                               <div className="flex gap-4 overflow-x-auto pb-2">
                                 {BOARD_COLUMNS.map((col) => {
                                   const colIssues = group.issues.filter((i) => i.status === col.id).sort((a, b) => a.columnOrder - b.columnOrder)
-                                  return (<DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={colIssues.length}>
-                                    {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} />))}
+                                  return (<DroppableColumn key={col.id} id={col.id} label={col.label} color={col.color} count={colIssues.length} dropAllowed={!dragActiveIssue || availableStatusesFor(dragActiveIssue).includes(col.id)}>
+                                    {colIssues.map((issue) => (<DraggableCard key={issue.id} issue={issue} onClick={() => openWorkItem(issue.id)} moveOptions={moveOptionsFor(issue)} onMove={(status) => void moveSprintIssue(issue, status)} isMoving={movingIssueId === issue.id} />))}
                                   </DroppableColumn>)
                                 })}
                               </div>
@@ -1322,7 +1652,7 @@ export function SprintView() {
                               <Badge className={`text-[10px] capitalize ${STATUS_BADGE[parent.status] || ''}`}>{parent.status.replace(/_/g, ' ')}</Badge>
                               <Badge variant="secondary" className="text-[10px] h-5">{children.length} child{children.length === 1 ? '' : 'ren'}</Badge>
                               <div className="w-10 text-right shrink-0">
-                                {parent.storyPoints != null && parent.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{parent.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                                {parent.storyPoints != null && parent.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{parent.storyPoints} SP</Badge> : <span className="text-muted-foreground/30">-</span>}
                               </div>
                               <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
                                 onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(parent.id) }}><Minus className="h-3 w-3" /></Button>
@@ -1413,7 +1743,7 @@ export function SprintView() {
                                     ) : <span className="text-xs text-muted-foreground">Unassigned</span>}
                                   </div>
                                   <div className="w-10 text-right shrink-0">
-                                    {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints}</Badge> : <span className="text-muted-foreground/30">-</span>}
+                                    {issue.storyPoints != null && issue.storyPoints > 0 ? <Badge variant="outline" className="text-[10px] font-mono">{issue.storyPoints} SP</Badge> : <span className="text-muted-foreground/30">-</span>}
                                   </div>
                                   <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0" aria-label="Remove from sprint"
                                     onClick={(e) => { e.stopPropagation(); handleRemoveFromSprint(issue.id) }}><Minus className="h-3 w-3" /></Button>
@@ -1437,11 +1767,20 @@ export function SprintView() {
             {/* ─── CAPACITY TAB ────────────────────────────────────────── */}
             {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('capacity') && (
               <TabsContent value="capacity" className="flex-1 overflow-auto mt-0">
-                <CapacityTab
-                  key={`capacity-${selectedSprint?.id ?? 'none'}-${capacityData?.capacities.map((entry) => `${entry.userId}:${entry.hoursPerDay}:${entry.daysOff}`).join('|') ?? 'empty'}`}
-                  data={capacityData}
-                  onSave={handleCapacitySave}
-                />
+                <div className="space-y-4">
+                  {capacityError ? (
+                    <div className="px-4 pt-4 md:px-6">
+                      <InlineAlert tone="danger" title="Capacity could not be updated." action={!capacityData && selectedSprint ? <Button size="sm" variant="outline" onClick={() => void fetchSprintCapacity(selectedSprint.id)}>Retry</Button> : undefined}>
+                        {capacityError}
+                      </InlineAlert>
+                    </div>
+                  ) : null}
+                  <CapacityTab
+                    key={`capacity-${selectedSprint?.id ?? 'none'}-${capacityData?.capacities.map((entry) => `${entry.userId}:${entry.hoursPerDay}:${entry.daysOff}`).join('|') ?? 'empty'}`}
+                    data={capacityData}
+                    onSave={handleCapacitySave}
+                  />
+                </div>
               </TabsContent>
             )}
           </Tabs>
@@ -1583,7 +1922,7 @@ export function SprintView() {
    CAPACITY TAB
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (entries: Array<{ userId: string; hoursPerDay: number; daysOff: number }>) => void }) {
+function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (entries: Array<{ userId: string; hoursPerDay: number; daysOff: number }>) => Promise<boolean> }) {
   const initialEditedCapacities = useMemo(() => {
     const initial: Record<string, { hoursPerDay: number; daysOff: number }> = {}
     data?.capacities.forEach((capacity) => {
@@ -1597,16 +1936,30 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
 
   const [editedCapacities, setEditedCapacities] = useState<Record<string, { hoursPerDay: number; daysOff: number }>>(initialEditedCapacities)
   const [isDirty, setIsDirty] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleChange = (userId: string, field: 'hoursPerDay' | 'daysOff', value: number) => {
     setEditedCapacities((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }))
     setIsDirty(true)
+    setValidationError(null)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const entries = Object.entries(editedCapacities).map(([userId, v]) => ({ userId, hoursPerDay: v.hoursPerDay, daysOff: v.daysOff }))
-    onSave(entries)
-    setIsDirty(false)
+    if (entries.some((entry) => !Number.isFinite(entry.hoursPerDay) || entry.hoursPerDay < 0 || entry.hoursPerDay > 24)) {
+      setValidationError('Hours per day must be between 0 and 24.')
+      return
+    }
+    if (entries.some((entry) => !Number.isInteger(entry.daysOff) || entry.daysOff < 0 || entry.daysOff > (data?.totals.sprintDays ?? 366))) {
+      setValidationError(`Days off must be a whole number between 0 and ${data?.totals.sprintDays ?? 366}.`)
+      return
+    }
+    setValidationError(null)
+    setIsSaving(true)
+    const saved = await onSave(entries)
+    if (saved) setIsDirty(false)
+    setIsSaving(false)
   }
 
   if (!data) return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground text-sm">Loading capacity data...</p></div>
@@ -1625,10 +1978,12 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
             Adjust working hours and time off per team member. Capacity, plan, and risk signals update without changing sprint business rules.
           </p>
         </div>
-        <Button size="sm" onClick={handleSave} disabled={!isDirty} className="h-10 gap-1.5 rounded-xl px-4">
-          Save Changes
+        <Button size="sm" onClick={() => void handleSave()} disabled={!isDirty || isSaving} className="h-10 gap-1.5 rounded-xl px-4">
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
+
+      {validationError ? <InlineAlert tone="danger" title="Capacity values are invalid.">{validationError}</InlineAlert> : null}
 
       <div className="space-y-4">
         {data.capacities.map((cap) => {
@@ -1675,6 +2030,9 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
                       <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter">H/Day</span>
                       <Input
                         type="number"
+                        min={0}
+                        max={24}
+                        step="0.5"
                         value={edited.hoursPerDay}
                         onChange={(e) => handleChange(cap.userId, 'hoursPerDay', parseFloat(e.target.value) || 0)}
                         className="h-7 w-11 border-border/50 bg-background/50 px-1 text-center text-xs focus-visible:ring-1 focus-visible:ring-primary/30"
@@ -1685,6 +2043,9 @@ function CapacityTab({ data, onSave }: { data: CapacityData | null; onSave: (ent
                       <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tighter">Off</span>
                       <Input
                         type="number"
+                        min={0}
+                        max={data.totals.sprintDays}
+                        step="1"
                         value={edited.daysOff}
                         onChange={(e) => handleChange(cap.userId, 'daysOff', parseInt(e.target.value) || 0)}
                         className="h-7 w-11 border-border/50 bg-background/50 px-1 text-center text-xs focus-visible:ring-1 focus-visible:ring-primary/30"

@@ -103,6 +103,7 @@ export function ErrorState({
   onRetry,
   retryLabel = "Try again",
   action,
+  headingLevel = 2,
   size = "md",
   className,
 }: {
@@ -112,10 +113,12 @@ export function ErrorState({
   onRetry?: () => void
   retryLabel?: string
   action?: React.ReactNode
+  headingLevel?: 1 | 2 | 3
   size?: Size
   className?: string
 }) {
   const s = sizing[size]
+  const Heading = `h${headingLevel}` as "h1" | "h2" | "h3"
 
   return (
     <div
@@ -137,7 +140,7 @@ export function ErrorState({
         <AlertTriangle className={s.icon} />
       </div>
 
-      <p className="type-heading text-foreground">{title}</p>
+      <Heading className="type-heading text-foreground">{title}</Heading>
 
       <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
         {description}

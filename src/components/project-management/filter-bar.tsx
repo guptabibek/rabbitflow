@@ -412,6 +412,7 @@ export function FilterBar({
             <Button
               size="sm"
               onClick={() => setCreateIssueOpen(true)}
+              title="Create work item (C)"
               data-testid="work-items-new-button"
             >
               <Plus />

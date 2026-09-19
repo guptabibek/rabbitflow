@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -12,6 +11,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,9 +49,11 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
   const { currentProject } = useAppStore()
   const [favorites, setFavorites] = useState<Favorite[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchFavorites = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const url = currentProject
         ? `/api/favorites?projectId=${currentProject.id}`
@@ -62,9 +64,9 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
       }
       const data = await res.json()
       setFavorites(data.favorites ?? data)
+      setError(null)
     } catch (error) {
-      setFavorites([])
-      toast.error(error instanceof Error ? error.message : 'Failed to load favorites')
+      setError(error instanceof Error ? error.message : 'Failed to load favorites')
     } finally {
       setLoading(false)
     }
@@ -73,6 +75,7 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
   useEffect(() => { fetchFavorites() }, [fetchFavorites])
 
   const handleToggle = async (entityType: string, entityId: string) => {
+    setError(null)
     try {
       const res = await fetch('/api/favorites', {
         method: 'POST',
@@ -85,7 +88,7 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
 
       await fetchFavorites()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update favorites')
+      setError(error instanceof Error ? error.message : 'Failed to update favorites')
     }
   }
 
@@ -97,7 +100,7 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
     )
   }
 
-  if (favorites.length === 0) return null
+  if (favorites.length === 0 && !error) return null
 
   return (
     <div className="px-2 py-2">
@@ -105,6 +108,12 @@ export function FavoritesSidebar({ onNavigate }: FavoritesSidebarProps) {
         <Star className="h-3 w-3" />
         Favorites
       </h4>
+      {error ? (
+        <div role="alert" className="mb-1.5 rounded-md border border-danger-border bg-danger-bg px-2 py-1.5 text-[11px] text-danger">
+          <p>{error}</p>
+          <Button variant="link" size="sm" className="h-auto p-0 text-[11px]" onClick={() => void fetchFavorites()}>Retry</Button>
+        </div>
+      ) : null}
       <div className="space-y-0.5">
         {favorites.map((fav) => {
           const Icon = ICON_MAP[fav.entityType] || Layers

@@ -57,6 +57,34 @@ const issueCoreRelations = {
       hierarchyLevel: true,
     },
   },
+  // Board and list consumers need only active blocking dependencies. Keeping
+  // this narrow avoids loading the full relation graph for every work item.
+  sourceRelations: {
+    where: {
+      relationType: 'blocked_by',
+      targetIssue: { status: { notIn: ['done', 'cancelled'] } },
+    },
+    select: {
+      id: true,
+      relationType: true,
+      targetIssue: {
+        select: { id: true, key: true, title: true, status: true, workItemType: true },
+      },
+    },
+  },
+  targetRelations: {
+    where: {
+      relationType: 'blocks',
+      sourceIssue: { status: { notIn: ['done', 'cancelled'] } },
+    },
+    select: {
+      id: true,
+      relationType: true,
+      sourceIssue: {
+        select: { id: true, key: true, title: true, status: true, workItemType: true },
+      },
+    },
+  },
   _count: { select: { comments: true, subIssues: true, attachments: true } },
 }
 

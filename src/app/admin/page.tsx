@@ -32,7 +32,7 @@ type AdminOverviewCard = {
 const ACTION_CARDS = [
   {
     title: 'Projects And Users',
-    description: 'Create projects, onboard users, and manage organization-wide membership from the main dashboard.',
+    description: 'Create projects, onboard users, and manage organization-wide membership from Projects.',
     href: '/dashboard',
     icon: Users,
     accent: 'from-info/20 via-sky-500/10 to-transparent',
@@ -86,7 +86,7 @@ export default function AdminIndexPage() {
         icon: Building2,
         helper: currentProject
           ? 'Return to this project when you switch back to delivery work.'
-          : 'Select a project from the dashboard when you need workspace context.',
+          : 'Select a project from Projects when you need workspace context.',
       },
     ],
     [currentProject, stats.projects, stats.users]
@@ -160,7 +160,7 @@ export default function AdminIndexPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => router.push('/dashboard')}>Return to dashboard</Button>
+          <Button onClick={() => router.push('/dashboard')}>Return to Projects</Button>
         </CardContent>
       </Card>
     )
@@ -245,7 +245,7 @@ export default function AdminIndexPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {currentProject
                   ? 'Return to workspace when you want to resume delivery work inside the selected project.'
-                  : 'Open a project from the main dashboard to restore workspace context.'}
+                  : 'Open a project from Projects to restore workspace context.'}
               </p>
             </div>
 
@@ -258,7 +258,7 @@ export default function AdminIndexPage() {
                   <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                     1
                   </div>
-                  <p>Use Main Dashboard for organization-level project and user creation.</p>
+                  <p>Use Projects for organization-level project and user creation.</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -276,7 +276,7 @@ export default function AdminIndexPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => router.push('/dashboard')}>Open Main Dashboard</Button>
+              <Button onClick={() => router.push('/dashboard')}>Open Projects</Button>
               <Button variant="outline" onClick={() => router.push('/admin/panel')}>
                 Open Admin Panel
               </Button>

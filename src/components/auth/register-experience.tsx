@@ -4,11 +4,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InlineAlert } from '@/components/ui/states'
 import { type ResolvedProjectBranding } from '@/lib/domain/project-branding'
 
 function toErrorMessage(value: unknown, fallback: string): string {
@@ -41,9 +41,11 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/register', {
@@ -55,14 +57,14 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
       const payload = await response.json()
 
       if (!response.ok) {
-        toast.error(toErrorMessage(payload?.error, 'Registration failed'))
+        setFormError(toErrorMessage(payload?.error, 'Registration failed'))
         return
       }
 
       router.push('/dashboard')
       router.refresh()
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -92,6 +94,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
     >
       {registrationEnabled ? (
       <form onSubmit={handleRegister} className="space-y-5" data-testid="register-form">
+        {formError ? <InlineAlert tone="danger" title="Account was not created.">{formError}</InlineAlert> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full Name</Label>
@@ -99,7 +102,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
               id="name"
               placeholder="John Doe"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); setFormError(null) }}
               required
               autoFocus
               autoComplete="name"
@@ -113,7 +116,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => { setEmail(event.target.value); setFormError(null) }}
               required
               autoComplete="email"
               data-testid="register-email-input"
@@ -127,7 +130,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
             type="password"
             placeholder="Minimum 8 characters"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => { setPassword(event.target.value); setFormError(null) }}
             required
             minLength={8}
             autoComplete="new-password"

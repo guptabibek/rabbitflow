@@ -39,6 +39,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from './confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 const ITERATION_TYPES = [
   { value: 'sprint', label: 'Sprint', icon: Flag },
@@ -121,6 +126,15 @@ export function SprintManagement() {
 
   const [form, setForm] = useState<IterationForm>(INITIAL_FORM)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'name' | 'teamId' | 'dates', string>>>({})
+  const iterationDeletion = useDestructiveConfirm<{
+    id: string
+    name: string
+    issueCount: number
+  }>()
   const canManageSprints = currentProjectPermissions.includes('sprint:manage')
 
   const sortedIterations = useMemo(() => {
@@ -136,16 +150,19 @@ export function SprintManagement() {
   const fetchIterations = async () => {
     if (!currentProject) return
 
+    setLoadError(null)
     try {
       const response = await fetch(`/api/iterations?projectId=${currentProject.id}`)
       if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        setLoadError(error.error || 'Failed to refresh iterations')
         return
       }
 
       setIterations(await response.json())
     } catch (caughtError) {
       console.error('Failed to fetch iterations:', caughtError)
-      toast.error('Failed to refresh iterations')
+      setLoadError('Failed to refresh iterations')
     }
   }
 
@@ -156,27 +173,45 @@ export function SprintManagement() {
 
   const resetForm = () => {
     setForm(INITIAL_FORM)
+    setFieldErrors({})
+    setSaveError(null)
   }
 
   const handleFormChange = <K extends keyof IterationForm>(key: K, value: IterationForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }))
+    setSaveError(null)
+    if (key === 'name' || key === 'teamId') {
+      setFieldErrors((previous) => ({ ...previous, [key]: undefined }))
+    }
+    if (key === 'startDate' || key === 'endDate') {
+      setFieldErrors((previous) => ({ ...previous, dates: undefined }))
+    }
   }
 
   const handleSave = async () => {
-    if (!currentProject || !form.name.trim()) {
+    if (!currentProject) {
       return
     }
 
     if (!canManageSprints) {
-      toast.error('You do not have permission to manage iterations')
-      return
+      setSaveError('You do not have permission to manage iterations.')
+      return false
     }
 
+    const nextFieldErrors: typeof fieldErrors = {}
+    if (!form.name.trim()) nextFieldErrors.name = 'Enter an iteration name.'
     if (form.iterationType === 'sprint' && form.teamId === NONE_VALUE) {
-      toast.error('A sprint must be assigned to a team')
+      nextFieldErrors.teamId = 'Select the team responsible for this sprint.'
+    }
+    if (form.startDate && form.endDate && form.endDate < form.startDate) {
+      nextFieldErrors.dates = 'End date must be on or after the start date.'
+    }
+    setFieldErrors(nextFieldErrors)
+    if (Object.keys(nextFieldErrors).length > 0) {
       return
     }
 
+    setSaveError(null)
     setIsLoading(true)
     try {
       const payload = {
@@ -201,7 +236,7 @@ export function SprintManagement() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to save iteration')
+        setSaveError(error.error || 'Failed to save iteration')
         return
       }
 
@@ -221,7 +256,7 @@ export function SprintManagement() {
       resetForm()
     } catch (caughtError) {
       console.error('Failed to save iteration:', caughtError)
-      toast.error('Failed to save iteration')
+      setSaveError('Failed to save iteration')
     } finally {
       setIsLoading(false)
     }
@@ -241,14 +276,17 @@ export function SprintManagement() {
       status: normalizeIterationStatus(iteration.status),
       teamId: iteration.teamId || NONE_VALUE,
     })
+    setFieldErrors({})
+    setSaveError(null)
   }
 
   const handleQuickStatusChange = async (iterationId: string, status: string) => {
     if (!canManageSprints) {
-      toast.error('You do not have permission to manage iterations')
+      setActionError('You do not have permission to manage iterations.')
       return
     }
 
+    setActionError(null)
     try {
       const response = await fetch(`/api/iterations/${iterationId}`, {
         method: 'PUT',
@@ -258,7 +296,7 @@ export function SprintManagement() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to update iteration status')
+        setActionError(error.error || 'Failed to update iteration status')
         return
       }
 
@@ -271,28 +309,20 @@ export function SprintManagement() {
       toast.success('Iteration status updated')
     } catch (caughtError) {
       console.error('Failed to update iteration status:', caughtError)
-      toast.error('Failed to update iteration status')
+      setActionError('Failed to update iteration status')
     }
   }
 
   const handleDelete = async (iterationId: string) => {
     if (!canManageSprints) {
-      toast.error('You do not have permission to manage iterations')
-      return
-    }
-
-    if (
-      !confirm('Are you sure you want to delete this iteration? Assigned work items will lose their iteration.')
-    ) {
-      return
+      return 'You do not have permission to manage iterations.'
     }
 
     try {
       const response = await fetch(`/api/iterations/${iterationId}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete iteration')
-        return
+        return error.error || 'Failed to delete iteration'
       }
 
       setIterations(iterations.filter((iteration) => iteration.id !== iterationId))
@@ -300,9 +330,10 @@ export function SprintManagement() {
         resetForm()
       }
       toast.success('Iteration deleted')
+      return true
     } catch (caughtError) {
       console.error('Failed to delete iteration:', caughtError)
-      toast.error('Failed to delete iteration')
+      return 'Failed to delete iteration'
     }
   }
 
@@ -314,7 +345,8 @@ export function SprintManagement() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <>
+    <div className="flex h-full min-h-0 flex-col bg-background" data-testid="iteration-management">
       <div className="border-b border-border bg-gradient-to-r from-background via-background to-muted/20 px-4 py-4 sm:px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -355,6 +387,11 @@ export function SprintManagement() {
             </div>
 
             <div className="space-y-3">
+              {saveError ? (
+                <div data-testid="iteration-save-error">
+                  <InlineAlert tone="danger">{saveError}</InlineAlert>
+                </div>
+              ) : null}
               <div>
                 <Label htmlFor="iter-name" className="text-xs">
                   Name *
@@ -365,7 +402,15 @@ export function SprintManagement() {
                   onChange={(event) => handleFormChange('name', event.target.value)}
                   placeholder="Sprint 24"
                   className="h-8 text-sm"
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? 'iter-name-error' : undefined}
+                  data-testid="iteration-name-input"
                 />
+                {fieldErrors.name ? (
+                  <p id="iter-name-error" className="mt-1 text-xs text-destructive">
+                    {fieldErrors.name}
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -420,12 +465,17 @@ export function SprintManagement() {
               </div>
 
               <div>
-                <Label className="text-xs">Team</Label>
+                <Label className="text-xs">Team {form.iterationType === 'sprint' ? '*' : ''}</Label>
                 <Select
                   value={form.teamId}
                   onValueChange={(value) => handleFormChange('teamId', value)}
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger
+                    className="h-8 text-xs"
+                    aria-invalid={Boolean(fieldErrors.teamId)}
+                    aria-describedby={fieldErrors.teamId ? 'iter-team-error' : undefined}
+                    data-testid="iteration-team-trigger"
+                  >
                     <SelectValue placeholder="Select team" />
                   </SelectTrigger>
                   <SelectContent>
@@ -437,6 +487,11 @@ export function SprintManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+                {fieldErrors.teamId ? (
+                  <p id="iter-team-error" className="mt-1 text-xs text-destructive">
+                    {fieldErrors.teamId}
+                  </p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -447,6 +502,8 @@ export function SprintManagement() {
                     value={form.startDate}
                     onChange={(event) => handleFormChange('startDate', event.target.value)}
                     className="h-8 text-xs"
+                    aria-invalid={Boolean(fieldErrors.dates)}
+                    data-testid="iteration-start-date-input"
                   />
                 </div>
                 <div>
@@ -456,14 +513,23 @@ export function SprintManagement() {
                     value={form.endDate}
                     onChange={(event) => handleFormChange('endDate', event.target.value)}
                     className="h-8 text-xs"
+                    aria-invalid={Boolean(fieldErrors.dates)}
+                    aria-describedby={fieldErrors.dates ? 'iter-dates-error' : undefined}
+                    data-testid="iteration-end-date-input"
                   />
                 </div>
               </div>
+              {fieldErrors.dates ? (
+                <p id="iter-dates-error" className="text-xs text-destructive">
+                  {fieldErrors.dates}
+                </p>
+              ) : null}
 
               <Button
                 className="w-full h-8 text-xs"
                 onClick={handleSave}
-                disabled={isLoading || !form.name.trim() || !canManageSprints}
+                disabled={isLoading || !canManageSprints}
+                data-testid="iteration-save-button"
               >
                 {form.id ? (
                   <>
@@ -481,6 +547,28 @@ export function SprintManagement() {
           </div>
 
         <div className="flex-1 flex flex-col min-w-0">
+            {loadError ? (
+              <div className="border-b border-border px-4 py-3">
+                <InlineAlert
+                  tone="danger"
+                  title="Iterations could not be refreshed."
+                  action={
+                    <Button variant="outline" size="sm" onClick={() => void fetchIterations()}>
+                      Retry
+                    </Button>
+                  }
+                >
+                  {loadError}
+                </InlineAlert>
+              </div>
+            ) : null}
+            {actionError ? (
+              <div className="border-b border-border px-4 py-3">
+                <div data-testid="iteration-action-error">
+                  <InlineAlert tone="danger">{actionError}</InlineAlert>
+                </div>
+              </div>
+            ) : null}
             <div className="px-4 py-2.5 border-b border-border flex items-center justify-between flex-shrink-0">
               <span className="text-xs font-medium text-muted-foreground">
                 All Iterations <span className="tabular-nums">({sortedIterations.length})</span>
@@ -576,7 +664,13 @@ export function SprintManagement() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => handleDelete(iteration.id)}
+                            onClick={() =>
+                              iterationDeletion.request({
+                                id: iteration.id,
+                                name: iteration.name,
+                                issueCount,
+                              })
+                            }
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-2" />
                             Delete
@@ -600,5 +694,20 @@ export function SprintManagement() {
         </div>
       </div>
     </div>
+    <ConfirmDestructiveDialog
+      open={iterationDeletion.isOpen}
+      onOpenChange={iterationDeletion.onOpenChange}
+      title={`Delete ${iterationDeletion.target?.name ?? 'this iteration'}?`}
+      description={
+        iterationDeletion.target?.issueCount
+          ? `${iterationDeletion.target.issueCount} assigned work item${iterationDeletion.target.issueCount === 1 ? '' : 's'} will become unassigned from this iteration. The work items will remain.`
+          : 'The iteration will be permanently removed. No work items are currently assigned to it.'
+      }
+      confirmLabel="Delete iteration"
+      onConfirm={() =>
+        iterationDeletion.target ? handleDelete(iterationDeletion.target.id) : false
+      }
+    />
+    </>
   )
 }

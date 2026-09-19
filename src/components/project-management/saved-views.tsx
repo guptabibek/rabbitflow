@@ -17,6 +17,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,6 +30,7 @@ import {
   ConfirmDestructiveDialog,
   useDestructiveConfirm,
 } from '@/components/project-management/confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 /**
  * Saved filter views.
@@ -50,7 +52,14 @@ type SavedView = {
 }
 
 export function SavedViews() {
-  const { currentProject, currentUser, filters, setFilters, workItemTypeFilter } = useAppStore()
+  const {
+    currentProject,
+    currentUser,
+    filters,
+    setFilters,
+    workItemTypeFilter,
+    setWorkItemTypeFilter,
+  } = useAppStore()
 
   const [views, setViews] = useState<SavedView[]>([])
   const [isSaveOpen, setSaveOpen] = useState(false)
@@ -58,23 +67,28 @@ export function SavedViews() {
   const [isShared, setIsShared] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [appliedViewId, setAppliedViewId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
 
   const deleteConfirm = useDestructiveConfirm<SavedView>()
 
   const load = useCallback(async () => {
     if (!currentProject) return
 
+    setLoadError(null)
     try {
       const response = await fetch(`/api/views?projectId=${currentProject.id}`)
       if (!response.ok) {
-        // A failure here should not break the filter bar around it.
         setViews([])
+        setLoadError(await getApiErrorMessage(response, 'Failed to load saved views'))
         return
       }
       const data = await response.json()
       setViews(Array.isArray(data) ? data : [])
     } catch {
       setViews([])
+      setLoadError('Failed to load saved views')
     }
   }, [currentProject])
 
@@ -89,23 +103,33 @@ export function SavedViews() {
       setFilters({
         assigneeId: saved.assigneeId ?? null,
         priority: saved.priority ?? null,
-        type: saved.type ?? null,
+        // Older views stored the visible type in `type`; newer views use the
+        // explicit workItemType field. Normalize both into the visible control
+        // instead of applying a hidden second type constraint.
+        type: null,
         search: saved.search ?? '',
         sprintId: saved.sprintId ?? null,
         iterationId: saved.iterationId ?? null,
         areaId: saved.areaId ?? null,
         labelIds: Array.isArray(saved.labelIds) ? saved.labelIds : [],
       })
+      setWorkItemTypeFilter(saved.workItemType ?? saved.type ?? 'all')
 
       setAppliedViewId(view.id)
       toast.success(`Applied "${view.name}"`)
     },
-    [setFilters]
+    [setFilters, setWorkItemTypeFilter]
   )
 
   const save = useCallback(async () => {
-    if (!currentProject || !name.trim()) return
+    if (!currentProject) return
+    if (!name.trim()) {
+      setNameError('Enter a view name.')
+      return
+    }
 
+    setNameError(null)
+    setSaveError(null)
     setIsSaving(true)
     try {
       const response = await fetch('/api/views', {
@@ -132,7 +156,7 @@ export function SavedViews() {
       await load()
       toast.success('View saved')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save view')
+      setSaveError(error instanceof Error ? error.message : 'Failed to save view')
     } finally {
       setIsSaving(false)
     }
@@ -148,8 +172,9 @@ export function SavedViews() {
         if (appliedViewId === viewId) setAppliedViewId(null)
         await load()
         toast.success('View deleted')
+        return true
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to delete view')
+        return error instanceof Error ? error.message : 'Failed to delete view'
       }
     },
     [appliedViewId, load]
@@ -174,6 +199,21 @@ export function SavedViews() {
 
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuLabel className="text-xs">Saved views</DropdownMenuLabel>
+
+          {loadError ? (
+            <div className="p-2">
+              <InlineAlert
+                tone="danger"
+                action={
+                  <Button size="sm" variant="outline" onClick={() => void load()}>
+                    Retry
+                  </Button>
+                }
+              >
+                {loadError}
+              </InlineAlert>
+            </div>
+          ) : null}
 
           {views.length === 0 ? (
             <p className="px-2 py-3 text-xs text-muted-foreground">
@@ -240,19 +280,39 @@ export function SavedViews() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Save current filters as a view</DialogTitle>
+            <DialogDescription>
+              Reuse the current work item filters yourself or share them with this project.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {saveError ? (
+              <div data-testid="saved-view-save-error">
+                <InlineAlert tone="danger">{saveError}</InlineAlert>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="saved-view-name">Name</Label>
               <Input
                 id="saved-view-name"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  setName(event.target.value)
+                  setNameError(null)
+                  setSaveError(null)
+                }}
                 placeholder="e.g. My open bugs"
                 maxLength={100}
                 autoFocus
+                aria-invalid={Boolean(nameError)}
+                aria-describedby={nameError ? 'saved-view-name-error' : undefined}
+                data-testid="saved-view-name-input"
               />
+              {nameError ? (
+                <p id="saved-view-name-error" className="text-xs text-destructive">
+                  {nameError}
+                </p>
+              ) : null}
             </div>
 
             <label className="flex items-start gap-2 text-sm">
@@ -274,7 +334,7 @@ export function SavedViews() {
             <Button variant="outline" onClick={() => setSaveOpen(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button onClick={() => void save()} disabled={isSaving || !name.trim()}>
+            <Button onClick={() => void save()} disabled={isSaving} data-testid="saved-view-save-button">
               {isSaving ? 'Saving…' : 'Save view'}
             </Button>
           </DialogFooter>
@@ -290,9 +350,9 @@ export function SavedViews() {
             ? 'This view is shared, so it will disappear for everyone in the project. This cannot be undone.'
             : 'This cannot be undone. The work items themselves are not affected.'
         }
-        onConfirm={async () => {
-          if (deleteConfirm.target) await remove(deleteConfirm.target.id)
-        }}
+        onConfirm={() =>
+          deleteConfirm.target ? remove(deleteConfirm.target.id) : false
+        }
       />
     </>
   )

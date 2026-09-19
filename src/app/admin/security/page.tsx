@@ -6,8 +6,13 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InlineAlert } from '@/components/ui/states'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 import { History, Loader2, RefreshCcw, Shield, ShieldAlert, Trash2, UserRound, XCircle } from 'lucide-react'
 
 type SecurityUser = {
@@ -134,6 +139,8 @@ export default function AdminSecurityPage() {
   const [auditLoading, setAuditLoading] = useState(false)
   const [operationLoading, setOperationLoading] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [pageError, setPageError] = useState<string | null>(null)
+  const accessRemoval = useDestructiveConfirm<SecurityUser>()
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
@@ -220,6 +227,7 @@ export default function AdminSecurityPage() {
 
   const loadSessions = async (userId: string) => {
     setSessionsLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/sessions`, {
         cache: 'no-store',
@@ -236,8 +244,7 @@ export default function AdminSecurityPage() {
       setSessions(nextSessions)
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load sessions')
-      setSessions([])
+      setPageError(error instanceof Error ? error.message : 'Failed to load sessions')
     } finally {
       setSessionsLoading(false)
     }
@@ -245,6 +252,7 @@ export default function AdminSecurityPage() {
 
   const loadAudit = async (userId: string) => {
     setAuditLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/audit?limit=100`, {
         cache: 'no-store',
@@ -262,8 +270,7 @@ export default function AdminSecurityPage() {
       setAuditEvents(nextEvents)
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load security timeline')
-      setAuditEvents([])
+      setPageError(error instanceof Error ? error.message : 'Failed to load security timeline')
     } finally {
       setAuditLoading(false)
     }
@@ -288,7 +295,7 @@ export default function AdminSecurityPage() {
         await loadUsers('', false)
       } catch (error) {
         console.error(error)
-        toast.error('Failed to initialize admin security page')
+        setPageError('Failed to initialize admin security page')
       } finally {
         setIsLoading(false)
       }
@@ -309,6 +316,7 @@ export default function AdminSecurityPage() {
 
   const refreshAll = async () => {
     setIsRefreshing(true)
+    setPageError(null)
     try {
       const resolvedUserId = await loadUsers(query)
       if (resolvedUserId) {
@@ -317,7 +325,7 @@ export default function AdminSecurityPage() {
       toast.success('Security data refreshed')
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Refresh failed')
+      setPageError(error instanceof Error ? error.message : 'Refresh failed')
     } finally {
       setIsRefreshing(false)
     }
@@ -325,6 +333,7 @@ export default function AdminSecurityPage() {
 
   const resetMfaForUser = async (userId: string, revokeSessions: boolean) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/mfa/reset`, {
         method: 'POST',
@@ -344,7 +353,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'MFA reset failed')
+      setPageError(error instanceof Error ? error.message : 'MFA reset failed')
     } finally {
       setOperationLoading(false)
     }
@@ -352,6 +361,7 @@ export default function AdminSecurityPage() {
 
   const updateMfaPolicyForUser = async (userId: string, action: 'enable' | 'disable') => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/mfa`, {
         method: 'POST',
@@ -371,18 +381,15 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'MFA policy update failed')
+      setPageError(error instanceof Error ? error.message : 'MFA policy update failed')
     } finally {
       setOperationLoading(false)
     }
   }
 
   const deactivateUser = async (userId: string) => {
-    if (!confirm('Remove all access for this user and deactivate the account? This will revoke sessions, remove memberships, and clear active assignments.')) {
-      return
-    }
-
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}`, {
         method: 'DELETE',
@@ -398,9 +405,10 @@ export default function AdminSecurityPage() {
       if (resolvedUserId) {
         await Promise.all([loadSessions(resolvedUserId), loadAudit(resolvedUserId)])
       }
+      return true
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'User deactivation failed')
+      return error instanceof Error ? error.message : 'User deactivation failed'
     } finally {
       setOperationLoading(false)
     }
@@ -408,6 +416,7 @@ export default function AdminSecurityPage() {
 
   const revokeSession = async (sessionId: string) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/sessions/${sessionId}`, {
         method: 'DELETE',
@@ -427,7 +436,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Session revoke failed')
+      setPageError(error instanceof Error ? error.message : 'Session revoke failed')
     } finally {
       setOperationLoading(false)
     }
@@ -435,6 +444,7 @@ export default function AdminSecurityPage() {
 
   const revokeAllSessionsForUser = async (userId: string) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/sessions`, {
         method: 'DELETE',
@@ -460,7 +470,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Bulk session revoke failed')
+      setPageError(error instanceof Error ? error.message : 'Bulk session revoke failed')
     } finally {
       setOperationLoading(false)
     }
@@ -508,6 +518,15 @@ export default function AdminSecurityPage() {
           Refresh
         </Button>
       </div>
+      {pageError ? (
+        <InlineAlert
+          tone="danger"
+          title="Security action not completed."
+          action={<Button size="sm" variant="outline" onClick={() => void refreshAll()}>Retry refresh</Button>}
+        >
+          {pageError}
+        </InlineAlert>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
         {securitySummaryCards.map((item) => (
@@ -683,7 +702,7 @@ export default function AdminSecurityPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => void deactivateUser(selectedUser.id)}
+                  onClick={() => accessRemoval.request(selectedUser)}
                   disabled={operationLoading || !selectedUser.isActive}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
@@ -826,6 +845,17 @@ export default function AdminSecurityPage() {
         <History className="h-3.5 w-3.5" />
         Use MFA controls, session revocation, and offboarding to lock down user access immediately.
       </div>
+
+      <ConfirmDestructiveDialog
+        open={accessRemoval.isOpen}
+        onOpenChange={accessRemoval.onOpenChange}
+        title={`Remove access for ${accessRemoval.target?.name ?? 'this user'}?`}
+        description="This deactivates the account, revokes every session, removes all project memberships, and clears active work-item assignments."
+        confirmLabel="Remove user access"
+        onConfirm={() =>
+          accessRemoval.target ? deactivateUser(accessRemoval.target.id) : false
+        }
+      />
     </div>
   )
 }

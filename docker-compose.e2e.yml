@@ -1,0 +1,37 @@
+name: rabbitflow-e2e
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rabbitflow
+      POSTGRES_USER: rabbitflow
+      POSTGRES_PASSWORD: rabbitflow
+    ports:
+      - "${E2E_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - e2e_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rabbitflow -d rabbitflow"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "${E2E_REDIS_PORT:-6380}:6379"
+    volumes:
+      - e2e_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+volumes:
+  e2e_postgres_data:
+  e2e_redis_data:

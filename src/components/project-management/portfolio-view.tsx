@@ -93,7 +93,7 @@ export function PortfolioView() {
       <Card>
         <CardHeader className="gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle>Portfolio Dashboard</CardTitle>
+            <CardTitle>Portfolio</CardTitle>
             <p className="text-sm text-muted-foreground">
               Cross-project health, due-soon work, and query-driven portfolio triage.
             </p>
@@ -123,13 +123,13 @@ export function PortfolioView() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="transition-shadow hover:shadow-md"><CardContent className="p-4 sm:p-5"><div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Projects</div><div className="mt-2 text-3xl font-semibold">{data.summary.totalProjects}</div></CardContent></Card>
             <Card className="transition-shadow hover:shadow-md"><CardContent className="p-4 sm:p-5"><div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objectives</div><div className="mt-2 text-3xl font-semibold">{data.summary.totalObjectives}</div></CardContent></Card>
-            <Card className="transition-shadow hover:shadow-md"><CardContent className="p-4 sm:p-5"><div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Objective Health</div><div className="mt-2 text-3xl font-semibold">{data.summary.objectiveHealth}%</div></CardContent></Card>
+            <Card className="transition-shadow hover:shadow-md"><CardContent className="p-4 sm:p-5"><div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Average objective progress</div><div className="mt-2 text-3xl font-semibold">{data.summary.objectiveHealth}%</div><p className="mt-1 text-xs text-muted-foreground">Mean progress across accessible objectives</p></CardContent></Card>
             <Card className="transition-shadow hover:shadow-md"><CardContent className="p-4 sm:p-5"><div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Due Soon</div><div className="mt-2 text-3xl font-semibold">{data.summary.dueSoonCount}</div></CardContent></Card>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
             <Card>
-              <CardHeader><CardTitle>Project Health</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Project delivery</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {data.projects.map((project) => (
                   <div key={project.id} className="rounded-2xl border border-border/70 bg-card/70 p-4">

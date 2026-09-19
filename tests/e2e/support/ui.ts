@@ -91,7 +91,7 @@ export async function createProject(page: Page, project: ProjectInput) {
   const response = await responsePromise
 
   expect(response.status()).toBe(201)
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/projects\/[^/]+\/overview$/)
 
   return response
 }
@@ -128,18 +128,18 @@ export async function deleteProject(page: Page, projectName: string) {
 
   await card.locator('[data-testid^="dashboard-project-actions-"]').click()
 
-  // Accepted from a listener so the click that opens it can settle — see the
-  // note on the same pattern in issues.spec.ts.
-  page.once('dialog', (dialog) => void dialog.accept())
-
-  const responsePromise = page.waitForResponse(
-    (response) => /\/api\/projects\//.test(response.url()) && response.request().method() === 'DELETE'
-  )
-
   // Delete straight from the card menu (portal-rendered, so queried off `page`).
   // It used to route through the edit dialog, which was the only way to reach
   // deletion at all.
   await page.locator('[data-testid^="dashboard-project-delete-"]').click()
+  const confirmation = page.getByRole('alertdialog')
+  await expect(confirmation).toContainText(projectName)
+  await expect(confirmation).toContainText('work items')
+
+  const responsePromise = page.waitForResponse(
+    (response) => /\/api\/projects\//.test(response.url()) && response.request().method() === 'DELETE'
+  )
+  await confirmation.getByRole('button', { name: 'Delete project' }).click()
   const response = await responsePromise
 
   expect(response.ok()).toBeTruthy()
@@ -152,7 +152,7 @@ export async function selectProjectFromDashboard(page: Page, name: string) {
   const card = findProjectCard(page, name)
   await expect(card).toBeVisible()
   await card.click()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(/\/projects\/[^/]+\/overview$/)
 }
 
 export async function openSidebarView(page: Page, view: string) {

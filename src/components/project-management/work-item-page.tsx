@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/states'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TypeIcon } from '@/components/project-management/work-item-indicators'
 import { cn } from '@/lib/utils'
+import { canonicalWorkspaceRoute } from '@/lib/domain/workspace-route'
 
 export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; embedded?: boolean; onClose?: () => void }) {
   const router = useRouter()
@@ -175,6 +176,13 @@ export function WorkItemPage({ issueId, embedded, onClose }: { issueId: string; 
             isRefreshing={isLoading}
             onReload={() => void loadWorkItem()}
             onIssueUpdated={(issue) => setPayload((previous) => (previous ? { ...previous, issue } : previous))}
+            onDeleted={() => {
+              if (embedded && onClose) {
+                onClose()
+                return
+              }
+              router.replace(canonicalWorkspaceRoute(payload.issue.project.id, 'list'))
+            }}
           />
         </div>
       </main>

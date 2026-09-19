@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { EmptyState } from '@/components/ui/states'
+import { EmptyState, ErrorState, InlineAlert } from '@/components/ui/states'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   ChevronDown,
@@ -16,7 +16,6 @@ import {
   Inbox,
   RefreshCw,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { cn, getApiErrorMessage } from '@/lib/utils'
 import {
   PriorityIndicator,
@@ -68,6 +67,8 @@ export function BacklogView() {
   const canCreate = currentProjectPermissions.includes('workitem:create')
   const [tree, setTree] = useState<BacklogNode[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reorderError, setReorderError] = useState<string | null>(null)
   const hasPersistedExpansion = currentProject
     ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id)
     : false
@@ -78,6 +79,7 @@ export function BacklogView() {
     if (!currentProject) return
 
     setIsLoading(true)
+    setLoadError(null)
     try {
       const params = new URLSearchParams({ projectId: currentProject.id })
       if (workItemTypeFilter !== 'all') {
@@ -101,7 +103,7 @@ export function BacklogView() {
     } catch (error) {
       console.error('Failed to load backlog:', error)
       setTree([])
-      toast.error(error instanceof Error ? error.message : 'Failed to load backlog')
+      setLoadError(error instanceof Error ? error.message : 'Failed to load backlog')
     } finally {
       setIsLoading(false)
     }
@@ -144,9 +146,10 @@ export function BacklogView() {
     direction: 'up' | 'down'
   ) => {
     if (!currentProject) return
+    setReorderError(null)
 
     if (!canReorderBacklog) {
-      toast.error('You do not have permission to reorder backlog items')
+      setReorderError('You do not have permission to reorder backlog items.')
       return
     }
 
@@ -182,14 +185,13 @@ export function BacklogView() {
         }),
       })
       if (!res.ok) {
-        const error = await res.json()
-        toast.error(error.error || 'Failed to reorder item')
+        setReorderError(await getApiErrorMessage(res, 'Failed to reorder item'))
         // Revert on failure
         await fetchBacklog()
       }
     } catch (error) {
       console.error('Failed to reorder backlog item:', error)
-      toast.error('Failed to reorder item')
+      setReorderError('The backlog item could not be reordered. Check your connection and try again.')
       await fetchBacklog()
     }
   }
@@ -408,6 +410,17 @@ export function BacklogView() {
         </Tooltip>
       </div>
 
+      {reorderError ? (
+        <InlineAlert
+          tone="danger"
+          title="Backlog order not saved."
+          className="mx-3 mt-3 shrink-0"
+          action={<Button size="sm" variant="outline" onClick={() => setReorderError(null)}>Dismiss</Button>}
+        >
+          {reorderError}
+        </InlineAlert>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-auto">
         {isLoading && tree.length === 0 ? (
           <div className="divide-y divide-border/60">
@@ -420,6 +433,13 @@ export function BacklogView() {
               </div>
             ))}
           </div>
+        ) : loadError ? (
+          <ErrorState
+            title="Backlog did not load"
+            description="The ranked work list is temporarily unavailable."
+            detail={loadError}
+            onRetry={() => void fetchBacklog()}
+          />
         ) : tree.length > 0 ? (
           renderNodes(tree)
         ) : (

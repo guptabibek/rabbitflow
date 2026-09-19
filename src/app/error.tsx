@@ -33,7 +33,7 @@ export default function AppError({
 
         <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
           This view failed to render. Your data is safe — nothing was saved or changed by this
-          error. Try again, or return to the dashboard.
+          error. Try again, or return to Projects.
         </p>
 
         {error.digest && (
@@ -48,7 +48,7 @@ export default function AppError({
             Try again
           </Button>
           <Button variant="outline" onClick={() => (window.location.href = '/dashboard')}>
-            Back to dashboard
+            Back to Projects
           </Button>
         </div>
       </div>

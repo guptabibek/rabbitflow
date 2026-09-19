@@ -286,7 +286,7 @@ export default function AdminPanelPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => router.push('/dashboard')}>Return to dashboard</Button>
+          <Button onClick={() => router.push('/dashboard')}>Return to Projects</Button>
         </CardContent>
       </Card>
     )
@@ -302,7 +302,7 @@ export default function AdminPanelPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => router.push('/dashboard')}>Go to main dashboard</Button>
+          <Button onClick={() => router.push('/dashboard')}>Go to Projects</Button>
         </CardContent>
       </Card>
     )

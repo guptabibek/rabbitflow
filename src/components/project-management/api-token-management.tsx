@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -41,6 +42,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
 
 const MAX_TOKEN_NAME_LENGTH = 200
 
@@ -86,6 +88,10 @@ export function ApiTokenManagement() {
   const [newTokenSecret, setNewTokenSecret] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<ApiToken | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Form
   const [tName, setTName] = useState('')
@@ -94,10 +100,11 @@ export function ApiTokenManagement() {
 
   const fetchTokens = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch('/api/api-tokens')
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to load API tokens'))
+        setLoadError(await getApiErrorMessage(res, 'Failed to load API tokens'))
         setTokens([])
         return
       }
@@ -105,7 +112,7 @@ export function ApiTokenManagement() {
       const data = await res.json()
       setTokens(data.tokens ?? data)
     } catch {
-      toast.error('Failed to load API tokens')
+      setLoadError('Failed to load API tokens')
     } finally {
       setLoading(false)
     }
@@ -114,13 +121,18 @@ export function ApiTokenManagement() {
   useEffect(() => { fetchTokens() }, [fetchTokens])
 
   const handleCreate = async () => {
-    if (!tName.trim()) return
-
-    if (tName.trim().length > MAX_TOKEN_NAME_LENGTH) {
-      toast.error(`Token name cannot exceed ${MAX_TOKEN_NAME_LENGTH} characters`)
+    if (!tName.trim()) {
+      setNameError('Enter a token name.')
       return
     }
 
+    if (tName.trim().length > MAX_TOKEN_NAME_LENGTH) {
+      setNameError(`Use ${MAX_TOKEN_NAME_LENGTH} characters or fewer.`)
+      return
+    }
+
+    setNameError(null)
+    setCreateError(null)
     setSaving(true)
     try {
       const expDays = parseInt(tExpDays, 10)
@@ -138,7 +150,7 @@ export function ApiTokenManagement() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to create API token'))
+        setCreateError(await getApiErrorMessage(res, 'Failed to create API token'))
         return
       }
 
@@ -150,7 +162,7 @@ export function ApiTokenManagement() {
       await fetchTokens()
       toast.success('API token created')
     } catch {
-      toast.error('Failed to create API token')
+      setCreateError('Failed to create API token')
     } finally {
       setSaving(false)
     }
@@ -159,11 +171,12 @@ export function ApiTokenManagement() {
   const handleDelete = async () => {
     if (!pendingDelete) return
 
+    setDeleteError(null)
     setSaving(true)
     try {
       const res = await fetch(`/api/api-tokens/${pendingDelete.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to revoke API token'))
+        setDeleteError(await getApiErrorMessage(res, 'Failed to revoke API token'))
         return
       }
 
@@ -171,7 +184,7 @@ export function ApiTokenManagement() {
       await fetchTokens()
       toast.success('API token revoked')
     } catch {
-      toast.error('Failed to revoke API token')
+      setDeleteError('Failed to revoke API token')
     } finally {
       setSaving(false)
     }
@@ -199,6 +212,8 @@ export function ApiTokenManagement() {
     if (!open) {
       setNewTokenSecret(null)
       setCopied(false)
+      setCreateError(null)
+      setNameError(null)
     }
   }
 
@@ -223,6 +238,11 @@ export function ApiTokenManagement() {
               <DialogTitle>
                 {newTokenSecret ? 'Token Created' : 'Create API Token'}
               </DialogTitle>
+              <DialogDescription>
+                {newTokenSecret
+                  ? 'Copy this token now because it cannot be shown again.'
+                  : 'Name the integration, choose its access, and set an expiration.'}
+              </DialogDescription>
             </DialogHeader>
 
             {newTokenSecret ? (
@@ -252,14 +272,32 @@ export function ApiTokenManagement() {
               </div>
             ) : (
               <div className="space-y-4 py-2">
+                {createError ? (
+                  <div data-testid="api-token-create-error">
+                    <InlineAlert tone="danger">{createError}</InlineAlert>
+                  </div>
+                ) : null}
                 <div className="space-y-1.5">
-                  <Label>Token Name</Label>
+                  <Label htmlFor="api-token-name">Token Name</Label>
                   <Input
+                    id="api-token-name"
                     value={tName}
                     maxLength={MAX_TOKEN_NAME_LENGTH}
-                    onChange={(e) => setTName(e.target.value)}
+                    onChange={(e) => {
+                      setTName(e.target.value)
+                      setNameError(null)
+                      setCreateError(null)
+                    }}
                     placeholder="e.g. CI/CD Pipeline"
+                    aria-invalid={Boolean(nameError)}
+                    aria-describedby={nameError ? 'api-token-name-error' : undefined}
+                    data-testid="api-token-name-input"
                   />
+                  {nameError ? (
+                    <p id="api-token-name-error" className="text-xs text-destructive">
+                      {nameError}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Scopes</Label>
@@ -308,7 +346,7 @@ export function ApiTokenManagement() {
                   <Button variant="outline" onClick={() => handleDialogClose(false)}>
                     Cancel
                   </Button>
-                  <Button onClick={handleCreate} disabled={!tName || saving}>
+                  <Button onClick={handleCreate} disabled={saving} data-testid="api-token-create-submit">
                     {saving ? 'Creating…' : 'Create Token'}
                   </Button>
                 </>
@@ -374,7 +412,10 @@ export function ApiTokenManagement() {
                   size="icon"
                   className="h-7 w-7 text-destructive"
                   aria-label="Revoke API token"
-                  onClick={() => setPendingDelete(token)}
+                  onClick={() => {
+                    setDeleteError(null)
+                    setPendingDelete(token)
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -384,7 +425,15 @@ export function ApiTokenManagement() {
         </div>
       )}
 
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke API token?</AlertDialogTitle>
@@ -394,9 +443,16 @@ export function ApiTokenManagement() {
                 : 'This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError ? <InlineAlert tone="danger">{deleteError}</InlineAlert> : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={saving}>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+              disabled={saving}
+            >
               {saving ? 'Revoking…' : 'Revoke'}
             </AlertDialogAction>
           </AlertDialogFooter>

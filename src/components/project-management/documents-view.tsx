@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -39,6 +40,7 @@ import {
   FolderOpen,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { InlineAlert } from '@/components/ui/states'
 
 const MAX_DOCUMENT_TITLE_LENGTH = 500
 const MAX_DOCUMENT_CONTENT_LENGTH = 500000
@@ -86,6 +88,13 @@ export function DocumentsView() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [treeError, setTreeError] = useState<string | null>(null)
+  const [documentError, setDocumentError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createTitleError, setCreateTitleError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editFieldErrors, setEditFieldErrors] = useState<Partial<Record<'title' | 'content', string>>>({})
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const projectId = currentProject?.id
 
@@ -97,10 +106,11 @@ export function DocumentsView() {
   const fetchTree = useCallback(async () => {
     if (!projectId) return
     setIsLoading(true)
+    setTreeError(null)
     try {
       const res = await fetch(`/api/documents?projectId=${projectId}`)
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to load documents'))
+        setTreeError(await getApiErrorMessage(res, 'Failed to load documents'))
         setTree([])
         return
       }
@@ -108,7 +118,7 @@ export function DocumentsView() {
       const data = await res.json()
       setTree(data)
     } catch {
-      toast.error('Failed to load documents')
+      setTreeError('Failed to load documents')
     } finally {
       setIsLoading(false)
     }
@@ -117,10 +127,11 @@ export function DocumentsView() {
   useEffect(() => { fetchTree() }, [fetchTree])
 
   const selectDocument = async (id: string) => {
+    setDocumentError(null)
     try {
       const res = await fetch(`/api/documents/${id}?revisions=true`)
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to load document'))
+        setDocumentError(await getApiErrorMessage(res, 'Failed to load document'))
         return
       }
 
@@ -132,18 +143,24 @@ export function DocumentsView() {
       })
       setEditMode(false)
     } catch {
-      toast.error('Failed to load document')
+      setDocumentError('Failed to load document')
     }
   }
 
   const createDocument = async () => {
-    if (!projectId || !newDocTitle.trim()) return
-
-    if (newDocTitle.trim().length > MAX_DOCUMENT_TITLE_LENGTH) {
-      toast.error(`Document title cannot exceed ${MAX_DOCUMENT_TITLE_LENGTH} characters`)
+    if (!projectId) return
+    if (!newDocTitle.trim()) {
+      setCreateTitleError('Enter a document title.')
       return
     }
 
+    if (newDocTitle.trim().length > MAX_DOCUMENT_TITLE_LENGTH) {
+      setCreateTitleError(`Use ${MAX_DOCUMENT_TITLE_LENGTH} characters or fewer.`)
+      return
+    }
+
+    setCreateTitleError(null)
+    setCreateError(null)
     setIsSaving(true)
     try {
       const res = await fetch('/api/documents', {
@@ -157,7 +174,7 @@ export function DocumentsView() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to create document'))
+        setCreateError(await getApiErrorMessage(res, 'Failed to create document'))
         return
       }
 
@@ -169,7 +186,7 @@ export function DocumentsView() {
       await selectDocument(doc.id)
       toast.success('Document created')
     } catch {
-      toast.error('Failed to create document')
+      setCreateError('Failed to create document')
     } finally {
       setIsSaving(false)
     }
@@ -178,20 +195,28 @@ export function DocumentsView() {
   const saveDocument = async () => {
     if (!selectedDoc) return
     if (!editTitle.trim()) {
-      toast.error('Document title is required')
+      setEditFieldErrors((previous) => ({ ...previous, title: 'Enter a document title.' }))
       return
     }
 
     if (editTitle.trim().length > MAX_DOCUMENT_TITLE_LENGTH) {
-      toast.error(`Document title cannot exceed ${MAX_DOCUMENT_TITLE_LENGTH} characters`)
+      setEditFieldErrors((previous) => ({
+        ...previous,
+        title: `Use ${MAX_DOCUMENT_TITLE_LENGTH} characters or fewer.`,
+      }))
       return
     }
 
     if (editContent.length > MAX_DOCUMENT_CONTENT_LENGTH) {
-      toast.error(`Document content cannot exceed ${MAX_DOCUMENT_CONTENT_LENGTH} characters`)
+      setEditFieldErrors((previous) => ({
+        ...previous,
+        content: `Use ${MAX_DOCUMENT_CONTENT_LENGTH} characters or fewer.`,
+      }))
       return
     }
 
+    setEditFieldErrors({})
+    setEditError(null)
     setIsSaving(true)
     try {
       const res = await fetch(`/api/documents/${selectedDoc.id}`, {
@@ -204,7 +229,7 @@ export function DocumentsView() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to save document'))
+        setEditError(await getApiErrorMessage(res, 'Failed to save document'))
         return
       }
 
@@ -213,7 +238,7 @@ export function DocumentsView() {
       await fetchTree()
       toast.success('Document saved')
     } catch {
-      toast.error('Failed to save document')
+      setEditError('Failed to save document')
     }
     finally {
       setIsSaving(false)
@@ -224,10 +249,11 @@ export function DocumentsView() {
     if (!pendingDelete) return
 
     setIsDeleting(true)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/documents/${pendingDelete.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to delete document'))
+        setDeleteError(await getApiErrorMessage(res, 'Failed to delete document'))
         return
       }
 
@@ -239,7 +265,7 @@ export function DocumentsView() {
       await fetchTree()
       toast.success('Document deleted')
     } catch {
-      toast.error('Failed to delete document')
+      setDeleteError('Failed to delete document')
     } finally {
       setIsDeleting(false)
     }
@@ -258,6 +284,8 @@ export function DocumentsView() {
     if (!selectedDoc) return
     setEditTitle(selectedDoc.title)
     setEditContent(selectedDoc.content)
+    setEditError(null)
+    setEditFieldErrors({})
     setEditMode(true)
   }
 
@@ -317,6 +345,19 @@ export function DocumentsView() {
           <div className="py-1">
             {isLoading ? (
               <div className="px-3 py-4 text-xs text-muted-foreground">Loading...</div>
+            ) : treeError ? (
+              <div className="p-3">
+                <InlineAlert
+                  tone="danger"
+                  action={
+                    <Button size="sm" variant="outline" onClick={() => void fetchTree()}>
+                      Retry
+                    </Button>
+                  }
+                >
+                  {treeError}
+                </InlineAlert>
+              </div>
             ) : tree.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-muted-foreground">
                 <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -331,17 +372,33 @@ export function DocumentsView() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
+        {documentError ? (
+          <div className="border-b p-3" data-testid="document-load-error">
+            <InlineAlert tone="danger">{documentError}</InlineAlert>
+          </div>
+        ) : null}
         {selectedDoc ? (
           <>
             <div className="flex items-center justify-between px-6 py-3 border-b">
               <div>
                 {editMode ? (
-                  <Input
-                    value={editTitle}
-                    maxLength={MAX_DOCUMENT_TITLE_LENGTH}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="text-lg font-semibold h-9"
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      value={editTitle}
+                      maxLength={MAX_DOCUMENT_TITLE_LENGTH}
+                      onChange={(e) => {
+                        setEditTitle(e.target.value)
+                        setEditFieldErrors((previous) => ({ ...previous, title: undefined }))
+                        setEditError(null)
+                      }}
+                      className="text-lg font-semibold h-9"
+                      aria-label="Document title"
+                      aria-invalid={Boolean(editFieldErrors.title)}
+                    />
+                    {editFieldErrors.title ? (
+                      <p className="text-xs text-destructive">{editFieldErrors.title}</p>
+                    ) : null}
+                  </div>
                 ) : (
                   <h2 className="text-lg font-semibold">{selectedDoc.title}</h2>
                 )}
@@ -378,7 +435,10 @@ export function DocumentsView() {
                       size="icon"
                       className="h-8 w-8 text-destructive"
                         aria-label="Delete document"
-                      onClick={() => setPendingDelete({ id: selectedDoc.id, title: selectedDoc.title })}
+                      onClick={() => {
+                        setDeleteError(null)
+                        setPendingDelete({ id: selectedDoc.id, title: selectedDoc.title })
+                      }}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -386,15 +446,31 @@ export function DocumentsView() {
                 )}
               </div>
             </div>
+            {editError ? (
+              <div className="border-b px-6 py-3" data-testid="document-save-error">
+                <InlineAlert tone="danger">{editError}</InlineAlert>
+              </div>
+            ) : null}
             <ScrollArea className="flex-1 p-6">
               {editMode ? (
-                <Textarea
-                  value={editContent}
-                  maxLength={MAX_DOCUMENT_CONTENT_LENGTH}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="min-h-[400px] font-mono text-sm"
-                  placeholder="Write your document in Markdown..."
-                />
+                <div className="space-y-1">
+                  <Textarea
+                    value={editContent}
+                    maxLength={MAX_DOCUMENT_CONTENT_LENGTH}
+                    onChange={(e) => {
+                      setEditContent(e.target.value)
+                      setEditFieldErrors((previous) => ({ ...previous, content: undefined }))
+                      setEditError(null)
+                    }}
+                    className="min-h-[400px] font-mono text-sm"
+                    placeholder="Write your document in Markdown..."
+                    aria-label="Document content"
+                    aria-invalid={Boolean(editFieldErrors.content)}
+                  />
+                  {editFieldErrors.content ? (
+                    <p className="text-xs text-destructive">{editFieldErrors.content}</p>
+                  ) : null}
+                </div>
               ) : (
                 <div className="max-w-none text-sm leading-6 text-foreground">
                   {selectedDoc.content ? (
@@ -453,32 +529,70 @@ export function DocumentsView() {
       </div>
 
       {/* Create Document Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) {
+            setCreateError(null)
+            setCreateTitleError(null)
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Document</DialogTitle>
+            <DialogDescription>
+              Add a document to the project knowledge base.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {createError ? (
+              <div data-testid="document-create-error">
+                <InlineAlert tone="danger">{createError}</InlineAlert>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Title</label>
+              <label htmlFor="new-document-title" className="text-sm font-medium">Title</label>
               <Input
+                id="new-document-title"
                 value={newDocTitle}
                 maxLength={MAX_DOCUMENT_TITLE_LENGTH}
-                onChange={(e) => setNewDocTitle(e.target.value)}
+                onChange={(e) => {
+                  setNewDocTitle(e.target.value)
+                  setCreateTitleError(null)
+                  setCreateError(null)
+                }}
                 placeholder="Document title"
+                aria-invalid={Boolean(createTitleError)}
+                aria-describedby={createTitleError ? 'new-document-title-error' : undefined}
+                data-testid="document-create-title-input"
               />
+              {createTitleError ? (
+                <p id="new-document-title-error" className="text-xs text-destructive">
+                  {createTitleError}
+                </p>
+              ) : null}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={createDocument} disabled={!newDocTitle.trim() || isSaving}>
+            <Button onClick={createDocument} disabled={isSaving} data-testid="document-create-submit">
               {isSaving ? 'Creating…' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete document?</AlertDialogTitle>
@@ -488,9 +602,16 @@ export function DocumentsView() {
                 : 'This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError ? <InlineAlert tone="danger">{deleteError}</InlineAlert> : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteDocument} disabled={isDeleting}>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmDeleteDocument()
+              }}
+              disabled={isDeleting}
+            >
               {isDeleting ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>

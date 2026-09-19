@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
@@ -33,6 +32,7 @@ export function IssueLoadMore({ className }: { className?: string }) {
   } = useAppStore()
 
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const loaded = issues.length
   const hasMore = issueTotal > loaded
@@ -40,6 +40,7 @@ export function IssueLoadMore({ className }: { className?: string }) {
   const loadMore = useCallback(async () => {
     if (!currentProject) return
     setIsLoading(true)
+    setError(null)
 
     try {
       // Offset paging over a stable order; the list endpoint sorts by
@@ -65,7 +66,7 @@ export function IssueLoadMore({ className }: { className?: string }) {
 
       appendIssues(payload)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load more work items')
+      setError(error instanceof Error ? error.message : 'Failed to load more work items')
     } finally {
       setIsLoading(false)
     }
@@ -74,6 +75,7 @@ export function IssueLoadMore({ className }: { className?: string }) {
   const searchWholeProject = useCallback(async () => {
     if (!currentProject) return
     setIsLoading(true)
+    setError(null)
 
     try {
       // Push the active filters to the server so results cover every work item,
@@ -100,9 +102,8 @@ export function IssueLoadMore({ className }: { className?: string }) {
         pageSize: issuePageSize,
       })
 
-      toast.success(`Searched all ${issueTotal} work items`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Search failed')
+      setError(error instanceof Error ? error.message : 'Search failed')
     } finally {
       setIsLoading(false)
     }
@@ -122,6 +123,12 @@ export function IssueLoadMore({ className }: { className?: string }) {
         <span className="font-medium text-foreground tabular-nums">{issueTotal}</span> work items.
         Filters and search apply only to what is loaded.
       </p>
+
+      {error ? (
+        <p role="alert" className="w-full text-xs text-danger">
+          {error} Your loaded work items are unchanged; retry when ready.
+        </p>
+      ) : null}
 
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={searchWholeProject} disabled={isLoading}>

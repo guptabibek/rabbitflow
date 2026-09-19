@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { canonicalWorkspaceRoute } from '@/lib/domain/workspace-route'
 import { useAppStore, type Project } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PageHeader } from '@/components/ui/page-header'
-import { EmptyState } from '@/components/ui/states'
+import { EmptyState, ErrorState, InlineAlert } from '@/components/ui/states'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -51,8 +51,28 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PROJECT_COLORS } from '@/lib/ui-tokens'
+import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from './confirm-destructive-dialog'
+import { ProjectDirectorySkeleton } from './workspace-loading'
 
 const PROJECT_ROLE_OPTIONS = ['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer'] as const
+
+type ProjectFormErrors = {
+  name?: string
+  key?: string
+  submit?: string
+}
+
+type UserFormErrors = {
+  name?: string
+  email?: string
+  password?: string
+  project?: string
+  submit?: string
+}
 
 export function WorkspaceDashboardPage() {
   const router = useRouter()
@@ -66,6 +86,9 @@ export function WorkspaceDashboardPage() {
   } = useAppStore()
   const [projects, setLocalProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [pageActionError, setPageActionError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showEditProject, setShowEditProject] = useState(false)
@@ -91,9 +114,13 @@ export function WorkspaceDashboardPage() {
     projectRole: 'Dev' as (typeof PROJECT_ROLE_OPTIONS)[number],
   })
   const [isCreating, setIsCreating] = useState(false)
+  const [createErrors, setCreateErrors] = useState<ProjectFormErrors>({})
   const [isUpdatingProject, setIsUpdatingProject] = useState(false)
+  const [editErrors, setEditErrors] = useState<ProjectFormErrors>({})
   const [isDeletingProject, setIsDeletingProject] = useState(false)
+  const projectDeletion = useDestructiveConfirm<Project>()
   const [isCreatingUser, setIsCreatingUser] = useState(false)
+  const [createUserErrors, setCreateUserErrors] = useState<UserFormErrors>({})
   const canCreateProject = currentUser?.globalRole === 'admin'
 
   const canManageProject = (project: Project) =>
@@ -102,10 +129,11 @@ export function WorkspaceDashboardPage() {
   const openAdminPanel = async () => {
     const targetProject = projects.find((project) => !project.isArchived) ?? null
     if (!targetProject) {
-      toast.error('Create a project before opening the admin panel')
+      setPageActionError('Create a project before opening the admin panel.')
       return
     }
 
+    setPageActionError(null)
     try {
       const res = await fetch('/api/projects/active', {
         method: 'PUT',
@@ -114,8 +142,7 @@ export function WorkspaceDashboardPage() {
       })
 
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to open admin panel')
+        setPageActionError(await getApiErrorMessage(res, 'The admin panel could not be opened.'))
         return
       }
 
@@ -124,12 +151,14 @@ export function WorkspaceDashboardPage() {
       router.push('/admin/panel')
       router.refresh()
     } catch {
-      toast.error('Failed to open admin panel')
+      setPageActionError('The server could not be reached while opening the admin panel.')
     }
   }
 
   useEffect(() => {
     const init = async () => {
+      setIsLoading(true)
+      setLoadError(null)
       try {
         const [meRes, projectRes, clearActiveRes] = await Promise.all([
           fetch('/api/auth/me'),
@@ -137,9 +166,13 @@ export function WorkspaceDashboardPage() {
           fetch('/api/projects/active', { method: 'DELETE' }),
         ])
 
-        if (!meRes.ok) {
+        if (meRes.status === 401 || meRes.status === 403) {
           router.replace('/login')
           return
+        }
+
+        if (!meRes.ok) {
+          throw new Error(await getApiErrorMessage(meRes, 'Your account could not be loaded'))
         }
 
         const me = await meRes.json()
@@ -150,22 +183,28 @@ export function WorkspaceDashboardPage() {
           console.error('Failed to clear active project context')
         }
 
-        if (projectRes.ok) {
-          const data = await projectRes.json()
-          setLocalProjects(data)
-          setProjects(data)
+        if (!projectRes.ok) {
+          throw new Error(await getApiErrorMessage(projectRes, 'Projects could not be loaded'))
         }
-      } catch {
-        router.replace('/login')
+
+        const data = await projectRes.json()
+        if (!Array.isArray(data)) {
+          throw new Error('Projects returned malformed data')
+        }
+        setLocalProjects(data)
+        setProjects(data)
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'Projects could not be loaded')
       } finally {
         setIsLoading(false)
       }
     }
 
     void init()
-  }, [resetProjectContext, router, setCurrentUser, setProjects])
+  }, [reloadKey, resetProjectContext, router, setCurrentUser, setProjects])
 
   const handleSelectProject = async (project: Project) => {
+    setPageActionError(null)
     try {
       const res = await fetch('/api/projects/active', {
         method: 'PUT',
@@ -174,36 +213,47 @@ export function WorkspaceDashboardPage() {
       })
 
       if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to switch project')
+        setPageActionError(await getApiErrorMessage(res, `${project.name} could not be opened.`))
         return
       }
 
       setCurrentProject(project)
       setActiveProjectId(project.id)
-      router.push('/')
-      router.refresh()
+      router.push(canonicalWorkspaceRoute(project.id, 'dashboard'))
     } catch {
-      toast.error('Failed to switch project')
+      setPageActionError(`The server could not be reached while opening ${project.name}.`)
     }
   }
 
   const handleCreateProject = async () => {
-    if (!createForm.name.trim() || !createForm.key.trim()) {
+    const errors: ProjectFormErrors = {}
+    if (!createForm.name.trim()) errors.name = 'Enter a project name.'
+    if (!/^[A-Z]{2,10}$/.test(createForm.key)) {
+      errors.key = 'Use 2–10 uppercase letters.'
+    }
+    if (errors.name || errors.key) {
+      setCreateErrors(errors)
       return
     }
 
+    setCreateErrors({})
     setIsCreating(true)
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify({
+          ...createForm,
+          name: createForm.name.trim(),
+          key: createForm.key.trim(),
+          description: createForm.description.trim(),
+        }),
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || 'Failed to create project')
+        setCreateErrors({
+          submit: await getApiErrorMessage(res, 'Project could not be created. Try again.'),
+        })
         return
       }
 
@@ -213,16 +263,18 @@ export function WorkspaceDashboardPage() {
       setProjects(nextProjects)
       setShowCreate(false)
       setCreateForm({ name: '', key: '', description: '', color: '#6366f1' })
+      setCreateErrors({})
       toast.success('Project created successfully')
       await handleSelectProject(project)
     } catch {
-      toast.error('Network error')
+      setCreateErrors({ submit: 'The server could not be reached. Check your connection and try again.' })
     } finally {
       setIsCreating(false)
     }
   }
 
   const openEditProject = (project: Project) => {
+    setEditErrors({})
     setEditProjectId(project.id)
     setEditForm({
       name: project.name,
@@ -233,10 +285,16 @@ export function WorkspaceDashboardPage() {
   }
 
   const handleUpdateProject = async () => {
-    if (!editProjectId || !editForm.name.trim()) {
+    if (!editProjectId) {
       return
     }
 
+    if (!editForm.name.trim()) {
+      setEditErrors({ name: 'Enter a project name.' })
+      return
+    }
+
+    setEditErrors({})
     setIsUpdatingProject(true)
     try {
       const response = await fetch(`/api/projects/${editProjectId}`, {
@@ -250,8 +308,9 @@ export function WorkspaceDashboardPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to update project')
+        setEditErrors({
+          submit: await getApiErrorMessage(response, 'Project changes could not be saved. Try again.'),
+        })
         return
       }
 
@@ -264,61 +323,54 @@ export function WorkspaceDashboardPage() {
       setProjects(nextProjects)
       setShowEditProject(false)
       setEditProjectId(null)
+      setEditErrors({})
       toast.success('Project updated successfully')
     } catch {
-      toast.error('Network error')
+      setEditErrors({ submit: 'The server could not be reached. Your changes are still here.' })
     } finally {
       setIsUpdatingProject(false)
     }
   }
 
-  /*
-    `projectId` lets the card menu delete without first opening the edit dialog.
-    Called with no argument it falls back to the dialog's own target, which is
-    how the Delete button inside the edit dialog still works.
-  */
-  const handleDeleteProject = async (projectId?: string) => {
-    const targetId = projectId ?? editProjectId
-    if (!targetId) {
-      return
-    }
-
-    const targetProject = projects.find((project) => project.id === targetId)
-    if (!targetProject || !confirm(`Delete project "${targetProject.name}"?`)) {
-      return
-    }
-
+  const handleDeleteProject = async (targetProject: Project) => {
     setIsDeletingProject(true)
     try {
-      const response = await fetch(`/api/projects/${targetId}`, {
+      const response = await fetch(`/api/projects/${targetProject.id}`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete project')
-        return
+        return getApiErrorMessage(response, 'Project could not be deleted. Try again.')
       }
 
-      const nextProjects = projects.filter((project) => project.id !== targetId)
+      const nextProjects = projects.filter((project) => project.id !== targetProject.id)
       setLocalProjects(nextProjects)
       setProjects(nextProjects)
       setShowEditProject(false)
       setEditProjectId(null)
       toast.success('Project deleted successfully')
+      return true
     } catch {
-      toast.error('Network error')
+      return 'The server could not be reached. Check your connection and try again.'
     } finally {
       setIsDeletingProject(false)
     }
   }
 
   const handleCreateUser = async () => {
-    if (
-      !createUserForm.name.trim() ||
-      !createUserForm.email.trim() ||
-      createUserForm.password.length < 8
-    ) {
+    const errors: UserFormErrors = {}
+    if (!createUserForm.name.trim()) errors.name = 'Enter the user’s full name.'
+    if (!createUserForm.email.trim()) {
+      errors.email = 'Enter an email address.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createUserForm.email.trim())) {
+      errors.email = 'Enter a valid email address.'
+    }
+    if (createUserForm.password.length < 8) {
+      errors.password = 'Use at least 8 characters.'
+    }
+
+    if (errors.name || errors.email || errors.password) {
+      setCreateUserErrors(errors)
       return
     }
 
@@ -326,10 +378,11 @@ export function WorkspaceDashboardPage() {
     const targetProjectId = createUserForm.projectId || availableProjects[0]?.id || ''
 
     if (createUserForm.assignToProject && !targetProjectId) {
-      toast.error('No active project available for assignment')
+      setCreateUserErrors({ project: 'Create a project before assigning this user.' })
       return
     }
 
+    setCreateUserErrors({})
     setIsCreatingUser(true)
     try {
       const response = await fetch('/api/users', {
@@ -346,8 +399,9 @@ export function WorkspaceDashboardPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to create user')
+        setCreateUserErrors({
+          submit: await getApiErrorMessage(response, 'User could not be created. Try again.'),
+        })
         return
       }
 
@@ -362,6 +416,7 @@ export function WorkspaceDashboardPage() {
         projectId: '',
         projectRole: 'Dev',
       })
+      setCreateUserErrors({})
       const baseMessage = createUserForm.assignToProject
         ? 'User created, assigned to project, and must reset password on first login.'
         : 'User created and must reset password on first login.'
@@ -376,7 +431,7 @@ export function WorkspaceDashboardPage() {
         toast.success(baseMessage)
       }
     } catch {
-      toast.error('Network error')
+      setCreateUserErrors({ submit: 'The server could not be reached. The entered details are still here.' })
     } finally {
       setIsCreatingUser(false)
     }
@@ -396,19 +451,23 @@ export function WorkspaceDashboardPage() {
   )
 
   if (isLoading) {
+    return <ProjectDirectorySkeleton />
+  }
+
+  if (loadError) {
     return (
-      <div className="min-h-dvh bg-background">
-        <div className="h-12 border-b border-border" />
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-2 h-3.5 w-72" />
-          <Skeleton className="mt-5 h-8 w-full max-w-sm" />
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((index) => (
-              <Skeleton key={index} className="h-[7.5rem] w-full" />
-            ))}
-          </div>
-        </div>
+      <div className="flex min-h-dvh flex-col bg-background">
+        <div className="h-12 shrink-0 border-b border-border" />
+        <main id="main-content" className="flex flex-1 items-center justify-center px-4">
+          <ErrorState
+            title="Projects did not load"
+            description="Your session is still available. Retry the project list request."
+            detail={loadError}
+            headingLevel={1}
+            onRetry={() => setReloadKey((value) => value + 1)}
+            retryLabel="Retry projects"
+          />
+        </main>
       </div>
     )
   }
@@ -522,6 +581,21 @@ export function WorkspaceDashboardPage() {
       />
 
       <main className="w-full flex-1 px-4 py-4 sm:px-6 sm:py-5">
+        {pageActionError ? (
+          <div className="mb-4" data-testid="dashboard-page-action-error">
+            <InlineAlert
+              tone="danger"
+              title="The action did not complete."
+              action={
+                <Button variant="ghost" size="xs" onClick={() => setPageActionError(null)}>
+                  Dismiss
+                </Button>
+              }
+            >
+              {pageActionError}
+            </InlineAlert>
+          </div>
+        ) : null}
         {/*
           Search is worth its row only once a list stops being scannable. Below
           that it stays mounted but visually hidden, so keyboard and assistive
@@ -611,7 +685,7 @@ export function WorkspaceDashboardPage() {
                           variant="destructive"
                           onClick={(event) => {
                             event.stopPropagation()
-                            void handleDeleteProject(project.id)
+                            projectDeletion.request(project)
                           }}
                           data-testid={`dashboard-project-delete-${project.id}`}
                         >
@@ -675,30 +749,53 @@ export function WorkspaceDashboardPage() {
         )}
       </main>
 
-      <Dialog open={canCreateProject && showCreate} onOpenChange={setShowCreate}>
+      <Dialog
+        open={canCreateProject && showCreate}
+        onOpenChange={(open) => {
+          setShowCreate(open)
+          if (!open && !isCreating) setCreateErrors({})
+        }}
+      >
         <DialogContent className="max-w-md">
           <div data-testid="dashboard-create-project-dialog" />
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {createErrors.submit ? (
+              <div data-testid="dashboard-create-project-error">
+                <InlineAlert tone="danger" title="Project was not created.">
+                  {createErrors.submit}
+                </InlineAlert>
+              </div>
+            ) : null}
             <div>
-              <Label>Project Name</Label>
+              <Label htmlFor="create-project-name">Project Name</Label>
               <Input
+                id="create-project-name"
                 value={createForm.name}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateForm((state) => ({ ...state, name: event.target.value }))
-                }
+                  setCreateErrors((state) => ({ ...state, name: undefined, submit: undefined }))
+                }}
                 placeholder="My Awesome Project"
                 className="mt-1.5"
+                aria-invalid={Boolean(createErrors.name)}
+                aria-describedby={createErrors.name ? 'create-project-name-error' : undefined}
                 data-testid="dashboard-create-project-name-input"
               />
+              {createErrors.name ? (
+                <p id="create-project-name-error" className="mt-1 text-xs text-danger">
+                  {createErrors.name}
+                </p>
+              ) : null}
             </div>
             <div>
-              <Label>Project Key</Label>
+              <Label htmlFor="create-project-key">Project Key</Label>
               <Input
+                id="create-project-key"
                 value={createForm.key}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateForm((state) => ({
                     ...state,
                     key: event.target.value
@@ -706,23 +803,36 @@ export function WorkspaceDashboardPage() {
                       .replace(/[^A-Z]/g, '')
                       .slice(0, 10),
                   }))
-                }
+                  setCreateErrors((state) => ({ ...state, key: undefined, submit: undefined }))
+                }}
                 placeholder="MAP"
                 maxLength={10}
                 className="mt-1.5 font-mono uppercase"
+                aria-invalid={Boolean(createErrors.key)}
+                aria-describedby={
+                  createErrors.key
+                    ? 'create-project-key-help create-project-key-error'
+                    : 'create-project-key-help'
+                }
                 data-testid="dashboard-create-project-key-input"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p id="create-project-key-help" className="mt-1 text-xs text-muted-foreground">
                 2-10 uppercase letters, used in work item keys like `MAP-123`.
               </p>
+              {createErrors.key ? (
+                <p id="create-project-key-error" className="mt-1 text-xs text-danger">
+                  {createErrors.key}
+                </p>
+              ) : null}
             </div>
             <div>
               <Label>Description</Label>
               <Textarea
                 value={createForm.description}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateForm((state) => ({ ...state, description: event.target.value }))
-                }
+                  setCreateErrors((state) => ({ ...state, submit: undefined }))
+                }}
                 placeholder="Brief project description..."
                 rows={3}
                 className="mt-1.5"
@@ -742,7 +852,11 @@ export function WorkspaceDashboardPage() {
                         : 'hover:scale-105'
                     }`}
                     style={{ backgroundColor: color }}
-                    onClick={() => setCreateForm((state) => ({ ...state, color }))}
+                    onClick={() => {
+                      setCreateForm((state) => ({ ...state, color }))
+                      setCreateErrors((state) => ({ ...state, submit: undefined }))
+                    }}
+                    aria-label={`Use ${color} for this project`}
                     data-testid={`dashboard-create-project-color-${color.replace('#', '')}`}
                   />
                 ))}
@@ -751,7 +865,7 @@ export function WorkspaceDashboardPage() {
             <Button
               className="w-full"
               onClick={handleCreateProject}
-              disabled={isCreating || !createForm.name.trim() || createForm.key.length < 2}
+              disabled={isCreating}
               data-testid="dashboard-create-project-submit-button"
             >
               {isCreating ? 'Creating...' : 'Create Project'}
@@ -766,6 +880,7 @@ export function WorkspaceDashboardPage() {
           setShowEditProject(open)
           if (!open && !isUpdatingProject && !isDeletingProject) {
             setEditProjectId(null)
+            setEditErrors({})
           }
         }}
       >
@@ -775,25 +890,42 @@ export function WorkspaceDashboardPage() {
             <DialogTitle>Edit Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {editErrors.submit ? (
+              <div data-testid="dashboard-edit-project-error">
+                <InlineAlert tone="danger" title="Changes were not saved.">
+                  {editErrors.submit}
+                </InlineAlert>
+              </div>
+            ) : null}
             <div>
-              <Label>Project Name</Label>
+              <Label htmlFor="edit-project-name">Project Name</Label>
               <Input
+                id="edit-project-name"
                 value={editForm.name}
-                onChange={(event) =>
+                onChange={(event) => {
                   setEditForm((state) => ({ ...state, name: event.target.value }))
-                }
+                  setEditErrors((state) => ({ ...state, name: undefined, submit: undefined }))
+                }}
                 placeholder="Project name"
                 className="mt-1.5"
+                aria-invalid={Boolean(editErrors.name)}
+                aria-describedby={editErrors.name ? 'edit-project-name-error' : undefined}
                 data-testid="dashboard-edit-project-name-input"
               />
+              {editErrors.name ? (
+                <p id="edit-project-name-error" className="mt-1 text-xs text-danger">
+                  {editErrors.name}
+                </p>
+              ) : null}
             </div>
             <div>
               <Label>Description</Label>
               <Textarea
                 value={editForm.description}
-                onChange={(event) =>
+                onChange={(event) => {
                   setEditForm((state) => ({ ...state, description: event.target.value }))
-                }
+                  setEditErrors((state) => ({ ...state, submit: undefined }))
+                }}
                 placeholder="Brief project description..."
                 rows={3}
                 className="mt-1.5"
@@ -813,7 +945,11 @@ export function WorkspaceDashboardPage() {
                         : 'hover:scale-105'
                     }`}
                     style={{ backgroundColor: color }}
-                    onClick={() => setEditForm((state) => ({ ...state, color }))}
+                    onClick={() => {
+                      setEditForm((state) => ({ ...state, color }))
+                      setEditErrors((state) => ({ ...state, submit: undefined }))
+                    }}
+                    aria-label={`Use ${color} for this project`}
                     data-testid={`dashboard-edit-project-color-${color.replace('#', '')}`}
                   />
                 ))}
@@ -823,10 +959,10 @@ export function WorkspaceDashboardPage() {
               <Button
                 variant="outline"
                 className="flex-1"
-                // Wrapped, not passed directly: `handleDeleteProject` takes an
-                // optional id, and a bare reference would hand it the click
-                // event as the project to delete.
-                onClick={() => void handleDeleteProject()}
+                onClick={() => {
+                  const project = projects.find((candidate) => candidate.id === editProjectId)
+                  if (project) projectDeletion.request(project)
+                }}
                 disabled={isUpdatingProject || isDeletingProject}
                 data-testid="dashboard-delete-project-button"
               >
@@ -835,7 +971,7 @@ export function WorkspaceDashboardPage() {
               <Button
                 className="flex-1"
                 onClick={handleUpdateProject}
-                disabled={isUpdatingProject || isDeletingProject || !editForm.name.trim()}
+                disabled={isUpdatingProject || isDeletingProject}
                 data-testid="dashboard-edit-project-submit-button"
               >
                 {isUpdatingProject ? 'Saving...' : 'Save Changes'}
@@ -858,6 +994,7 @@ export function WorkspaceDashboardPage() {
               projectId: '',
               projectRole: 'Dev',
             })
+            setCreateUserErrors({})
           }
         }}
       >
@@ -866,54 +1003,96 @@ export function WorkspaceDashboardPage() {
             <DialogTitle>Create New User</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {createUserErrors.submit ? (
+              <div data-testid="dashboard-create-user-error">
+                <InlineAlert tone="danger" title="User was not created.">
+                  {createUserErrors.submit}
+                </InlineAlert>
+              </div>
+            ) : null}
             <div>
-              <Label>Full Name</Label>
+              <Label htmlFor="create-user-name">Full Name</Label>
               <Input
+                id="create-user-name"
                 value={createUserForm.name}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateUserForm((state) => ({ ...state, name: event.target.value }))
-                }
+                  setCreateUserErrors((state) => ({ ...state, name: undefined, submit: undefined }))
+                }}
                 placeholder="Jane Doe"
                 className="mt-1.5"
+                aria-invalid={Boolean(createUserErrors.name)}
+                aria-describedby={createUserErrors.name ? 'create-user-name-error' : undefined}
+                data-testid="dashboard-create-user-name-input"
               />
+              {createUserErrors.name ? (
+                <p id="create-user-name-error" className="mt-1 text-xs text-danger">
+                  {createUserErrors.name}
+                </p>
+              ) : null}
             </div>
             <div>
-              <Label>Email</Label>
+              <Label htmlFor="create-user-email">Email</Label>
               <Input
+                id="create-user-email"
                 type="email"
                 value={createUserForm.email}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateUserForm((state) => ({ ...state, email: event.target.value }))
-                }
+                  setCreateUserErrors((state) => ({ ...state, email: undefined, submit: undefined }))
+                }}
                 placeholder="jane@example.com"
                 className="mt-1.5"
+                aria-invalid={Boolean(createUserErrors.email)}
+                aria-describedby={createUserErrors.email ? 'create-user-email-error' : undefined}
+                data-testid="dashboard-create-user-email-input"
               />
+              {createUserErrors.email ? (
+                <p id="create-user-email-error" className="mt-1 text-xs text-danger">
+                  {createUserErrors.email}
+                </p>
+              ) : null}
             </div>
             <div>
-              <Label>Temporary Password</Label>
+              <Label htmlFor="create-user-password">Temporary Password</Label>
               <Input
+                id="create-user-password"
                 type="password"
                 value={createUserForm.password}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateUserForm((state) => ({ ...state, password: event.target.value }))
-                }
+                  setCreateUserErrors((state) => ({ ...state, password: undefined, submit: undefined }))
+                }}
                 placeholder="Minimum 8 characters"
                 className="mt-1.5"
+                aria-invalid={Boolean(createUserErrors.password)}
+                aria-describedby={
+                  createUserErrors.password
+                    ? 'create-user-password-help create-user-password-error'
+                    : 'create-user-password-help'
+                }
+                data-testid="dashboard-create-user-password-input"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p id="create-user-password-help" className="mt-1 text-xs text-muted-foreground">
                 The user will be forced to reset password on first login.
               </p>
+              {createUserErrors.password ? (
+                <p id="create-user-password-error" className="mt-1 text-xs text-danger">
+                  {createUserErrors.password}
+                </p>
+              ) : null}
             </div>
             <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
               <input
                 type="checkbox"
                 checked={createUserForm.assignToProject}
-                onChange={(event) =>
+                onChange={(event) => {
                   setCreateUserForm((state) => ({
                     ...state,
                     assignToProject: event.target.checked,
                   }))
-                }
+                  setCreateUserErrors((state) => ({ ...state, project: undefined, submit: undefined }))
+                }}
               />
               Assign user to a project now
             </label>
@@ -927,11 +1106,16 @@ export function WorkspaceDashboardPage() {
                       projects.find((project) => !project.isArchived)?.id ||
                       ''
                     }
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
                       setCreateUserForm((state) => ({ ...state, projectId: value }))
-                    }
+                      setCreateUserErrors((state) => ({ ...state, project: undefined, submit: undefined }))
+                    }}
                   >
-                    <SelectTrigger className="mt-1.5">
+                    <SelectTrigger
+                      className="mt-1.5"
+                      aria-invalid={Boolean(createUserErrors.project)}
+                      aria-describedby={createUserErrors.project ? 'create-user-project-error' : undefined}
+                    >
                       <SelectValue placeholder="Select project" />
                     </SelectTrigger>
                     <SelectContent>
@@ -944,17 +1128,23 @@ export function WorkspaceDashboardPage() {
                         ))}
                     </SelectContent>
                   </Select>
+                  {createUserErrors.project ? (
+                    <p id="create-user-project-error" className="mt-1 text-xs text-danger">
+                      {createUserErrors.project}
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <Label>Project Role</Label>
                   <Select
                     value={createUserForm.projectRole}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
                       setCreateUserForm((state) => ({
                         ...state,
                         projectRole: value as (typeof PROJECT_ROLE_OPTIONS)[number],
                       }))
-                    }
+                      setCreateUserErrors((state) => ({ ...state, submit: undefined }))
+                    }}
                   >
                     <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder="Select role" />
@@ -973,14 +1163,8 @@ export function WorkspaceDashboardPage() {
             <Button
               className="w-full"
               onClick={handleCreateUser}
-              disabled={
-                isCreatingUser ||
-                !createUserForm.name.trim() ||
-                !createUserForm.email.trim() ||
-                createUserForm.password.length < 8 ||
-                (createUserForm.assignToProject &&
-                  projects.filter((project) => !project.isArchived).length === 0)
-              }
+              disabled={isCreatingUser}
+              data-testid="dashboard-create-user-submit-button"
             >
               {isCreatingUser
                 ? 'Creating...'
@@ -991,6 +1175,17 @@ export function WorkspaceDashboardPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={projectDeletion.isOpen}
+        onOpenChange={projectDeletion.onOpenChange}
+        title={`Delete ${projectDeletion.target?.name ?? 'this project'}?`}
+        description="All work items, sprints, teams, documents, reports, automation rules, and project history will be permanently removed. This cannot be undone."
+        confirmLabel="Delete project"
+        onConfirm={() =>
+          projectDeletion.target ? handleDeleteProject(projectDeletion.target) : false
+        }
+      />
     </div>
   )
 }

@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
 import {
   Activity,
   BarChart3,
@@ -324,10 +323,9 @@ export function AppSidebar({
           accent: payload.accentColor || null,
         })
       })
-      .catch((error) => {
+      .catch(() => {
         if (!cancelled) {
           setBranding({ projectId: currentProject.id, name: 'RabbitFlow', accent: null })
-          toast.error(error instanceof Error ? error.message : 'Failed to load project branding')
         }
       })
 
@@ -532,6 +530,7 @@ export function AppSidebar({
                 onClick={() => currentProject && setCreateIssueOpen(true)}
                 disabled={!currentProject}
                 aria-label="New work item"
+                data-testid="sidebar-new-work-item-button"
               >
                 <Plus />
               </Button>
@@ -546,6 +545,7 @@ export function AppSidebar({
             className="w-full justify-center"
             onClick={() => currentProject && setCreateIssueOpen(true)}
             disabled={!currentProject}
+            data-testid="sidebar-new-work-item-button"
           >
             <Plus />
             New work item

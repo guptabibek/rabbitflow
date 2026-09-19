@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -41,6 +41,7 @@ import {
   ConfirmDestructiveDialog,
   useDestructiveConfirm,
 } from '@/components/project-management/confirm-destructive-dialog'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,6 +134,21 @@ interface AutomationLog {
   createdAt: string
 }
 
+function actionValidationMessage(action: Action) {
+  switch (action.type) {
+    case 'change_status': return action.config.stateId ? null : 'Select a state.'
+    case 'assign_user': return action.config.userId ? null : 'Select a user.'
+    case 'add_label':
+    case 'remove_label': return action.config.labelId ? null : 'Select a label.'
+    case 'add_comment': return action.config.body?.trim() ? null : 'Enter the comment text.'
+    case 'move_to_iteration': return action.config.iterationId ? null : 'Select an iteration.'
+    case 'set_field': return action.config.field?.trim() && action.config.value?.trim()
+      ? null
+      : 'Enter both a field and value.'
+    default: return 'Configure this action.'
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -154,10 +170,18 @@ export function AutomationRuleBuilder() {
     { type: 'set_field', config: {} },
   ])
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [conditionErrors, setConditionErrors] = useState<Record<number, string>>({})
+  const [actionErrors, setActionErrors] = useState<Record<number, string>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [logErrors, setLogErrors] = useState<Record<string, string>>({})
 
   const fetchRules = useCallback(async () => {
     if (!currentProject) return
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/automations?projectId=${currentProject.id}`)
       if (!res.ok) {
@@ -166,7 +190,7 @@ export function AutomationRuleBuilder() {
       const data = await res.json()
       setRules(data.rules ?? data)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load automation rules')
+      setLoadError(error instanceof Error ? error.message : 'Failed to load automation rules')
     } finally {
       setLoading(false)
     }
@@ -175,14 +199,25 @@ export function AutomationRuleBuilder() {
   useEffect(() => { fetchRules() }, [fetchRules])
 
   const fetchLogs = async (ruleId: string) => {
-    const res = await fetch(`/api/automations/${ruleId}`)
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to load automation logs'))
-      return
-    }
+    setLogErrors((previous) => ({ ...previous, [ruleId]: '' }))
+    try {
+      const res = await fetch(`/api/automations/${ruleId}`)
+      if (!res.ok) {
+        setLogErrors((previous) => ({
+          ...previous,
+          [ruleId]: 'Failed to load automation logs',
+        }))
+        return
+      }
 
-    const data = await res.json()
-    setLogs((prev) => ({ ...prev, [ruleId]: data.logs ?? [] }))
+      const data = await res.json()
+      setLogs((prev) => ({ ...prev, [ruleId]: data.logs ?? [] }))
+    } catch {
+      setLogErrors((previous) => ({
+        ...previous,
+        [ruleId]: 'Failed to load automation logs',
+      }))
+    }
   }
 
   const toggleExpand = (id: string) => {
@@ -195,7 +230,33 @@ export function AutomationRuleBuilder() {
   }
 
   const handleCreate = async () => {
-    if (!currentProject || !name) return
+    if (!currentProject) return
+
+    const nextConditionErrors = Object.fromEntries(
+      conditions.flatMap((condition, index) => {
+        const needsValue = !['is_empty', 'is_not_empty'].includes(condition.operator)
+        return !condition.field.trim() || (needsValue && !condition.value.trim())
+          ? [[index, needsValue ? 'Enter a field and comparison value.' : 'Enter a field.']]
+          : []
+      })
+    ) as Record<number, string>
+    const nextActionErrors = Object.fromEntries(
+      actions.flatMap((action, index) => {
+        const message = actionValidationMessage(action)
+        return message ? [[index, message]] : []
+      })
+    ) as Record<number, string>
+
+    if (!name.trim()) setNameError('Enter a rule name.')
+    setConditionErrors(nextConditionErrors)
+    setActionErrors(nextActionErrors)
+    if (!name.trim() || actions.length === 0 || Object.keys(nextConditionErrors).length > 0 || Object.keys(nextActionErrors).length > 0) {
+      if (actions.length === 0) setFormError('Add at least one action.')
+      return
+    }
+
+    setNameError(null)
+    setFormError(null)
     setSaving(true)
     try {
       // Translate frontend action format {type, config} to API format {type, field?, value?}
@@ -217,8 +278,8 @@ export function AutomationRuleBuilder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: currentProject.id,
-          name,
-          description: description || undefined,
+          name: name.trim(),
+          description: description.trim() || undefined,
           trigger,
           conditions,
           actions: apiActions,
@@ -231,36 +292,43 @@ export function AutomationRuleBuilder() {
       resetForm()
       await fetchRules()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create automation rule')
+      setFormError(error instanceof Error ? error.message : 'Failed to create automation rule')
     } finally {
       setSaving(false)
     }
   }
 
   const handleToggle = async (rule: AutomationRule) => {
-    const res = await fetch(`/api/automations/${rule.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !rule.isActive }),
-    })
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to update automation rule'))
-      return
-    }
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/automations/${rule.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !rule.isActive }),
+      })
+      if (!res.ok) {
+        setActionError(await getApiErrorMessage(res, 'Failed to update automation rule'))
+        return
+      }
 
-    await fetchRules()
+      await fetchRules()
+    } catch {
+      setActionError('Failed to update automation rule')
+    }
   }
 
   const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
 
   const handleDelete = async (id: string) => {
-    const res = await fetch(`/api/automations/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to delete automation rule'))
-      return
-    }
+    try {
+      const res = await fetch(`/api/automations/${id}`, { method: 'DELETE' })
+      if (!res.ok) return await getApiErrorMessage(res, 'Failed to delete automation rule')
 
-    await fetchRules()
+      await fetchRules()
+      return true
+    } catch {
+      return 'Failed to delete automation rule'
+    }
   }
 
   const resetForm = () => {
@@ -269,6 +337,10 @@ export function AutomationRuleBuilder() {
     setTrigger('issue_created')
     setConditions([])
     setActions([{ type: 'set_field', config: {} }])
+    setFormError(null)
+    setNameError(null)
+    setConditionErrors({})
+    setActionErrors({})
   }
 
   const addCondition = () => {
@@ -277,12 +349,15 @@ export function AutomationRuleBuilder() {
 
   const removeCondition = (i: number) => {
     setConditions((prev) => prev.filter((_, idx) => idx !== i))
+    setConditionErrors({})
   }
 
   const updateCondition = (i: number, patch: Partial<Condition>) => {
     setConditions((prev) =>
       prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c))
     )
+    setConditionErrors((previous) => ({ ...previous, [i]: '' }))
+    setFormError(null)
   }
 
   const addAction = () => {
@@ -291,12 +366,15 @@ export function AutomationRuleBuilder() {
 
   const removeAction = (i: number) => {
     setActions((prev) => prev.filter((_, idx) => idx !== i))
+    setActionErrors({})
   }
 
   const updateAction = (i: number, patch: Partial<Action>) => {
     setActions((prev) =>
       prev.map((a, idx) => (idx === i ? { ...a, ...patch } : a))
     )
+    setActionErrors((previous) => ({ ...previous, [i]: '' }))
+    setFormError(null)
   }
 
   if (!currentProject) {
@@ -316,7 +394,13 @@ export function AutomationRuleBuilder() {
             Automate work item actions based on triggers and conditions.
           </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open)
+            if (!open) resetForm()
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-3.5 w-3.5" />
@@ -326,17 +410,38 @@ export function AutomationRuleBuilder() {
           <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create Automation Rule</DialogTitle>
+              <DialogDescription>
+                Define a trigger, optional conditions, and one or more fully configured actions.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-5 py-2">
+              {formError ? (
+                <div data-testid="automation-create-error">
+                  <InlineAlert tone="danger">{formError}</InlineAlert>
+                </div>
+              ) : null}
               {/* Name / description */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Name</Label>
+                  <Label htmlFor="automation-name">Name</Label>
                   <Input
+                    id="automation-name"
                     placeholder="e.g. Auto-assign bugs"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => {
+                      setName(e.target.value)
+                      setNameError(null)
+                      setFormError(null)
+                    }}
+                    aria-invalid={Boolean(nameError)}
+                    aria-describedby={nameError ? 'automation-name-error' : undefined}
+                    data-testid="automation-name-input"
                   />
+                  {nameError ? (
+                    <p id="automation-name-error" className="text-xs text-destructive">
+                      {nameError}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Description</Label>
@@ -378,7 +483,8 @@ export function AutomationRuleBuilder() {
                   <p className="text-xs text-muted-foreground">No conditions — rule triggers on every event.</p>
                 )}
                 {conditions.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-md border p-2">
+                  <div key={i} className="rounded-md border p-2">
+                    <div className="flex items-center gap-2">
                     <Input
                       placeholder="field"
                       value={c.field}
@@ -406,6 +512,10 @@ export function AutomationRuleBuilder() {
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove condition" onClick={() => removeCondition(i)}>
                       <X className="h-3 w-3" />
                     </Button>
+                    </div>
+                    {conditionErrors[i] ? (
+                      <p className="mt-1 text-xs text-destructive">{conditionErrors[i]}</p>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -420,7 +530,8 @@ export function AutomationRuleBuilder() {
                   </Button>
                 </div>
                 {actions.map((a, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-md border p-2">
+                  <div key={i} className="rounded-md border p-2">
+                    <div className="flex items-center gap-2">
                     <Select
                       value={a.type}
                       onValueChange={(v) =>
@@ -555,6 +666,10 @@ export function AutomationRuleBuilder() {
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Remove action" onClick={() => removeAction(i)}>
                       <X className="h-3 w-3" />
                     </Button>
+                    </div>
+                    {actionErrors[i] ? (
+                      <p className="mt-1 text-xs text-destructive">{actionErrors[i]}</p>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -563,7 +678,7 @@ export function AutomationRuleBuilder() {
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={!name || actions.length === 0 || saving}>
+              <Button onClick={handleCreate} disabled={saving} data-testid="automation-create-submit">
                 {saving ? 'Creating…' : 'Create Rule'}
               </Button>
             </DialogFooter>
@@ -571,12 +686,26 @@ export function AutomationRuleBuilder() {
         </Dialog>
       </div>
 
+      {actionError ? (
+        <div data-testid="automation-action-error">
+          <InlineAlert tone="danger">{actionError}</InlineAlert>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-16 w-full rounded-lg" />
           ))}
         </div>
+      ) : loadError ? (
+        <ErrorState
+          title="Automation rules did not load"
+          description="The rule list could not be read. Nothing has changed."
+          detail={loadError}
+          onRetry={() => void fetchRules()}
+          size="sm"
+        />
       ) : rules.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -591,7 +720,12 @@ export function AutomationRuleBuilder() {
             <Card key={rule.id}>
               <CardContent className="p-3">
                 <div className="flex items-center gap-3">
-                  <button className="flex-shrink-0" onClick={() => toggleExpand(rule.id)}>
+                  <button
+                    className="flex-shrink-0"
+                    onClick={() => toggleExpand(rule.id)}
+                    aria-expanded={expandedId === rule.id}
+                    aria-label={expandedId === rule.id ? `Hide details for ${rule.name}` : `Show details for ${rule.name}`}
+                  >
                     {expandedId === rule.id ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     ) : (
@@ -684,7 +818,18 @@ export function AutomationRuleBuilder() {
                     {/* Execution logs */}
                     <div>
                       <h4 className="mb-1 text-xs font-semibold text-muted-foreground">Recent Logs</h4>
-                      {!logs[rule.id] ? (
+                      {logErrors[rule.id] ? (
+                        <InlineAlert
+                          tone="danger"
+                          action={
+                            <Button size="sm" variant="outline" onClick={() => void fetchLogs(rule.id)}>
+                              Retry
+                            </Button>
+                          }
+                        >
+                          {logErrors[rule.id]}
+                        </InlineAlert>
+                      ) : !logs[rule.id] ? (
                         <Skeleton className="h-8 w-full" />
                       ) : logs[rule.id].length === 0 ? (
                         <p className="text-xs text-muted-foreground">No executions yet.</p>
@@ -727,9 +872,9 @@ export function AutomationRuleBuilder() {
         onOpenChange={deleteConfirm.onOpenChange}
         title={`Delete automation rule "${deleteConfirm.target?.name ?? ''}"?`}
         description="This rule will stop running immediately. Work items it already changed are not reverted. This cannot be undone."
-        onConfirm={async () => {
-          if (deleteConfirm.target) await handleDelete(deleteConfirm.target.id)
-        }}
+        onConfirm={() =>
+          deleteConfirm.target ? handleDelete(deleteConfirm.target.id) : false
+        }
       />
     </div>
   )

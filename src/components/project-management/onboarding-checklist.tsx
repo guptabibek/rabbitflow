@@ -339,7 +339,10 @@ export function OnboardingChecklistCompact() {
   if (!showChecklist || !status) return null
 
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-primary/[0.06] px-3 py-2">
+    <div
+      className="flex items-center gap-2 rounded-lg bg-primary/[0.06] px-3 py-2"
+      data-testid="onboarding-checklist-compact"
+    >
       <Sparkles className="h-3.5 w-3.5 text-primary" />
       <div className="flex-1">
         <div className="flex items-center justify-between">

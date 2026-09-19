@@ -8,18 +8,9 @@ import {
   type WorkItemTypeDefinition,
 } from '@/store/app-store'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -76,6 +67,8 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { InlineAlert } from '@/components/ui/states'
+import { ConfirmDestructiveDialog } from '@/components/project-management/confirm-destructive-dialog'
 
 type WorkItemTypeManagementMode = 'dialog' | 'screen'
 
@@ -418,9 +411,9 @@ function AddSectionPicker({
       <DialogContent className="max-w-md gap-0 p-0">
         <DialogHeader className="px-5 pt-5 pb-3">
           <DialogTitle className="text-base">Add Section</DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <DialogDescription>
             Choose a section type to add to this work item type.
-          </p>
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 px-5 pb-5">
           {SECTION_TYPE_OPTIONS.map((option) => {
@@ -1039,6 +1032,7 @@ export function WorkItemTypeManagement({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
+  const [operationError, setOperationError] = useState<string | null>(null)
   const formSnapshotRef = useRef<string>('')
   const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
@@ -1105,6 +1099,7 @@ export function WorkItemTypeManagement({
       if (!currentProject) return
 
       setIsLoading(true)
+      setOperationError(null)
       try {
         const response = await fetch(
           `/api/work-item-types?projectId=${currentProject.id}&includeDisabled=true`,
@@ -1113,7 +1108,7 @@ export function WorkItemTypeManagement({
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
-          toast.error(error.error || 'Failed to load work item types')
+          setOperationError(error.error || 'Failed to load work item types')
           return
         }
 
@@ -1136,7 +1131,7 @@ export function WorkItemTypeManagement({
         }
 
         console.error('Failed to load work item types:', caughtError)
-        toast.error('Failed to load work item types')
+        setOperationError(caughtError instanceof Error ? caughtError.message : 'Failed to load work item types')
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false)
@@ -1181,8 +1176,9 @@ export function WorkItemTypeManagement({
   }
 
   const resetForCreate = () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1212,8 +1208,9 @@ export function WorkItemTypeManagement({
   }
 
   const handleSave = async () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1221,7 +1218,7 @@ export function WorkItemTypeManagement({
 
     const validationError = validateWorkItemTypeForm(form)
     if (validationError) {
-      toast.error(validationError)
+      setOperationError(validationError)
       return
     }
 
@@ -1268,7 +1265,7 @@ export function WorkItemTypeManagement({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to save work item type')
+        setOperationError(error.error || 'Failed to save work item type')
         return
       }
 
@@ -1286,7 +1283,7 @@ export function WorkItemTypeManagement({
       toast.success(form.id ? 'Work item type updated' : 'Work item type created')
     } catch (caughtError) {
       console.error('Failed to save work item type:', caughtError)
-      toast.error('Failed to save work item type')
+      setOperationError(caughtError instanceof Error ? caughtError.message : 'Failed to save work item type')
     } finally {
       setIsSaving(false)
     }
@@ -1294,11 +1291,10 @@ export function WorkItemTypeManagement({
 
   const handleDelete = async () => {
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
-      return
+      return 'You do not have permission to manage work item types.'
     }
 
-    if (!form.id) return
+    if (!form.id) return false
 
     try {
       const response = await fetch(`/api/work-item-types/${form.id}`, {
@@ -1307,8 +1303,7 @@ export function WorkItemTypeManagement({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete work item type')
-        return
+        return error.error || 'Failed to delete work item type'
       }
 
       const nextDefinitions = typeDefinitions.filter((d) => d.id !== form.id)
@@ -1323,15 +1318,17 @@ export function WorkItemTypeManagement({
       }
       await refreshEnabledTypes()
       toast.success('Work item type deleted')
+      return true
     } catch (caughtError) {
       console.error('Failed to delete work item type:', caughtError)
-      toast.error('Failed to delete work item type')
+      return caughtError instanceof Error ? caughtError.message : 'Failed to delete work item type'
     }
   }
 
   const handleDuplicate = () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1557,6 +1554,21 @@ export function WorkItemTypeManagement({
             </Button>
           </div>
         </div>
+
+        {operationError ? (
+          <InlineAlert
+            tone="danger"
+            title="Work item type not saved."
+            className="mx-6 mt-3"
+            action={
+              <Button size="sm" variant="outline" onClick={() => void loadTypes()}>
+                Reload types
+              </Button>
+            }
+          >
+            {operationError}
+          </InlineAlert>
+        ) : null}
 
         {/* Tabs + Content */}
         <Tabs
@@ -1946,30 +1958,14 @@ export function WorkItemTypeManagement({
       <div className="flex h-full min-h-0 flex-col bg-background">
         {titleHeader}
         {editorBody}
-
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete &ldquo;{form.name}&rdquo;?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete this work item type definition. Existing work items
-                of this type must be migrated before deletion. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  setDeleteDialogOpen(false)
-                  void handleDelete()
-                }}
-              >
-                Delete Permanently
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDestructiveDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title={`Delete “${form.name}”?`}
+          description="This permanently deletes the work item type definition. Existing work items must be migrated before deletion."
+          confirmLabel="Delete permanently"
+          onConfirm={handleDelete}
+        />
       </div>
     )
   }
@@ -1990,34 +1986,23 @@ export function WorkItemTypeManagement({
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[92vh] max-w-[1340px] overflow-hidden p-0 gap-0">
+        <DialogTitle className="sr-only">Work Item Types</DialogTitle>
+        <DialogDescription className="sr-only">
+          Create and configure work item types, sections, and fields.
+        </DialogDescription>
         {titleHeader}
         {editorBody}
       </DialogContent>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{form.name}&rdquo;?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this work item type definition. Existing work items
-              of this type must be migrated before deletion. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                setDeleteDialogOpen(false)
-                void handleDelete()
-              }}
-            >
-              Delete Permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDestructiveDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={`Delete “${form.name}”?`}
+        description="This permanently deletes the work item type definition. Existing work items must be migrated before deletion."
+        confirmLabel="Delete permanently"
+        onConfirm={handleDelete}
+      />
     </Dialog>
   )
 }

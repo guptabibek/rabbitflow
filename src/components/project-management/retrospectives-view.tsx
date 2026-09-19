@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -34,6 +34,7 @@ import {
   Lightbulb,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
 
 type RetroItem = {
   id: string
@@ -79,12 +80,16 @@ export function RetrospectivesView() {
   const [newIterationId, setNewIterationId] = useState('')
   const [newItemCategory, setNewItemCategory] = useState<string>('went_well')
   const [newItemContent, setNewItemContent] = useState('')
+  const [listError, setListError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const projectId = currentProject?.id
 
   const fetchRetros = useCallback(async () => {
     if (!projectId) return
     setIsLoading(true)
+    setListError(null)
     try {
       const res = await fetch(`/api/retrospectives?projectId=${projectId}`)
       if (!res.ok) {
@@ -92,7 +97,8 @@ export function RetrospectivesView() {
       }
       setRetros(await res.json())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load retrospectives')
+      setRetros([])
+      setListError(error instanceof Error ? error.message : 'Failed to load retrospectives')
     } finally {
       setIsLoading(false)
     }
@@ -101,6 +107,7 @@ export function RetrospectivesView() {
   useEffect(() => { fetchRetros() }, [fetchRetros])
 
   const selectRetro = async (id: string) => {
+    setActionError(null)
     try {
       const res = await fetch(`/api/retrospectives/${id}`)
       if (!res.ok) {
@@ -108,12 +115,22 @@ export function RetrospectivesView() {
       }
       setSelectedRetro(await res.json())
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load retrospective')
+      setActionError(error instanceof Error ? error.message : 'Failed to load retrospective')
     }
   }
 
   const createRetro = async () => {
-    if (!projectId || !newTitle.trim() || !newIterationId) return
+    if (!projectId) return
+    setActionError(null)
+    if (!newTitle.trim()) {
+      setActionError('Retrospective title is required.')
+      return
+    }
+    if (!newIterationId) {
+      setActionError('Choose a sprint or iteration.')
+      return
+    }
+    setSaving(true)
     try {
       const res = await fetch('/api/retrospectives', {
         method: 'POST',
@@ -133,12 +150,20 @@ export function RetrospectivesView() {
       await fetchRetros()
       await selectRetro(retro.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create retrospective')
+      setActionError(error instanceof Error ? error.message : 'Failed to create retrospective')
+    } finally {
+      setSaving(false)
     }
   }
 
   const addItem = async () => {
-    if (!selectedRetro || !newItemContent.trim()) return
+    if (!selectedRetro) return
+    setActionError(null)
+    if (!newItemContent.trim()) {
+      setActionError('Retrospective item content is required.')
+      return
+    }
+    setSaving(true)
     try {
       const res = await fetch('/api/retrospectives', {
         method: 'POST',
@@ -156,12 +181,15 @@ export function RetrospectivesView() {
       setAddItemOpen(false)
       await selectRetro(selectedRetro.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to add retrospective item')
+      setActionError(error instanceof Error ? error.message : 'Failed to add retrospective item')
+    } finally {
+      setSaving(false)
     }
   }
 
   const vote = async (itemId: string) => {
     if (!selectedRetro) return
+    setActionError(null)
     try {
       const res = await fetch(`/api/retrospectives/${selectedRetro.id}`, {
         method: 'POST',
@@ -173,7 +201,7 @@ export function RetrospectivesView() {
       }
       await selectRetro(selectedRetro.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update vote')
+      setActionError(error instanceof Error ? error.message : 'Failed to update vote')
     }
   }
 
@@ -204,6 +232,10 @@ export function RetrospectivesView() {
             Add Item
           </Button>
         </div>
+
+        {actionError ? (
+          <InlineAlert tone="danger" title="Action not completed.">{actionError}</InlineAlert>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {CATEGORIES.map((cat) => {
@@ -262,6 +294,7 @@ export function RetrospectivesView() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Add Retro Item</DialogTitle>
+              <DialogDescription>Add an observation or follow-up to this retrospective.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -279,14 +312,17 @@ export function RetrospectivesView() {
                 <label className="text-sm font-medium">Content</label>
                 <Textarea
                   value={newItemContent}
-                  onChange={(e) => setNewItemContent(e.target.value)}
+                  onChange={(e) => { setNewItemContent(e.target.value); setActionError(null) }}
                   placeholder="Share your thoughts..."
                 />
               </div>
             </div>
+            {actionError ? (
+              <InlineAlert tone="danger" title="Item not added.">{actionError}</InlineAlert>
+            ) : null}
             <DialogFooter>
               <Button variant="outline" onClick={() => setAddItemOpen(false)}>Cancel</Button>
-              <Button onClick={addItem} disabled={!newItemContent.trim()}>Add</Button>
+              <Button onClick={addItem} disabled={!newItemContent.trim() || saving}>{saving ? 'Adding…' : 'Add'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -314,6 +350,13 @@ export function RetrospectivesView() {
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <Card key={i} className="animate-pulse h-20" />)}
         </div>
+      ) : listError ? (
+        <ErrorState
+          title="Retrospectives did not load"
+          description="The retrospective list is temporarily unavailable."
+          detail={listError}
+          onRetry={() => void fetchRetros()}
+        />
       ) : retros.length === 0 ? (
         <Card className="py-16 text-center">
           <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -350,13 +393,14 @@ export function RetrospectivesView() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Retrospective</DialogTitle>
+            <DialogDescription>Start a retrospective for a sprint or iteration.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Title</label>
               <Input
                 value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
+                onChange={(e) => { setNewTitle(e.target.value); setActionError(null) }}
                 placeholder="Sprint N Retrospective"
               />
             </div>
@@ -372,9 +416,12 @@ export function RetrospectivesView() {
               </Select>
             </div>
           </div>
+          {actionError ? (
+            <InlineAlert tone="danger" title="Retrospective not created.">{actionError}</InlineAlert>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={createRetro} disabled={!newTitle.trim() || !newIterationId}>Create</Button>
+            <Button onClick={createRetro} disabled={!newTitle.trim() || !newIterationId || saving}>{saving ? 'Creating…' : 'Create'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
 
 type BrandingState = {
   organizationName: string | null
@@ -45,6 +46,8 @@ export function BrandingStudio() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [loadKey, setLoadKey] = useState(0)
   const canManage = currentProjectPermissions.includes('branding:manage')
 
   useEffect(() => {
@@ -79,11 +82,35 @@ export function BrandingStudio() {
     return () => {
       cancelled = true
     }
-  }, [currentProject])
+  }, [currentProject, loadKey])
 
   if (!currentProject) return null
 
   const saveBranding = async () => {
+    setSaveError(null)
+    const urlFields = [
+      ['Logo URL', branding.logoUrl],
+      ['Support URL', branding.supportUrl],
+      ['Help center URL', branding.helpCenterUrl],
+    ] as const
+    for (const [label, value] of urlFields) {
+      if (!value?.trim()) continue
+      try {
+        const parsed = new URL(value)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error()
+      } catch {
+        setSaveError(`${label} must be an absolute HTTP or HTTPS URL.`)
+        return
+      }
+    }
+    if (branding.supportEmail?.trim() && !/^\S+@\S+\.\S+$/.test(branding.supportEmail.trim())) {
+      setSaveError('Support email must be a valid email address.')
+      return
+    }
+    if (!/^#[0-9a-f]{6}$/i.test(branding.accentColor)) {
+      setSaveError('Accent color must be a six-digit hex color such as #22c55e.')
+      return
+    }
     setSaving(true)
     try {
       const response = await fetch(`/api/projects/${currentProject.id}/branding`, {
@@ -99,7 +126,7 @@ export function BrandingStudio() {
       setBranding({ ...EMPTY_BRANDING, ...(await response.json()) })
       toast.success('Branding updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save branding')
+      setSaveError(error instanceof Error ? error.message : 'Failed to save branding')
     } finally {
       setSaving(false)
     }
@@ -111,9 +138,22 @@ export function BrandingStudio() {
         <CardHeader>
           <CardTitle>White-Label Branding</CardTitle>
           <p className="text-sm text-muted-foreground">Project-specific product identity, support surfaces, and login copy.</p>
-          {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
+          {loadError ? (
+            <InlineAlert
+              tone="danger"
+              title="Branding did not load."
+              action={<Button size="sm" variant="outline" onClick={() => setLoadKey((value) => value + 1)}>Retry</Button>}
+            >
+              {loadError}
+            </InlineAlert>
+          ) : null}
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
+          {saveError ? (
+            <InlineAlert tone="danger" title="Branding not saved." className="md:col-span-2">
+              {saveError}
+            </InlineAlert>
+          ) : null}
           <div className="space-y-2"><Label>Organization name</Label><Input disabled={!canManage || loading} value={branding.organizationName ?? ''} onChange={(event) => setBranding((state) => ({ ...state, organizationName: event.target.value }))} /></div>
           <div className="space-y-2"><Label>Product name</Label><Input disabled={!canManage || loading} value={branding.productName ?? ''} onChange={(event) => setBranding((state) => ({ ...state, productName: event.target.value }))} /></div>
           <div className="space-y-2"><Label>Logo URL</Label><Input disabled={!canManage || loading} value={branding.logoUrl ?? ''} onChange={(event) => setBranding((state) => ({ ...state, logoUrl: event.target.value }))} /></div>

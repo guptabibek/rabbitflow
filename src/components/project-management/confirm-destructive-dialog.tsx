@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 /**
  * Shared confirmation for irreversible actions.
@@ -31,7 +32,8 @@ type ConfirmDestructiveDialogProps = {
   description: ReactNode
   /** Label for the confirming button. Defaults to "Delete". */
   confirmLabel?: string
-  onConfirm: () => void | Promise<void>
+  /** Return false or an error message when the operation fails and the dialog should stay open. */
+  onConfirm: () => boolean | void | string | Promise<boolean | void | string>
 }
 
 export function ConfirmDestructiveDialog({
@@ -43,26 +45,50 @@ export function ConfirmDestructiveDialog({
   onConfirm,
 }: ConfirmDestructiveDialogProps) {
   const [isPending, setIsPending] = useState(false)
+  const [failureMessage, setFailureMessage] = useState<string | null>(null)
+
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) setFailureMessage(null)
+    onOpenChange(nextOpen)
+  }, [onOpenChange])
 
   const handleConfirm = useCallback(async () => {
+    setFailureMessage(null)
     setIsPending(true)
     try {
-      await onConfirm()
-      onOpenChange(false)
+      const succeeded = await onConfirm()
+      if (typeof succeeded === 'string') {
+        setFailureMessage(succeeded)
+      } else if (succeeded === false) {
+        setFailureMessage('The action did not complete. Review the problem and try again.')
+      } else {
+        handleOpenChange(false)
+      }
+    } catch (error) {
+      setFailureMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : 'The action did not complete. Try again.'
+      )
     } finally {
       // Reset regardless of outcome so a failed action can be retried rather
       // than leaving the dialog stuck in a pending state.
       setIsPending(false)
     }
-  }, [onConfirm, onOpenChange])
+  }, [handleOpenChange, onConfirm])
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {failureMessage ? (
+          <InlineAlert tone="danger" title="Action failed.">
+            {failureMessage}
+          </InlineAlert>
+        ) : null}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction

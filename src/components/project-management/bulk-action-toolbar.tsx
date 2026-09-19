@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { toast } from 'sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +22,15 @@ import {
   Loader2,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
+import {
+  getAvailableBoardStatuses,
+  type BoardStatus,
+} from '@/lib/domain/work-item-view'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,13 +68,48 @@ export function BulkActionToolbar({
   onClearSelection,
   onActionComplete,
 }: BulkToolbarProps) {
-  const { currentProject, users, labels, projects } = useAppStore()
+  const {
+    currentProject,
+    users,
+    labels,
+    projects,
+    issues,
+    states,
+    stateTransitions,
+    typeStateMappings,
+    workItemTypes,
+  } = useAppStore()
   const [executing, setExecuting] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const deleteConfirm = useDestructiveConfirm<number>()
+
+  const legalStatusOptions = useMemo(() => {
+    const selectedIssues = issues.filter((issue) => selectedIds.includes(issue.id))
+    if (selectedIssues.length !== selectedIds.length) return []
+
+    return STATUS_OPTIONS.filter(
+      (status): status is (typeof STATUS_OPTIONS)[number] & { value: BoardStatus } =>
+        status.value !== 'cancelled' &&
+        selectedIssues.every((issue) => {
+          const typeDefinition = workItemTypes.find(
+            (definition) => definition.key === issue.workItemType
+          )
+          return getAvailableBoardStatuses({
+            states,
+            typeStateMappings,
+            stateTransitions,
+            workItemTypeId: typeDefinition?.id,
+            currentStateId: issue.stateRecord?.id,
+          }).includes(status.value as BoardStatus)
+        })
+    )
+  }, [issues, selectedIds, stateTransitions, states, typeStateMappings, workItemTypes])
 
   if (selectedIds.length === 0) return null
 
   const executeBulkAction = async (action: BulkAction) => {
-    if (!currentProject) return
+    if (!currentProject) return 'Select a project before applying a bulk action.'
+    setActionError(null)
     setExecuting(true)
     try {
       const body: Record<string, unknown> = {
@@ -92,14 +135,18 @@ export function BulkActionToolbar({
 
       onActionComplete()
       onClearSelection()
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to apply bulk action')
+      const message = error instanceof Error ? error.message : 'Failed to apply bulk action'
+      setActionError(message)
+      return message
     } finally {
       setExecuting(false)
     }
   }
 
   return (
+    <div className="space-y-2">
     <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 shadow-sm" data-testid="bulk-action-toolbar">
       <Badge variant="secondary" className="gap-1">
         <CheckSquare className="h-3 w-3" />
@@ -122,7 +169,7 @@ export function BulkActionToolbar({
           {users.map((u) => (
             <DropdownMenuItem
               key={u.id}
-              onClick={() => executeBulkAction({ type: 'update', updates: { assigneeId: u.id } })}
+            onClick={() => void executeBulkAction({ type: 'update', updates: { assigneeId: u.id } })}
               data-testid={`bulk-assign-user-${u.id}`}
             >
               {u.name}
@@ -130,7 +177,7 @@ export function BulkActionToolbar({
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => executeBulkAction({ type: 'update', updates: { assigneeId: null } })}
+            onClick={() => void executeBulkAction({ type: 'update', updates: { assigneeId: null } })}
             data-testid="bulk-assign-unassigned"
           >
             Unassign
@@ -142,18 +189,18 @@ export function BulkActionToolbar({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-1 h-7 text-xs" disabled={executing} data-testid="bulk-status-trigger">
-            Status
+            State
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Set status
+            Move to board column
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {STATUS_OPTIONS.map((status) => (
+          {legalStatusOptions.map((status) => (
             <DropdownMenuItem
               key={status.value}
-              onClick={() => executeBulkAction({ type: 'update', updates: { status: status.value } })}
+              onClick={() => void executeBulkAction({ type: 'update', updates: { status: status.value } })}
               data-testid={`bulk-status-${status.value}`}
             >
               {status.label}
@@ -173,7 +220,7 @@ export function BulkActionToolbar({
           {PRIORITY_OPTIONS.map((priority) => (
             <DropdownMenuItem
               key={priority}
-              onClick={() => executeBulkAction({ type: 'update', updates: { priority } })}
+              onClick={() => void executeBulkAction({ type: 'update', updates: { priority } })}
               data-testid={`bulk-priority-${priority}`}
             >
               {priority.charAt(0).toUpperCase() + priority.slice(1)}
@@ -198,7 +245,7 @@ export function BulkActionToolbar({
             <DropdownMenuItem
               key={l.id}
               onClick={() =>
-                executeBulkAction({
+                void executeBulkAction({
                   type: 'update',
                   updates: { addLabelIds: [l.id] },
                 })
@@ -220,7 +267,7 @@ export function BulkActionToolbar({
             <DropdownMenuItem
               key={`rm-${l.id}`}
               onClick={() =>
-                executeBulkAction({
+                void executeBulkAction({
                   type: 'update',
                   updates: { removeLabelIds: [l.id] },
                 })
@@ -257,7 +304,7 @@ export function BulkActionToolbar({
               <DropdownMenuItem
                 key={p.id}
                 onClick={() =>
-                  executeBulkAction({ type: 'move', targetProjectId: p.id })
+                  void executeBulkAction({ type: 'move', targetProjectId: p.id })
                 }
                 data-testid={`bulk-move-project-${p.id}`}
               >
@@ -277,7 +324,7 @@ export function BulkActionToolbar({
         size="sm"
         className="gap-1 h-7 text-xs text-destructive hover:text-destructive"
         disabled={executing}
-        onClick={() => executeBulkAction({ type: 'delete' })}
+        onClick={() => deleteConfirm.request(selectedIds.length)}
         data-testid="bulk-delete-button"
       >
         <Trash2 className="h-3 w-3" />
@@ -296,6 +343,18 @@ export function BulkActionToolbar({
       >
         <X className="h-3.5 w-3.5" />
       </Button>
+    </div>
+    {actionError ? (
+      <InlineAlert tone="danger" title="Bulk action not completed.">{actionError}</InlineAlert>
+    ) : null}
+    <ConfirmDestructiveDialog
+      open={deleteConfirm.isOpen}
+      onOpenChange={deleteConfirm.onOpenChange}
+      title={`Delete ${deleteConfirm.target ?? 0} selected work items?`}
+      description="Their comments, attachments, links, history, and planning data will be permanently removed."
+      confirmLabel="Delete work items"
+      onConfirm={() => executeBulkAction({ type: 'delete' })}
+    />
     </div>
   )
 }

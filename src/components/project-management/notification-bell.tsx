@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -242,13 +241,13 @@ export function NotificationBell() {
         timeoutMs: 6_000,
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to mark notification as read')
+      setLoadError(error instanceof Error ? error.message : 'Failed to mark notification as read')
       void fetchNotifications()
       return
     }
 
     if (!response.ok) {
-      toast.error(await getApiErrorMessage(response, 'Failed to mark notification as read'))
+      setLoadError(await getApiErrorMessage(response, 'Failed to mark notification as read'))
       void fetchNotifications()
       return
     }
@@ -270,13 +269,13 @@ export function NotificationBell() {
         timeoutMs: 6_000,
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to mark notifications as read')
+      setLoadError(error instanceof Error ? error.message : 'Failed to mark notifications as read')
       void fetchNotifications()
       return
     }
 
     if (!response.ok) {
-      toast.error(await getApiErrorMessage(response, 'Failed to mark notifications as read'))
+      setLoadError(await getApiErrorMessage(response, 'Failed to mark notifications as read'))
       void fetchNotifications()
       return
     }

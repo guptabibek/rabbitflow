@@ -36,6 +36,8 @@ backups, no TLS, no observability.
 | [security-audit.md](security-audit.md) | 25 findings with reproduction steps; the primary document |
 | [ux-audit.md](ux-audit.md) | Browser-verified UX findings with screenshot evidence |
 | [ux-qa-validation-2026-09-13.md](ux-qa-validation-2026-09-13.md) | Release-candidate UX, workflow, role, API, database, and production Docker verification |
+| [product-10-of-10-plan.md](product-10-of-10-plan.md) | Twelve-week product, UX, QA, and production plan with measurable release gates |
+| [product-10-of-10-execution.md](product-10-of-10-execution.md) | Current implementation status, completed slices, evidence, and remaining acceptance work |
 | [frontend-architecture.md](frontend-architecture.md) | The monolithic-component problem and its consequences |
 | [backend-architecture.md](backend-architecture.md) | Layering, side-effect durability, observability |
 | [database-architecture.md](database-architecture.md) | Schema, cascades, indexing, migration safety |

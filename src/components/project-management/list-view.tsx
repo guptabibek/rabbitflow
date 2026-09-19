@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAppStore, type Issue } from '@/store/app-store'
 import { compareIssueKeys } from '@/lib/domain/issue-key-format'
 import { filterIssues } from '@/lib/domain/issue-filters'
@@ -16,7 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { EmptyState } from '@/components/ui/states'
+import { EmptyState, InlineAlert } from '@/components/ui/states'
 import { SkeletonTable } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { BulkActionToolbar } from '@/components/project-management/bulk-action-toolbar'
@@ -41,7 +41,6 @@ import {
   Shapes,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { toast } from 'sonner'
 import { cn, getApiErrorMessage } from '@/lib/utils'
 import { hasActiveFilters } from '@/lib/domain/issue-filters'
 
@@ -127,6 +126,28 @@ export function ListView() {
   const [selectedIssues, setSelectedIssues] = useState<string[]>([])
   const [sortField, setSortField] = useState<SortField>('key')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  const refreshIssues = useCallback(async () => {
+    if (!currentProject) return
+    setRefreshError(null)
+    try {
+      const res = await fetch(
+        `/api/issues?projectId=${currentProject.id}&pageSize=200&includeTotal=true`
+      )
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Failed to refresh work items'))
+      }
+      const payload: unknown = await res.json()
+      if (!Array.isArray(payload)) throw new Error('Work items returned malformed data')
+      setIssues(payload, {
+        total: Number(res.headers.get('x-total-count')) || payload.length,
+        pageSize: 200,
+      })
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Failed to refresh work items')
+    }
+  }, [currentProject, setIssues])
 
   const hasPersistedExpansion = currentProject
     ? Object.prototype.hasOwnProperty.call(hierarchyExpandedByProject, currentProject.id)
@@ -288,44 +309,7 @@ export function ListView() {
           <BulkActionToolbar
             selectedIds={selectedIssues}
             onClearSelection={() => setSelectedIssues([])}
-            onActionComplete={async () => {
-              if (!currentProject) return
-              try {
-                /*
-                  `/api/issues`, not `/api/backlog`.
-
-                  The backlog route answers with `{ projectId, total, tree }` —
-                  an object — and this handler pushed it straight into the store
-                  as the issue list. Every later `issues.filter(...)` then threw
-                  `issues.filter is not a function` and the whole view fell into
-                  the error boundary, so completing any bulk action from this
-                  list took the list down with it.
-
-                  This endpoint returns the flat array the store expects, and is
-                  the same one the workspace loads from.
-                */
-                const res = await fetch(
-                  `/api/issues?projectId=${currentProject.id}&pageSize=200&includeTotal=true`
-                )
-                if (!res.ok) {
-                  throw new Error(await getApiErrorMessage(res, 'Failed to refresh work items'))
-                }
-
-                const payload: unknown = await res.json()
-                if (!Array.isArray(payload)) {
-                  throw new Error('Work items returned malformed data')
-                }
-
-                setIssues(payload, {
-                  total: Number(res.headers.get('x-total-count')) || payload.length,
-                  pageSize: 200,
-                })
-              } catch (error) {
-                toast.error(
-                  error instanceof Error ? error.message : 'Failed to refresh work items'
-                )
-              }
-            }}
+            onActionComplete={refreshIssues}
           />
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -344,6 +328,14 @@ export function ListView() {
           <IssueLoadMore className="my-0" />
         </div>
       </div>
+
+      {refreshError ? (
+        <div className="shrink-0 border-b border-border px-3 py-2">
+          <InlineAlert tone="danger" title="The action completed, but the list is stale." action={<Button size="sm" variant="outline" onClick={() => void refreshIssues()}>Retry refresh</Button>}>
+            {refreshError}
+          </InlineAlert>
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
         {isLoading && visibleRows.length === 0 ? (
@@ -426,7 +418,7 @@ export function ListView() {
                       </span>
                       {issue.storyPoints != null ? (
                         <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {issue.storyPoints}pt
+                          {issue.storyPoints} SP
                         </span>
                       ) : null}
                     </div>
@@ -676,7 +668,7 @@ export function ListView() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="text-[12px] font-medium text-foreground">
-                              {issue.storyPoints}
+                              {issue.storyPoints} SP
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>Story points</TooltipContent>

@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getAvailableWorkItemStates } from '../../src/lib/domain/work-item-view.ts'
+import {
+  getAvailableBoardStatuses,
+  getAvailableWorkItemStates,
+} from '../../src/lib/domain/work-item-view.ts'
 import type { State } from '../../src/store/app-store.ts'
 
 const states: State[] = [
@@ -80,4 +83,52 @@ test('an unmapped legacy current state remains visible without exposing other in
   })
 
   assert.deepEqual(available.map((state) => state.id), ['foreign'])
+})
+
+test('board destinations mirror category aliases and enabled outgoing edges', () => {
+  const available = getAvailableBoardStatuses({
+    states,
+    typeStateMappings: mappings,
+    stateTransitions: transitions,
+    workItemTypeId: 'story',
+    currentStateId: 'new',
+  })
+
+  // Backlog and To Do both resolve to Proposed. Development is reachable,
+  // which makes both In Progress board aliases valid. Closed has no edge.
+  assert.deepEqual(available, ['backlog', 'todo', 'in_progress', 'in_review'])
+})
+
+test('board destinations choose the same final target that the API resolves', () => {
+  const available = getAvailableBoardStatuses({
+    states,
+    typeStateMappings: mappings,
+    stateTransitions: [
+      ...transitions,
+      {
+        workItemTypeId: 'story',
+        fromStateId: 'development',
+        toStateId: 'closed',
+        order: 50,
+        isEnabled: true,
+      },
+    ],
+    workItemTypeId: 'story',
+    currentStateId: 'development',
+  })
+
+  assert.deepEqual(available, ['backlog', 'todo', 'in_progress', 'in_review', 'done'])
+})
+
+test('board destinations fail closed when workflow topology is unavailable', () => {
+  assert.deepEqual(
+    getAvailableBoardStatuses({
+      states,
+      typeStateMappings: [],
+      stateTransitions: [],
+      workItemTypeId: 'story',
+      currentStateId: 'new',
+    }),
+    []
+  )
 })
