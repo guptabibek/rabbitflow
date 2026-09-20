@@ -36,6 +36,21 @@ test('invalid sprint route options fall back to safe defaults', () => {
   })
 })
 
+test('ceremony tabs remain linkable', () => {
+  for (const activeTab of ['daily', 'review'] as const) {
+    const params = writeWorkspaceSprintRoute('', {
+      selectedTeamId: ALL_SPRINT_TEAMS,
+      selectedSprintId: 'sprint-ceremony',
+      activeTab,
+      boardGroupBy: 'none',
+      backlogGroupBy: 'story',
+    })
+
+    assert.equal(params.get('sprintTab'), activeTab)
+    assert.equal(parseWorkspaceSprintRoute(params).activeTab, activeTab)
+  }
+})
+
 test('default sprint route state stays out of the URL', () => {
   const params = writeWorkspaceSprintRoute('?panel=activity&sprintId=old', {
     selectedTeamId: ALL_SPRINT_TEAMS,

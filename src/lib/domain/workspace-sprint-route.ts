@@ -1,4 +1,4 @@
-export type SprintTab = 'overview' | 'board' | 'backlog' | 'capacity'
+export type SprintTab = 'overview' | 'daily' | 'review' | 'board' | 'backlog' | 'capacity'
 export type SprintGroupBy = 'none' | 'status' | 'assignee' | 'priority' | 'story'
 
 export type WorkspaceSprintRouteState = {
@@ -18,7 +18,7 @@ const CONTROLLED_KEYS = [
   'boardGroupBy',
   'backlogGroupBy',
 ] as const
-const TABS = new Set<SprintTab>(['overview', 'board', 'backlog', 'capacity'])
+const TABS = new Set<SprintTab>(['overview', 'daily', 'review', 'board', 'backlog', 'capacity'])
 const GROUPS = new Set<SprintGroupBy>(['none', 'status', 'assignee', 'priority', 'story'])
 
 function boundedId(value: string | null) {

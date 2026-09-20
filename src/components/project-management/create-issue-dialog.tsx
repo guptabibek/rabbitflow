@@ -193,6 +193,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const {
     addIssue,
     areas,
+    createIssueDraft,
     currentProject,
     currentProjectPermissions,
     isCreateIssueOpen,
@@ -202,6 +203,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     lastWorkItemTypeByProject,
     removeWorkItemTemplate,
     saveWorkItemTemplate,
+    setCreateIssueDraft,
     setCreateIssueOpen,
     setLastWorkItemType,
     states,
@@ -214,6 +216,8 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   const typeOptions = useMemo(() => workItemTypes, [workItemTypes])
   const initializedProjectIdRef = useRef<string | null>(null)
+  const appliedCreateDraftIdRef = useRef<string | null>(null)
+  const draftedWorkItemTypeRef = useRef<string | null>(null)
   const userSelectedTypeRef = useRef(false)
   const persistedCreationPreferences = readWorkItemCreationPreferences()
   const runtimeProjectTemplates = currentProject
@@ -317,11 +321,24 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     typeOptions.find((type) => type.key === typeKey)?.hierarchyLevel ?? 999
 
   useEffect(() => {
+    const draftedType = draftedWorkItemTypeRef.current ?? createIssueDraft?.workItemType
+    if (draftedType && typeOptions.some((type) => type.key === draftedType)) {
+      if (workItemType !== draftedType) setWorkItemType(draftedType)
+      userSelectedTypeRef.current = true
+      return
+    }
+
     const projectId = currentProject?.id ?? null
     if (initializedProjectIdRef.current !== projectId) {
       initializedProjectIdRef.current = projectId
-      userSelectedTypeRef.current = false
-      setWorkItemType(defaultWorkItemType)
+      const draftedType = createIssueDraft?.workItemType
+      if (draftedType && typeOptions.some((type) => type.key === draftedType)) {
+        userSelectedTypeRef.current = true
+        setWorkItemType(draftedType)
+      } else {
+        userSelectedTypeRef.current = false
+        setWorkItemType(defaultWorkItemType)
+      }
       return
     }
 
@@ -331,7 +348,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     ) {
       setWorkItemType(defaultWorkItemType)
     }
-  }, [currentProject?.id, defaultWorkItemType, typeOptions, workItemType])
+  }, [createIssueDraft?.workItemType, currentProject?.id, defaultWorkItemType, typeOptions, workItemType])
 
   useEffect(() => {
     setCustomFields((previous) =>
@@ -545,6 +562,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
 
   const handleWorkItemTypeChange = (value: WorkItemType) => {
     if (!typeOptions.some((type) => type.key === value)) return
+    draftedWorkItemTypeRef.current = null
     userSelectedTypeRef.current = true
     setWorkItemType(value)
     if (currentProject) {
@@ -552,6 +570,56 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
     }
     clearFieldError('workItemType')
   }
+
+  useEffect(() => {
+    if (
+      !isCreateIssueOpen ||
+      !createIssueDraft ||
+      typeOptions.length === 0 ||
+      appliedCreateDraftIdRef.current === createIssueDraft.id
+    ) {
+      return
+    }
+
+    if (
+      createIssueDraft.workItemType &&
+      !typeOptions.some((type) => type.key === createIssueDraft.workItemType)
+    ) {
+      return
+    }
+
+    appliedCreateDraftIdRef.current = createIssueDraft.id
+    setTitle(createIssueDraft.title)
+    setDescription(createIssueDraft.description ?? '')
+
+    if (createIssueDraft.workItemType) {
+      draftedWorkItemTypeRef.current = createIssueDraft.workItemType
+      userSelectedTypeRef.current = true
+      setWorkItemType(createIssueDraft.workItemType)
+    }
+
+    if (
+      createIssueDraft.assigneeId &&
+      users.some((user) => user.id === createIssueDraft.assigneeId)
+    ) {
+      setAssigneeId(createIssueDraft.assigneeId)
+    }
+
+    const draftIteration = createIssueDraft.iterationId
+      ? iterations.find((iteration) => iteration.id === createIssueDraft.iterationId)
+      : null
+    if (draftIteration) {
+      setIterationId(draftIteration.id)
+      setSelectedIterationTeamId(draftIteration.teamId ?? UNASSIGNED_VALUE)
+    }
+
+    setStartDate(createIssueDraft.startDate ?? '')
+    setDueDate(createIssueDraft.dueDate ?? '')
+
+    setActiveTab('basic')
+    setFieldErrors({})
+    setSubmitError(null)
+  }, [createIssueDraft, isCreateIssueOpen, iterations, typeOptions, users])
 
   const applyTemplate = (templateId: string) => {
     const template = projectTemplates.find((entry) => entry.id === templateId)
@@ -665,6 +733,9 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       setCreateIssueOpen(false)
+      setCreateIssueDraft(null)
+      appliedCreateDraftIdRef.current = null
+      draftedWorkItemTypeRef.current = null
       onClose?.()
       resetForm()
       return
@@ -795,6 +866,7 @@ export function CreateIssueDialog({ mode = 'dialog', onClose }: CreateIssueDialo
           labelIds: selectedLabels.length > 0 ? selectedLabels : undefined,
           parentIssueId: parentIssueId || undefined,
           customFields,
+          retrospectiveActionItemId: createIssueDraft?.retrospectiveActionItemId,
         }),
       })
 

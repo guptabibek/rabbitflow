@@ -6,6 +6,7 @@ import { getAreaAccessScope } from '@/lib/domain/access-control'
 import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
+import { findCycleCreatedByEdge } from '@/lib/domain/dependency-cycle'
 
 const relationTypeSchema = z.enum([
   'related',
@@ -296,6 +297,28 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json({ error: 'Link already exists' }, { status: 409 })
+    }
+
+    if (data.relationType === 'blocks' || data.relationType === 'blocked_by') {
+      const relations = await db.issueRelation.findMany({
+        where: {
+          sourceIssue: { projectId: sourceIssue.projectId },
+          relationType: { in: ['blocks', 'blocked_by'] },
+        },
+        select: { sourceIssueId: true, targetIssueId: true, relationType: true },
+      })
+      const blockerId = data.relationType === 'blocks' ? data.sourceIssueId : data.targetIssueId
+      const blockedId = data.relationType === 'blocks' ? data.targetIssueId : data.sourceIssueId
+      const cycle = findCycleCreatedByEdge(relations, blockerId, blockedId)
+      if (cycle) {
+        return NextResponse.json(
+          {
+            error: 'This dependency would create a cycle',
+            details: { code: 'dependency_cycle', issueIds: cycle },
+          },
+          { status: 409 }
+        )
+      }
     }
 
     const relation = await db.issueRelation.create({

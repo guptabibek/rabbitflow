@@ -1460,12 +1460,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <aside className="min-h-0 overflow-y-auto border-t border-border/70 bg-muted/10 lg:border-l lg:border-t-0">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="flex h-full flex-col">
             <div className="border-b border-border/60 px-3 pt-3 md:px-4 md:pt-4">
-              <TabsList className="grid h-auto w-full grid-cols-5 rounded-xl bg-muted/25 p-1">
-                <TabsTrigger value="general" className="h-8 rounded-lg text-xs font-medium">General</TabsTrigger>
-                <TabsTrigger value="attachments" className="h-8 rounded-lg text-xs font-medium">Files</TabsTrigger>
-                <TabsTrigger value="history" className="h-8 rounded-lg text-xs font-medium">History</TabsTrigger>
-                <TabsTrigger value="git" className="h-8 rounded-lg text-xs font-medium">Git</TabsTrigger>
-                <TabsTrigger value="approvals" className="h-8 rounded-lg text-xs font-medium">Approvals</TabsTrigger>
+              <TabsList className="flex h-auto w-full justify-start overflow-x-auto rounded-xl bg-muted/25 p-1 sm:grid sm:grid-cols-5">
+                <TabsTrigger value="general" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">General</TabsTrigger>
+                <TabsTrigger value="attachments" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Files</TabsTrigger>
+                <TabsTrigger value="history" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">History</TabsTrigger>
+                <TabsTrigger value="git" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Git</TabsTrigger>
+                <TabsTrigger value="approvals" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Approvals</TabsTrigger>
               </TabsList>
             </div>
 

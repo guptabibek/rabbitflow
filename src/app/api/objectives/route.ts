@@ -18,7 +18,8 @@ const createKeyResultSchema = z.object({
   targetValue: z.number().min(0),
   currentValue: z.number().min(0).optional(),
   unit: z.string().max(50).optional(),
-  issueIds: z.array(z.string().trim().min(1)).optional(),
+  issueId: z.string().trim().min(1).nullable().optional(),
+  issueIds: z.array(z.string().trim().min(1)).max(1).optional(),
 })
 
 // GET /api/objectives?projectId=xxx
@@ -40,6 +41,28 @@ export async function GET(request: NextRequest) {
       include: {
         keyResults: {
           orderBy: { createdAt: 'asc' },
+          include: {
+            issue: {
+              select: {
+                id: true,
+                key: true,
+                title: true,
+                status: true,
+                priority: true,
+                dueDate: true,
+                startDate: true,
+                assignee: { select: { id: true, name: true } },
+                sourceRelations: {
+                  where: { relationType: 'blocked_by' },
+                  select: { targetIssue: { select: { id: true, key: true, title: true, status: true } } },
+                },
+                targetRelations: {
+                  where: { relationType: 'blocks' },
+                  select: { sourceIssue: { select: { id: true, key: true, title: true, status: true } } },
+                },
+              },
+            },
+          },
         },
         owner: { select: { id: true, name: true } },
         _count: { select: { keyResults: true } },
@@ -47,16 +70,47 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate progress for each objective
+    const now = new Date()
     const withProgress = objectives.map((obj) => {
       const totalKRs = obj.keyResults.length
-      if (totalKRs === 0) return { ...obj, progress: 0 }
-
       const totalProgress = obj.keyResults.reduce((sum, kr) => {
         if (kr.targetValue === 0) return sum
         return sum + Math.min(1, kr.currentValue / kr.targetValue)
       }, 0)
+      const keyResults = obj.keyResults.map((kr) => {
+        if (!kr.issue) return { ...kr, issue: null }
+        const blockers = [
+          ...kr.issue.sourceRelations.map((relation) => relation.targetIssue),
+          ...kr.issue.targetRelations.map((relation) => relation.sourceIssue),
+        ].filter((issue) => !['done', 'cancelled'].includes(issue.status))
+        const { sourceRelations: _sourceRelations, targetRelations: _targetRelations, ...issue } = kr.issue
+        return {
+          ...kr,
+          issue: {
+            ...issue,
+            blockers,
+            isOverdue: Boolean(issue.dueDate && issue.dueDate < now && !['done', 'cancelled'].includes(issue.status)),
+          },
+        }
+      })
+      const linkedIssues = keyResults.flatMap((kr) => kr.issue ? [kr.issue] : [])
+      const overdueCount = linkedIssues.filter((issue) => issue.isOverdue).length
+      const blockedCount = linkedIssues.filter((issue) => issue.blockers.length > 0).length
+      const confidence = linkedIssues.length === 0
+        ? { state: 'no_data', label: 'No linked delivery scope' }
+        : overdueCount > 0
+          ? { state: 'at_risk', label: 'At risk' }
+          : blockedCount > 0
+            ? { state: 'watch', label: 'Needs attention' }
+            : { state: 'on_track', label: 'On track' }
 
-      return { ...obj, progress: Math.round((totalProgress / totalKRs) * 100) }
+      return {
+        ...obj,
+        keyResults,
+        progress: totalKRs === 0 ? 0 : Math.round((totalProgress / totalKRs) * 100),
+        progressSource: totalKRs === 0 ? 'No key results' : `Mean progress across ${totalKRs} key result${totalKRs === 1 ? '' : 's'}`,
+        delivery: { linkedCount: linkedIssues.length, overdueCount, blockedCount, confidence },
+      }
     })
 
     return NextResponse.json(withProgress)
@@ -87,6 +141,17 @@ export async function POST(request: NextRequest) {
       const auth = await requireProjectPermission(request, objective.projectId, 'project:update')
       if (!auth.ok) return auth.response
 
+      const issueId = data.issueId ?? data.issueIds?.[0] ?? null
+      if (issueId) {
+        const linkedIssue = await db.issue.findFirst({
+          where: { id: issueId, projectId: objective.projectId },
+          select: { id: true },
+        })
+        if (!linkedIssue) {
+          return NextResponse.json({ error: 'Linked work item must belong to the objective project' }, { status: 400 })
+        }
+      }
+
       const kr = await db.keyResult.create({
         data: {
           objectiveId: data.objectiveId,
@@ -94,6 +159,7 @@ export async function POST(request: NextRequest) {
           targetValue: data.targetValue,
           currentValue: data.currentValue ?? 0,
           unit: data.unit ?? '%',
+          issueId,
         },
       })
 

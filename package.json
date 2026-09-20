@@ -12,6 +12,8 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
+    "test:load": "node scripts/release-load-test.mjs",
+    "seed:scale": "node --experimental-strip-types scripts/seed-production-scale.mts",
     "lint": "eslint .",
     "db:prepare": "node --no-warnings scripts/db-prepare.mts",
     "db:push": "npm run db:prepare && prisma db push",
@@ -91,6 +93,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",

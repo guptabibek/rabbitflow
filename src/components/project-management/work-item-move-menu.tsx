@@ -30,7 +30,7 @@ export function WorkItemMoveMenu({
           type="button"
           aria-label={`Move ${issueKey} to another column`}
           disabled={disabled}
-          className="-mr-1 inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+          className="-mr-1 inline-flex size-11 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50 sm:size-6"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >

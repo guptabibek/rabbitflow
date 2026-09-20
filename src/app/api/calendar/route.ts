@@ -31,6 +31,10 @@ export async function GET(request: NextRequest) {
       where: {
         projectId,
         OR: [
+          {
+            startDate: { lte: monthEnd },
+            dueDate: { gte: monthStart },
+          },
           { dueDate: { gte: monthStart, lte: monthEnd } },
           { startDate: { gte: monthStart, lte: monthEnd } },
         ],
@@ -43,9 +47,53 @@ export async function GET(request: NextRequest) {
         status: true,
         priority: true,
         workItemType: true,
+        version: true,
         startDate: true,
         dueDate: true,
         areaId: true,
+        area: { select: { id: true, name: true } },
+        iteration: {
+          select: {
+            id: true,
+            name: true,
+            iterationType: true,
+            team: { select: { id: true, name: true } },
+          },
+        },
+        linkedKeyResults: {
+          select: { objective: { select: { id: true, title: true } } },
+        },
+        assignee: { select: { id: true, name: true, avatar: true } },
+      },
+    })
+
+    const unscheduledIssues = await db.issue.findMany({
+      where: { projectId, startDate: null, dueDate: null },
+      orderBy: [{ priority: 'desc' }, { updatedAt: 'desc' }],
+      take: 100,
+      select: {
+        id: true,
+        key: true,
+        title: true,
+        status: true,
+        priority: true,
+        workItemType: true,
+        version: true,
+        startDate: true,
+        dueDate: true,
+        areaId: true,
+        area: { select: { id: true, name: true } },
+        iteration: {
+          select: {
+            id: true,
+            name: true,
+            iterationType: true,
+            team: { select: { id: true, name: true } },
+          },
+        },
+        linkedKeyResults: {
+          select: { objective: { select: { id: true, title: true } } },
+        },
         assignee: { select: { id: true, name: true, avatar: true } },
       },
     })
@@ -54,10 +102,23 @@ export async function GET(request: NextRequest) {
       if (issue.areaId === null) return scope.allowUnassigned
       return scope.allowedAreaIds.includes(issue.areaId)
     })
+    const unscheduled = unscheduledIssues.filter((issue) => {
+      if (issue.areaId === null) return scope.allowUnassigned
+      return scope.allowedAreaIds.includes(issue.areaId)
+    })
+
+    const serialize = (issue: (typeof issues)[number]) => ({
+      ...issue,
+      objectives: Array.from(
+        new Map(issue.linkedKeyResults.map((entry) => [entry.objective.id, entry.objective])).values()
+      ),
+      linkedKeyResults: undefined,
+    })
 
     return NextResponse.json({
       month: monthStart.toISOString(),
-      items,
+      items: items.map(serialize),
+      unscheduled: unscheduled.map(serialize),
     })
   } catch (error) {
     console.error('Error fetching calendar view:', error)

@@ -49,6 +49,8 @@ type CreateIssueInput = {
   iterationId?: string | null
   storyPoints?: number | null
   estimatedHours?: number | null
+  startDate?: Date | null
+  dueDate?: Date | null
 }
 
 type CreateNotificationInput = {
@@ -60,6 +62,14 @@ type CreateNotificationInput = {
   entityType?: string | null
   entityId?: string | null
   actorEmail?: string | null
+}
+
+type CreateRetrospectiveInput = {
+  projectId: string
+  iterationId?: string | null
+  title?: string
+  actionItem?: string
+  authorEmail?: string
 }
 
 export async function ensureUserAccount({
@@ -276,6 +286,8 @@ export async function createIssueFixture({
   iterationId,
   storyPoints,
   estimatedHours,
+  startDate,
+  dueDate,
 }: CreateIssueInput) {
   const [project, reporter, assignee, state, existingCount] = await Promise.all([
     db.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, key: true } }),
@@ -308,8 +320,101 @@ export async function createIssueFixture({
       iterationId: iterationId ?? null,
       storyPoints: storyPoints ?? null,
       estimatedHours: estimatedHours ?? null,
+      startDate: startDate ?? null,
+      dueDate: dueDate ?? null,
       columnOrder: issueNumber * 10,
     },
+  })
+}
+
+export async function createObjectiveFixture({
+  projectId,
+  issueId,
+  title = makeProjectName('objective'),
+  currentValue = 25,
+  targetValue = 100,
+}: {
+  projectId: string
+  issueId?: string | null
+  title?: string
+  currentValue?: number
+  targetValue?: number
+}) {
+  const owner = await db.user.findUniqueOrThrow({
+    where: { email: TEST_ACCOUNTS.admin.email },
+    select: { id: true },
+  })
+  return db.objective.create({
+    data: {
+      projectId,
+      ownerId: owner.id,
+      title,
+      status: 'on_track',
+      keyResults: {
+        create: {
+          title: `${title} result`,
+          currentValue,
+          targetValue,
+          unit: '%',
+          issueId: issueId ?? null,
+        },
+      },
+    },
+    include: { keyResults: true },
+  })
+}
+
+export async function getIssueFixture(issueId: string) {
+  return db.issue.findUnique({ where: { id: issueId } })
+}
+
+export async function createRetrospectiveFixture({
+  projectId,
+  iterationId = null,
+  title = makeProjectName('retrospective'),
+  actionItem = `${E2E_PREFIX}: retrospective follow-up`,
+  authorEmail = TEST_ACCOUNTS.admin.email,
+}: CreateRetrospectiveInput) {
+  const author = await db.user.findUniqueOrThrow({
+    where: { email: authorEmail },
+    select: { id: true },
+  })
+
+  return db.retrospective.create({
+    data: {
+      projectId,
+      iterationId,
+      title,
+      facilitatorId: author.id,
+      items: {
+        create: {
+          category: 'action_item',
+          content: actionItem,
+          authorId: author.id,
+        },
+      },
+    },
+    include: { items: true },
+  })
+}
+
+export async function createIssueRelationFixture(
+  sourceIssueId: string,
+  targetIssueId: string,
+  relationType: 'blocked_by' | 'blocks' | 'related' = 'blocked_by'
+) {
+  return db.issueRelation.create({ data: { sourceIssueId, targetIssueId, relationType } })
+}
+
+export async function ageIssueFixture(issueId: string, days: number) {
+  const updatedAt = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  return db.issue.update({ where: { id: issueId }, data: { updatedAt } })
+}
+
+export async function getRetroActionItem(itemId: string) {
+  return db.retroItem.findUnique({
+    where: { id: itemId },
+    include: { actionItemIssue: { include: { assignee: true } } },
   })
 }
 
@@ -482,7 +587,7 @@ export async function completeIssue(issueId: string) {
 
   await db.issue.update({
     where: { id: issueId },
-    data: { stateId: done.id, status: 'done' },
+    data: { stateId: done.id, status: 'done', completedDate: new Date() },
   })
 
   return done

@@ -120,7 +120,10 @@ const createIssueSchema = z.object({
       z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
     )
     .optional(),
+  retrospectiveActionItemId: nullableReferenceIdSchema,
 })
+
+class RetrospectiveActionConflictError extends Error {}
 
 export async function GET(request: NextRequest) {
   try {
@@ -314,6 +317,38 @@ export async function POST(request: NextRequest) {
 
     await ensureProjectSystemRecords(data.projectId, auth.actor.userId)
 
+    const retrospectiveActionItem = data.retrospectiveActionItemId
+      ? await db.retroItem.findUnique({
+          where: { id: data.retrospectiveActionItemId },
+          select: {
+            id: true,
+            category: true,
+            actionItemIssueId: true,
+            retrospective: { select: { projectId: true } },
+          },
+        })
+      : null
+
+    if (data.retrospectiveActionItemId) {
+      if (
+        !retrospectiveActionItem ||
+        retrospectiveActionItem.retrospective.projectId !== data.projectId ||
+        retrospectiveActionItem.category !== 'action_item'
+      ) {
+        return NextResponse.json(
+          { error: 'Retrospective action item must belong to the selected project' },
+          { status: 400 }
+        )
+      }
+
+      if (retrospectiveActionItem.actionItemIssueId) {
+        return NextResponse.json(
+          { error: 'This retrospective action already has a work item' },
+          { status: 409 }
+        )
+      }
+    }
+
     const sprintContextError = await validateSprintAssignmentTeamContext({
       projectId: data.projectId,
       iterationId: data.iterationId,
@@ -386,7 +421,7 @@ export async function POST(request: NextRequest) {
         select: { columnOrder: true },
       })
 
-      return tx.issue.create({
+      const createdIssue = await tx.issue.create({
         data: {
           key: formatProjectIssueKey(project.key, issueNumber),
           title: data.title.trim(),
@@ -430,6 +465,26 @@ export async function POST(request: NextRequest) {
         },
         include: issueMutationInclude,
       })
+
+      if (data.retrospectiveActionItemId) {
+        const linked = await tx.retroItem.updateMany({
+          where: {
+            id: data.retrospectiveActionItemId,
+            category: 'action_item',
+            actionItemIssueId: null,
+            retrospective: { projectId: data.projectId },
+          },
+          data: { actionItemIssueId: createdIssue.id },
+        })
+
+        if (linked.count !== 1) {
+          throw new RetrospectiveActionConflictError(
+            'This retrospective action was converted by another user'
+          )
+        }
+      }
+
+      return createdIssue
     })
 
     await createAuditLog({
@@ -509,6 +564,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeIssueRecord(finalIssue), { status: 201 })
   } catch (error) {
+    if (error instanceof RetrospectiveActionConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     if (error instanceof z.ZodError) {
       return validationError(error, readRequestId(request))
     }

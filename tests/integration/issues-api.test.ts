@@ -48,6 +48,7 @@ after(async () => {
 
 beforeEach(async () => {
   await db.issue.deleteMany({})
+  await db.retrospective.deleteMany({})
 })
 
 // ---------------------------------------------------------------------------
@@ -179,6 +180,98 @@ test('issue keys increment per project and do not collide across projects', asyn
   assert.notEqual(first.body?.key, second.body?.key)
   assert.ok(first.body?.key.startsWith('CRUD-'))
   assert.ok(second.body?.key.startsWith('CRUD-'))
+})
+
+test('retrospective action conversion creates and links one validated work item atomically', async () => {
+  const iteration = await db.iteration.create({
+    data: { projectId: project.id, name: 'Ceremony sprint', iterationType: 'sprint' },
+  })
+  const retrospective = await db.retrospective.create({
+    data: { projectId: project.id, iterationId: iteration.id, title: 'Sprint review' },
+  })
+  const actionItem = await db.retroItem.create({
+    data: {
+      retrospectiveId: retrospective.id,
+      category: 'action_item',
+      content: 'Add deployment checklist',
+      authorId: admin.id,
+    },
+  })
+
+  const created = await readResponse<{ id: string; iteration?: { id: string } | null }>(
+    await issuesPost(
+      authedRequest(admin, '/api/issues', {
+        method: 'POST',
+        body: {
+          projectId: project.id,
+          title: actionItem.content,
+          workItemType: 'task',
+          iterationId: iteration.id,
+          retrospectiveActionItemId: actionItem.id,
+          customFields: { scope: 'In Scope' },
+        },
+      })
+    )
+  )
+
+  assert.equal(created.status, 201)
+  assert.equal(created.body?.iteration?.id, iteration.id)
+  const persistedAction = await db.retroItem.findUniqueOrThrow({ where: { id: actionItem.id } })
+  assert.equal(persistedAction.actionItemIssueId, created.body?.id)
+
+  const duplicate = await readResponse<{ error: string }>(
+    await issuesPost(
+      authedRequest(admin, '/api/issues', {
+        method: 'POST',
+        body: {
+          projectId: project.id,
+          title: 'Duplicate follow-up',
+          workItemType: 'task',
+          retrospectiveActionItemId: actionItem.id,
+          customFields: { scope: 'In Scope' },
+        },
+      })
+    )
+  )
+
+  assert.equal(duplicate.status, 409)
+  assert.equal(await db.issue.count({ where: { projectId: project.id } }), 1)
+})
+
+test('retrospective actions cannot be linked across projects', async () => {
+  const retrospective = await db.retrospective.create({
+    data: { projectId: otherProject.id, title: 'Other project retro' },
+  })
+  const actionItem = await db.retroItem.create({
+    data: {
+      retrospectiveId: retrospective.id,
+      category: 'action_item',
+      content: 'Must remain in other project',
+      authorId: outsider.id,
+    },
+  })
+
+  const result = await readResponse<{ error: string }>(
+    await issuesPost(
+      authedRequest(admin, '/api/issues', {
+        method: 'POST',
+        body: {
+          projectId: project.id,
+          title: actionItem.content,
+          workItemType: 'task',
+          retrospectiveActionItemId: actionItem.id,
+          customFields: { scope: 'In Scope' },
+        },
+      })
+    )
+  )
+
+  assert.equal(result.status, 400)
+  assert.equal(await db.issue.count(), 0)
+  assert.equal(
+    (await db.retroItem.findUniqueOrThrow({ where: { id: actionItem.id } })).actionItemIssueId,
+    null
+  )
 })
 
 // ---------------------------------------------------------------------------

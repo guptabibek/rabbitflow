@@ -358,7 +358,7 @@ test.describe('Workspace UX smoke coverage', () => {
     await expect(page.getByTestId('work-items-list-view')).toBeVisible()
     await expect.poll(() => tableScroller.evaluate((element) => element.scrollTop)).toBe(listScrollBefore)
 
-    await page.setViewportSize({ width: 600, height: 720 })
+    await page.setViewportSize({ width: 900, height: 720 })
     await page.goto(`/projects/${project.id}/board`)
     const boardScroller = page.getByRole('region', { name: 'Kanban board' })
     await expect(boardScroller).toBeVisible()

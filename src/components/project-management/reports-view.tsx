@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -318,6 +318,7 @@ export function ReportsView() {
   const [dayRange, setDayRange] = useState('30')
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const reportAbortRef = useRef<AbortController | null>(null)
 
   // Data states
   const [executive, setExecutive] = useState<Record<string, unknown> | null>(null)
@@ -369,7 +370,7 @@ export function ReportsView() {
   const visibleBurndown = activeSelectedSprint ? burndown : null
 
   const fetchApi = useCallback(async (url: string) => {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: reportAbortRef.current?.signal })
     if (!res.ok) {
       throw new Error(await getApiErrorMessage(res, 'Failed to load report data'))
     }
@@ -385,6 +386,8 @@ export function ReportsView() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
+    reportAbortRef.current?.abort()
+    reportAbortRef.current = new AbortController()
     const load = async () => {
       setIsLoading(true)
       setLoadError(null)
@@ -479,6 +482,7 @@ export function ReportsView() {
           }
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
         console.error('Failed to load report data:', error)
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : 'Failed to load report data')
@@ -487,8 +491,17 @@ export function ReportsView() {
       if (!cancelled) setIsLoading(false)
     }
     load()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      reportAbortRef.current?.abort()
+    }
   }, [projectId, activeTab, activeSelectedSprint, dayRange, fetchApi, withTeam])
+
+  const cancelReport = () => {
+    reportAbortRef.current?.abort()
+    setIsLoading(false)
+    setLoadError('Report loading was cancelled. Change a filter or tab to start a new request.')
+  }
 
   const handleExport = () => {
     if (!projectId) return
@@ -549,6 +562,7 @@ export function ReportsView() {
               <Download />
               <span className="hidden md:inline">Export CSV</span>
             </Button>
+            {isLoading ? <Button variant="outline" size="sm" onClick={cancelReport}>Cancel loading</Button> : null}
           </>
         }
         tabs={

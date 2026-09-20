@@ -43,6 +43,13 @@ type RetroItem = {
   author: { id: string; name: string } | null
   voteCount: number
   hasVoted: boolean
+  actionItemIssue: {
+    id: string
+    key: string
+    title: string
+    status: string
+    assigneeId: string | null
+  } | null
 }
 
 type Retro = {
@@ -70,7 +77,15 @@ const CATEGORIES = [
 ] as const
 
 export function RetrospectivesView() {
-  const { currentProject, iterations } = useAppStore()
+  const {
+    currentProject,
+    currentProjectPermissions,
+    currentUser,
+    iterations,
+    openWorkItem,
+    setCreateIssueDraft,
+    setCreateIssueOpen,
+  } = useAppStore()
   const [retros, setRetros] = useState<Retro[]>([])
   const [selectedRetro, setSelectedRetro] = useState<RetroDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -85,6 +100,22 @@ export function RetrospectivesView() {
   const [saving, setSaving] = useState(false)
 
   const projectId = currentProject?.id
+  const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
+
+  const convertActionItem = (item: RetroItem) => {
+    if (!selectedRetro || !canCreateWorkItems || item.actionItemIssue) return
+
+    setCreateIssueDraft({
+      id: `retro-action:${item.id}`,
+      title: item.content.slice(0, 500),
+      description: `Follow-up from retrospective “${selectedRetro.title}”.`,
+      workItemType: 'task',
+      iterationId: selectedRetro.iteration?.id,
+      assigneeId: currentUser?.id,
+      retrospectiveActionItemId: item.id,
+    })
+    setCreateIssueOpen(true)
+  }
 
   const fetchRetros = useCallback(async () => {
     if (!projectId) return
@@ -272,6 +303,41 @@ export function RetrospectivesView() {
                               {item.voteCount}
                             </Button>
                           </div>
+                          {cat.key === 'action_item' ? (
+                            <div className="mt-3 border-t border-border pt-2">
+                              {item.actionItemIssue ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-auto w-full justify-between gap-2 py-1.5 text-xs"
+                                  onClick={() => openWorkItem(item.actionItemIssue!.id)}
+                                  data-testid={`retro-action-work-item-${item.id}`}
+                                >
+                                  <span className="truncate font-mono">{item.actionItemIssue.key}</span>
+                                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                    {item.actionItemIssue.status.replace(/_/g, ' ')}
+                                  </Badge>
+                                </Button>
+                              ) : canCreateWorkItems ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-full text-xs"
+                                  onClick={() => convertActionItem(item)}
+                                  data-testid={`retro-action-create-work-item-${item.id}`}
+                                >
+                                  <CheckSquare className="mr-1.5 h-3.5 w-3.5" />
+                                  Create assigned work item
+                                </Button>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  Ask a project member with create permission to assign this follow-up.
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ))
                   )}

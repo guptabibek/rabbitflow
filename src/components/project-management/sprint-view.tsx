@@ -65,6 +65,7 @@ import {
   Users,
   AlertTriangle,
   Activity,
+  Clock3,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
@@ -84,6 +85,7 @@ import {
   hasWorkspaceSprintRoute,
   parseWorkspaceSprintRoute,
   writeWorkspaceSprintRoute,
+  type SprintTab,
 } from '@/lib/domain/workspace-sprint-route'
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -476,7 +478,7 @@ export function SprintView() {
     return parseWorkspaceSprintRoute(window.location.search)
   }, [])
 
-  const initialActiveTab: 'overview' | 'board' | 'backlog' | 'capacity' =
+  const initialActiveTab: SprintTab =
     routeSelection?.activeTab ?? projectSelection?.activeTab ?? 'backlog'
   const initialBoardGroupBy: GroupBy =
     routeSelection?.boardGroupBy ?? projectSelection?.boardGroupBy ?? 'none'
@@ -486,10 +488,10 @@ export function SprintView() {
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(
     routeSelection?.selectedSprintId ?? projectSelection?.selectedSprintId ?? null
   )
-  const [activeTab, setActiveTab] = useState<'overview' | 'board' | 'backlog' | 'capacity'>(
+  const [activeTab, setActiveTab] = useState<SprintTab>(
     initialActiveTab
   )
-  const [loadedTabs, setLoadedTabs] = useState<Set<'overview' | 'board' | 'backlog' | 'capacity'>>(
+  const [loadedTabs, setLoadedTabs] = useState<Set<SprintTab>>(
     () => new Set([initialActiveTab])
   )
   const [sprintIssues, setSprintIssues] = useState<Issue[]>([])
@@ -1159,6 +1161,53 @@ export function SprintView() {
       : capacityUtilizationPercent >= 90
         ? 'warning'
         : 'positive'
+  const dailyFocus = sprintIssues
+    .filter((issue) => !['done', 'cancelled'].includes(issue.status))
+    .map((issue) => {
+      const blockers = [
+        ...(issue.sourceRelations ?? [])
+          .filter((relation) => relation.relationType === 'blocked_by')
+          .map((relation) => relation.targetIssue),
+        ...(issue.targetRelations ?? [])
+          .filter((relation) => relation.relationType === 'blocks')
+          .map((relation) => relation.sourceIssue),
+      ]
+      const staleDays = issue.updatedAt
+        ? Math.max(0, differenceInDays(new Date(), new Date(issue.updatedAt)))
+        : 0
+
+      return {
+        issue,
+        blockers: Array.from(new Map(blockers.map((blocker) => [blocker.id, blocker])).values()),
+        staleDays,
+      }
+    })
+    .filter(({ issue, blockers, staleDays }) =>
+      blockers.length > 0 ||
+      staleDays >= 3 ||
+      !issue.assignee ||
+      ['in_progress', 'in_review'].includes(issue.status)
+    )
+    .sort((left, right) => {
+      if (left.blockers.length !== right.blockers.length) {
+        return right.blockers.length - left.blockers.length
+      }
+      if (left.staleDays !== right.staleDays) return right.staleDays - left.staleDays
+      return left.issue.columnOrder - right.issue.columnOrder
+    })
+  const blockedDailyItems = dailyFocus.filter((entry) => entry.blockers.length > 0).length
+  const staleDailyItems = dailyFocus.filter((entry) => entry.staleDays >= 3).length
+  const completedOutcomes = [...sprintIssues]
+    .filter((issue) => issue.status === 'done')
+    .sort((left, right) => {
+      const rightDate = new Date(right.completedDate ?? right.updatedAt ?? 0).getTime()
+      const leftDate = new Date(left.completedDate ?? left.updatedAt ?? 0).getTime()
+      return rightDate - leftDate
+    })
+  const completedOutcomePoints = completedOutcomes.reduce(
+    (total, issue) => total + (issue.storyPoints ?? 0),
+    0
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.06),_transparent_38%),linear-gradient(to_bottom,_hsl(var(--background)),_hsl(var(--background)))]">
@@ -1361,6 +1410,8 @@ export function SprintView() {
                 <TabsList className="h-auto w-max min-w-full justify-start gap-2 bg-transparent p-0 py-1">
                   {[
                     { value: 'overview', icon: Activity, label: 'Overview' },
+                    { value: 'daily', icon: AlertTriangle, label: 'Daily' },
+                    { value: 'review', icon: CheckCircle2, label: 'Review' },
                     { value: 'board', icon: KanbanSquare, label: 'Board' },
                     { value: 'backlog', icon: List, label: 'Backlog' },
                     { value: 'capacity', icon: Users, label: 'Capacity' },
@@ -1507,6 +1558,144 @@ export function SprintView() {
                 ) : (
                   <div className="flex items-center justify-center h-64"><p className="text-muted-foreground text-sm">Loading analytics...</p></div>
                 )}
+              </TabsContent>
+            )}
+
+            {/* ─── DAILY TAB ─────────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('daily') && (
+              <TabsContent value="daily" className="mt-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6">
+                <div className="mx-auto max-w-5xl space-y-5" data-testid="sprint-daily-view">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Card className="border-border/70 bg-card/80 shadow-sm">
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium text-muted-foreground">Needs discussion</p>
+                        <p className="mt-1 text-2xl font-semibold tabular-nums">{dailyFocus.length}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className={blockedDailyItems > 0 ? 'border-warning/50 bg-warning/5 shadow-sm' : 'border-border/70 bg-card/80 shadow-sm'}>
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium text-muted-foreground">Blocked</p>
+                        <p className={blockedDailyItems > 0 ? 'mt-1 text-2xl font-semibold tabular-nums text-warning' : 'mt-1 text-2xl font-semibold tabular-nums'}>{blockedDailyItems}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className={staleDailyItems > 0 ? 'border-warning/50 bg-warning/5 shadow-sm' : 'border-border/70 bg-card/80 shadow-sm'}>
+                      <CardContent className="p-4">
+                        <p className="text-xs font-medium text-muted-foreground">Stale for 3+ days</p>
+                        <p className={staleDailyItems > 0 ? 'mt-1 text-2xl font-semibold tabular-nums text-warning' : 'mt-1 text-2xl font-semibold tabular-nums'}>{staleDailyItems}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h2 className="text-base font-semibold">Daily focus</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Active, blocked, stale, or unassigned sprint work that may need the team today.
+                    </p>
+                  </div>
+
+                  {dailyFocus.length === 0 ? (
+                    <Card className="border-dashed py-12 text-center">
+                      <CheckCircle2 className="mx-auto h-8 w-8 text-success" aria-hidden="true" />
+                      <p className="mt-3 font-medium">No delivery risks need discussion</p>
+                      <p className="mt-1 text-sm text-muted-foreground">The sprint has no blocked, stale, active, or unassigned work.</p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {dailyFocus.map(({ issue, blockers, staleDays }) => (
+                        <button
+                          key={issue.id}
+                          type="button"
+                          onClick={() => openWorkItem(issue.id)}
+                          className="flex w-full flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center"
+                          data-testid={`daily-focus-${issue.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs text-muted-foreground">{issue.key}</span>
+                              <Badge className={STATUS_BADGE[issue.status]}>{issue.status.replace(/_/g, ' ')}</Badge>
+                              {blockers.length > 0 ? <Badge variant="outline" className="border-warning/50 text-warning">Blocked</Badge> : null}
+                              {staleDays >= 3 ? <Badge variant="outline" className="gap-1"><Clock3 className="h-3 w-3" />{staleDays}d stale</Badge> : null}
+                              {!issue.assignee ? <Badge variant="outline">Unassigned</Badge> : null}
+                            </div>
+                            <p className="mt-2 font-medium text-foreground">{issue.title}</p>
+                            {blockers.length > 0 ? (
+                              <p className="mt-1 text-xs text-warning">
+                                Blocked by {blockers.map((blocker) => blocker.key).join(', ')}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                            {issue.assignee?.avatar ? <Avatar className="h-6 w-6"><AvatarImage src={issue.assignee.avatar} /><AvatarFallback>{issue.assignee.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar> : null}
+                            <span>{issue.assignee?.name ?? 'No owner'}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            )}
+
+            {/* ─── REVIEW TAB ────────────────────────────────────────── */}
+            {!isAllTeamsMode && !showNoSprintsEmpty && !showLoadingSkeleton && loadedTabs.has('review') && (
+              <TabsContent value="review" className="mt-0 flex-1 overflow-auto px-4 py-4 md:px-6 md:py-6">
+                <div className="mx-auto max-w-5xl space-y-5" data-testid="sprint-review-view">
+                  <Card className="overflow-hidden border-border/70 bg-card/80 shadow-sm">
+                    <CardHeader className="border-b border-border/60">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Target className="h-4 w-4 text-primary" /> Sprint goal
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4">
+                      <p className={selectedSprint?.goal ? 'text-sm leading-6' : 'text-sm text-warning'}>
+                        {selectedSprint?.goal || 'No sprint goal was recorded. Add one before the review so outcomes can be assessed against intent.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Completed outcomes</p><p className="mt-1 text-2xl font-semibold tabular-nums">{completedOutcomes.length}</p></CardContent></Card>
+                    <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Completed points</p><p className="mt-1 text-2xl font-semibold tabular-nums">{completedOutcomePoints} SP</p></CardContent></Card>
+                    <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Open at review</p><p className="mt-1 text-2xl font-semibold tabular-nums">{sprintIssues.filter((issue) => !['done', 'cancelled'].includes(issue.status)).length}</p></CardContent></Card>
+                  </div>
+
+                  <div>
+                    <h2 className="text-base font-semibold">Completed outcomes</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">Open an item to demonstrate its result, acceptance evidence, and discussion history.</p>
+                  </div>
+
+                  {completedOutcomes.length === 0 ? (
+                    <Card className="border-dashed py-12 text-center">
+                      <PackageCheck className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                      <p className="mt-3 font-medium">No completed outcomes yet</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Items appear here when they reach Done.</p>
+                    </Card>
+                  ) : (
+                    <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+                      {completedOutcomes.map((issue) => (
+                        <button
+                          key={issue.id}
+                          type="button"
+                          onClick={() => openWorkItem(issue.id)}
+                          className="flex w-full flex-col gap-2 p-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center"
+                          data-testid={`review-outcome-${issue.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-muted-foreground">{issue.key}</span>
+                              <Badge className={STATUS_BADGE.done}>done</Badge>
+                            </div>
+                            <p className="mt-1 font-medium">{issue.title}</p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                            <span>{issue.assignee?.name ?? 'Unassigned'}</span>
+                            <span className="font-mono">{issue.storyPoints ?? 0} SP</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
             )}
 

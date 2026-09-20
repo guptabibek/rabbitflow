@@ -252,6 +252,8 @@ export function KanbanBoard() {
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [movingIssueId, setMovingIssueId] = useState<string | null>(null)
+  const [mobileStatus, setMobileStatus] = useState<BoardStatus>('backlog')
+  const [announcement, setAnnouncement] = useState('')
   const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
   const canUpdateBoard = currentProjectPermissions.includes('board:update')
   const boardPreferences = currentProject
@@ -328,6 +330,7 @@ export function KanbanBoard() {
   const visibleColumns = boardPreferences.hideCompleted
     ? issuesByStatus.filter((column) => column.id !== 'done')
     : issuesByStatus
+  const mobileColumn = visibleColumns.find((column) => column.id === mobileStatus) ?? visibleColumns[0]
 
   const toggleColumnCollapsed = useCallback(
     (status: BoardStatus) => {
@@ -417,6 +420,7 @@ export function KanbanBoard() {
 
         const updated = await response.json()
         updateIssue(issue.id, updated)
+        setAnnouncement(`${issue.key} moved to ${COLUMNS.find((column) => column.id === targetStatus)?.name ?? targetStatus}.`)
       } catch (error) {
         console.error('Failed to move board card:', error)
         setMoveError('The work item could not be moved. Check your connection and try again.')
@@ -479,6 +483,7 @@ export function KanbanBoard() {
       onDragCancel={() => setActiveIssue(null)}
     >
       <div className="group/board flex h-full min-h-0 flex-col">
+        <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
         <IssueLoadMore className="mx-4 mt-3 shrink-0" />
 
         <div className="mx-4 mt-2 flex shrink-0 justify-end">
@@ -579,8 +584,41 @@ export function KanbanBoard() {
             description="Every item on this board is filtered out. Widen or clear the filters to bring the columns back."
           />
         ) : (
+          <>
+            {mobileColumn ? (
+              <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3 md:hidden" aria-label="Mobile Kanban board" data-testid="mobile-board">
+                <div className="sticky top-0 z-20 mb-3 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur">
+                  <Label htmlFor="mobile-board-status" className="text-xs font-medium">Board status</Label>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <select
+                      id="mobile-board-status"
+                      value={mobileColumn.id}
+                      onChange={(event) => setMobileStatus(event.target.value as BoardStatus)}
+                      className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      {visibleColumns.map((column) => <option key={column.id} value={column.id}>{column.name} ({column.issues.length})</option>)}
+                    </select>
+                    {canCreateWorkItems ? <Button type="button" className="min-h-11" onClick={() => setCreateIssueOpen(true)}><Plus className="size-4" /> Add</Button> : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{mobileColumn.issues.length} item{mobileColumn.issues.length === 1 ? '' : 's'}</span>
+                    <span>{mobileColumn.points} story points</span>
+                    {boardPreferences.wipLimits[mobileColumn.id] !== undefined ? <span className={mobileColumn.issues.length >= boardPreferences.wipLimits[mobileColumn.id]! ? 'text-warning' : ''}>WIP {mobileColumn.issues.length}/{boardPreferences.wipLimits[mobileColumn.id]}</span> : null}
+                  </div>
+                </div>
+                {isLoading && mobileColumn.issues.length === 0 ? <div className="space-y-2"><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div> : (
+                  <SortableContext items={mobileColumn.issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {mobileColumn.issues.map((issue) => <IssueCard key={issue.id} issue={issue} isMoving={movingIssueId === issue.id} moveOptions={COLUMNS.filter((candidate) => candidate.id !== issue.status && availableStatusesFor(issue).includes(candidate.id)).map((candidate) => ({ id: candidate.id, label: candidate.name }))} onMove={(status) => void moveIssue(issue, status)} />)}
+                      {!isLoading && mobileColumn.issues.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No work in {mobileColumn.name}.{canCreateWorkItems ? <Button type="button" variant="link" className="min-h-11 px-1" onClick={() => setCreateIssueOpen(true)}>Create an item</Button> : null}</div> : null}
+                    </div>
+                  </SortableContext>
+                )}
+              </section>
+            ) : null}
+
           <div
-            className="scroll-affordance-shell relative min-h-0 flex-1"
+            className="scroll-affordance-shell relative hidden min-h-0 flex-1 md:block"
             data-overflowing={hasHiddenColumns}
           >
             {/*
@@ -694,6 +732,7 @@ export function KanbanBoard() {
               ))}
             </div>
           </div>
+          </>
         )}
       </div>
 

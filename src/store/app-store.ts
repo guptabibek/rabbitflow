@@ -136,6 +136,18 @@ export type WorkItemTemplate = {
   customFields: Record<string, unknown>
 }
 
+export type CreateIssueDraft = {
+  id: string
+  title: string
+  description?: string
+  workItemType?: WorkItemType
+  iterationId?: string
+  assigneeId?: string
+  startDate?: string
+  dueDate?: string
+  retrospectiveActionItemId?: string
+}
+
 type WorkItemCreationPreferences = {
   lastWorkItemTypeByProject: Record<string, WorkItemType>
   workItemTemplatesByProject: Record<string, WorkItemTemplate[]>
@@ -437,7 +449,7 @@ interface AppState {
     {
       selectedTeamId: string
       selectedSprintId: string | null
-      activeTab: 'overview' | 'board' | 'backlog' | 'capacity'
+      activeTab: 'overview' | 'daily' | 'review' | 'board' | 'backlog' | 'capacity'
       boardGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
       backlogGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
     }
@@ -447,7 +459,7 @@ interface AppState {
     selection: {
       selectedTeamId?: string
       selectedSprintId?: string | null
-      activeTab?: 'overview' | 'board' | 'backlog' | 'capacity'
+      activeTab?: 'overview' | 'daily' | 'review' | 'board' | 'backlog' | 'capacity'
       boardGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
       backlogGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
     }
@@ -455,6 +467,8 @@ interface AppState {
 
   isCreateIssueOpen: boolean
   setCreateIssueOpen: (open: boolean) => void
+  createIssueDraft: CreateIssueDraft | null
+  setCreateIssueDraft: (draft: CreateIssueDraft | null) => void
   isSprintModalOpen: boolean
   setSprintModalOpen: (open: boolean) => void
 
@@ -727,6 +741,8 @@ export const useAppStore = create<AppState>()(
 
       isCreateIssueOpen: false,
       setCreateIssueOpen: (open) => set({ isCreateIssueOpen: open }),
+      createIssueDraft: null,
+      setCreateIssueDraft: (draft) => set({ createIssueDraft: draft }),
       isSprintModalOpen: false,
       setSprintModalOpen: (open) => set({ isSprintModalOpen: open }),
 
@@ -757,6 +773,7 @@ export const useAppStore = create<AppState>()(
           typeStateMappings: [],
           stateTransitions: [],
           areas: [],
+          createIssueDraft: null,
           filters: {
             assigneeId: null,
             priority: null,

@@ -152,10 +152,12 @@ jobs:
       - run: npx prisma migrate deploy
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run Playwright
         run: npm run test:e2e
+        env:
+          E2E_FULL_MATRIX: 'true'
 
       - uses: actions/upload-artifact@v4
         if: failure()

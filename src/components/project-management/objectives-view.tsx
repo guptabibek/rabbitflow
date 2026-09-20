@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/app-store'
 import {
   AlertDialog,
@@ -31,6 +32,8 @@ import {
   Plus,
   ChevronRight,
   Trash2,
+  Link2,
+  TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
@@ -43,6 +46,16 @@ type KeyResult = {
   targetValue: number
   unit: string
   status: string
+  issue: {
+    id: string
+    key: string
+    title: string
+    status: string
+    priority: string
+    dueDate: string | null
+    isOverdue: boolean
+    blockers: Array<{ id: string; key: string; title: string; status: string }>
+  } | null
 }
 
 type Objective = {
@@ -56,10 +69,18 @@ type Objective = {
   keyResults: KeyResult[]
   owner: { id: string; name: string } | null
   _count?: { keyResults: number }
+  progressSource: string
+  delivery: {
+    linkedCount: number
+    overdueCount: number
+    blockedCount: number
+    confidence: { state: 'no_data' | 'on_track' | 'watch' | 'at_risk'; label: string }
+  }
 }
 
 export function ObjectivesView() {
-  const { currentProject } = useAppStore()
+  const router = useRouter()
+  const { currentProject, issues } = useAppStore()
   const [objectives, setObjectives] = useState<Objective[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [createObjOpen, setCreateObjOpen] = useState(false)
@@ -70,6 +91,7 @@ export function ObjectivesView() {
   const [newKRTitle, setNewKRTitle] = useState('')
   const [newKRTarget, setNewKRTarget] = useState(100)
   const [newKRUnit, setNewKRUnit] = useState('%')
+  const [newKRIssueId, setNewKRIssueId] = useState('')
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -165,6 +187,7 @@ export function ObjectivesView() {
           title: newKRTitle.trim(),
           targetValue: newKRTarget,
           unit: newKRUnit.trim(),
+          issueId: newKRIssueId || null,
         }),
       })
 
@@ -176,6 +199,7 @@ export function ObjectivesView() {
       setNewKRTitle('')
       setNewKRTarget(100)
       setNewKRUnit('%')
+      setNewKRIssueId('')
       setCreateKROpen(false)
       await fetchObjectives()
       toast.success('Key result added')
@@ -237,6 +261,13 @@ export function ObjectivesView() {
     }
   }
 
+  const confidenceColor = (status: Objective['delivery']['confidence']['state']) => {
+    if (status === 'on_track') return 'bg-success/10 text-success border-success/20'
+    if (status === 'watch') return 'bg-warning/10 text-warning border-warning/20'
+    if (status === 'at_risk') return 'bg-danger/10 text-danger border-danger/20'
+    return 'bg-muted text-muted-foreground border-border'
+  }
+
   if (!projectId) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -296,9 +327,9 @@ export function ObjectivesView() {
       ) : (
         <div className="space-y-4">
           {objectives.map((obj) => (
-            <Card key={obj.id} className="transition-shadow hover:shadow-md">
+            <Card key={obj.id} data-testid={`objective-card-${obj.id}`} className="transition-shadow hover:shadow-md">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{obj.title}</CardTitle>
@@ -309,6 +340,20 @@ export function ObjectivesView() {
                     {obj.description && (
                       <p className="text-sm text-muted-foreground mt-1">{obj.description}</p>
                     )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className={confidenceColor(obj.delivery.confidence.state)}>
+                        {obj.delivery.confidence.label}
+                      </Badge>
+                      <span>{obj.progressSource}</span>
+                      <span>{obj.delivery.linkedCount} linked work item{obj.delivery.linkedCount === 1 ? '' : 's'}</span>
+                      {obj.endDate ? <span>Target {new Date(obj.endDate).toLocaleDateString()}</span> : <span>No target date</span>}
+                    </div>
+                    {obj.delivery.overdueCount > 0 || obj.delivery.blockedCount > 0 ? (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-danger" role="status">
+                        <TriangleAlert className="size-3.5" aria-hidden="true" />
+                        {obj.delivery.overdueCount} overdue · {obj.delivery.blockedCount} blocked
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right mr-4">
@@ -361,6 +406,18 @@ export function ObjectivesView() {
                                 {kr.currentValue}/{kr.targetValue} {kr.unit}
                               </span>
                             </div>
+                            {kr.issue ? (
+                              <button
+                                type="button"
+                                className="mt-2 flex items-center gap-1.5 rounded-sm text-xs text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                                onClick={() => router.push(`/work-items/${encodeURIComponent(kr.issue!.id)}`)}
+                              >
+                                <Link2 className="size-3" aria-hidden="true" />
+                                {kr.issue.key} · {kr.issue.title}
+                                {kr.issue.isOverdue ? <Badge variant="outline" className="ml-1 border-danger/20 bg-danger/10 text-danger">Overdue</Badge> : null}
+                                {kr.issue.blockers.length > 0 ? <Badge variant="outline" className="ml-1 border-warning/20 bg-warning/10 text-warning">Blocked by {kr.issue.blockers.map((blocker) => blocker.key).join(', ')}</Badge> : null}
+                              </button>
+                            ) : <p className="mt-2 text-xs text-muted-foreground">No delivery work linked</p>}
                           </div>
                           <Input
                             type="number"
@@ -459,6 +516,7 @@ export function ObjectivesView() {
           if (!open) {
             setKeyResultError(null)
             setKeyResultFieldErrors({})
+            setNewKRIssueId('')
           }
         }}
       >
@@ -527,6 +585,19 @@ export function ObjectivesView() {
                   <p className="text-xs text-destructive">{keyResultFieldErrors.unit}</p>
                 ) : null}
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="key-result-work-item" className="text-sm font-medium">Linked delivery work (optional)</label>
+              <select
+                id="key-result-work-item"
+                value={newKRIssueId}
+                onChange={(event) => setNewKRIssueId(event.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="">No linked work item</option>
+                {issues.map((issue) => <option key={issue.id} value={issue.id}>{issue.key} · {issue.title}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Link the measurable result to the work that delivers it so risks remain traceable.</p>
             </div>
           </div>
           <DialogFooter>

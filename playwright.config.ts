@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 import { E2E_BASE_URL } from './tests/e2e/support/env'
 
+const browserChannel = process.env.E2E_BROWSER_CHANNEL
+const fullMatrix = process.env.E2E_FULL_MATRIX === 'true'
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 90_000,
@@ -37,22 +40,45 @@ export default defineConfig({
       too. CI leaves it unset and uses the pinned Playwright build, so the
       version the pipeline tests against stays reproducible.
     */
-    ...(process.env.E2E_BROWSER_CHANNEL
-      ? { channel: process.env.E2E_BROWSER_CHANNEL }
-      : {}),
   },
   projects: [
     {
       name: 'setup',
       testMatch: /setup[\\/].*\.setup\.ts/,
+      use: browserChannel ? { channel: browserChannel } : {},
     },
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        ...(browserChannel ? { channel: browserChannel } : {}),
       },
       dependencies: ['setup'],
     },
+    ...(fullMatrix ? [
+      {
+        name: 'firefox',
+        use: { ...devices['Desktop Firefox'] },
+        dependencies: ['setup'],
+      },
+      {
+        name: 'webkit',
+        use: { ...devices['Desktop Safari'] },
+        dependencies: ['setup'],
+      },
+      {
+        name: 'mobile-chromium',
+        testMatch: /(accessibility|product-planning)\.spec\.ts/,
+        use: { ...devices['Pixel 7'] },
+        dependencies: ['setup'],
+      },
+      {
+        name: 'mobile-webkit',
+        testMatch: /(accessibility|product-planning)\.spec\.ts/,
+        use: { ...devices['iPhone 15'] },
+        dependencies: ['setup'],
+      },
+    ] : []),
   ],
   webServer:
     process.env.E2E_SKIP_WEBSERVER === 'true'

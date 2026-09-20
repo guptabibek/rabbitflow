@@ -5,7 +5,7 @@ import { requireProjectPermission } from '@/lib/domain/auth'
 
 const updateRetroSchema = z.object({
   title: z.string().trim().min(1).max(500).optional(),
-  status: z.enum(['active', 'voting', 'discussing', 'closed']).optional(),
+  status: z.enum(['open', 'active', 'voting', 'discussing', 'closed']).optional(),
 })
 
 export async function GET(
@@ -24,6 +24,9 @@ export async function GET(
           include: {
             author: { select: { id: true, name: true } },
             retroVotes: { select: { userId: true } },
+            actionItemIssue: {
+              select: { id: true, key: true, title: true, status: true, assigneeId: true },
+            },
           },
         },
       },
@@ -126,7 +129,7 @@ export async function POST(
       return NextResponse.json({ error: 'Retrospective not found' }, { status: 404 })
     }
 
-    if (retro.status !== 'voting' && retro.status !== 'active') {
+    if (!['open', 'active', 'voting'].includes(retro.status)) {
       return NextResponse.json({ error: 'Voting is not active for this retrospective' }, { status: 400 })
     }
 
