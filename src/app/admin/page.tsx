@@ -16,6 +16,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Metric, MetricRow } from '@/components/ui/metric'
+import { PageBody, PageHeader } from '@/components/ui/page-header'
+import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
 
 type AdminOverviewStats = {
   projects: number
@@ -31,25 +34,22 @@ type AdminOverviewCard = {
 
 const ACTION_CARDS = [
   {
-    title: 'Projects And Users',
+    title: 'Projects and users',
     description: 'Create projects, onboard users, and manage organization-wide membership from Projects.',
     href: '/dashboard',
     icon: Users,
-    accent: 'from-info/20 via-sky-500/10 to-transparent',
   },
   {
-    title: 'Admin Panel',
+    title: 'Project configuration',
     description: 'Manage work item types, state machines, and planning field configuration in a dedicated admin workspace.',
     href: '/admin/panel',
     icon: Building2,
-    accent: 'from-success/20 via-emerald-500/10 to-transparent',
   },
   {
-    title: 'Admin Security',
+    title: 'Security and access',
     description: 'Review active sessions, enforce MFA, offboard users, and inspect the security audit timeline.',
     href: '/admin/security',
     icon: Shield,
-    accent: 'from-warning/20 via-amber-500/10 to-transparent',
   },
 ]
 
@@ -78,7 +78,7 @@ export default function AdminIndexPage() {
         label: 'Admin Surfaces',
         value: 3,
         icon: Blocks,
-        helper: 'Overview, Admin Panel, and Admin Security.',
+        helper: 'Overview, Configuration, and Security.',
       },
       {
         label: 'Workspace Context',
@@ -167,123 +167,93 @@ export default function AdminIndexPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-        {statCards.map((item) => (
-          <Card key={item.label} className="rounded-3xl border-border/70 bg-card/90 shadow-sm">
-            <CardContent className="flex items-center justify-between p-4 sm:p-6">
-              <div className="min-w-0 pr-4">
-                <div className="text-sm text-muted-foreground">{item.label}</div>
-                <div
-                  className={`mt-2 font-semibold tracking-tight ${
-                    typeof item.value === 'number' ? 'text-3xl' : 'truncate text-base'
-                  }`}
-                  title={String(item.value)}
+    <div className="flex min-h-screen flex-col">
+      <PageHeader
+        title="Organization overview"
+        description="A single place for project administration, delivery configuration, and account security."
+        meta={<Badge variant="outline">System administrator</Badge>}
+        actions={
+          <Button size="sm" onClick={() => router.push('/dashboard')}>
+            <FolderKanban />
+            Open projects
+          </Button>
+        }
+      />
+
+      <PageBody className="space-y-4">
+        <MetricRow>
+          {statCards.map((item) => (
+            <Metric
+              key={item.label}
+              label={item.label}
+              value={item.value}
+              hint={item.helper}
+              icon={item.icon}
+            />
+          ))}
+        </MetricRow>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
+          <Panel>
+            <PanelHeader
+              title="Administration"
+              description="Choose the area that matches the job you need to complete."
+              icon={Blocks}
+            />
+            <PanelBody className="grid gap-3 md:grid-cols-3">
+              {ACTION_CARDS.map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={() => router.push(item.href)}
+                  className="group flex min-h-44 flex-col rounded-lg border border-border bg-card p-4 text-left outline-none transition-[border-color,background-color,box-shadow] hover:border-border-strong hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  {item.value}
-                </div>
-                <div className="mt-2 text-xs leading-5 text-muted-foreground">{item.helper}</div>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+                  <span className="flex size-8 items-center justify-center rounded-md border border-border bg-surface-sunken text-muted-foreground transition-colors group-hover:text-primary">
+                    <item.icon className="size-4" />
+                  </span>
+                  <span className="mt-4 text-sm font-semibold tracking-tight">{item.title}</span>
+                  <span className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</span>
+                  <span className="mt-auto flex items-center pt-4 text-xs font-medium text-primary">
+                    Open
+                    <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </button>
+              ))}
+            </PanelBody>
+          </Panel>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.92fr)]">
-        <Card className="overflow-hidden rounded-[28px] border-border/70 bg-card/92 shadow-sm">
-          <CardHeader className="border-b border-border/60 bg-[linear-gradient(135deg,_hsl(var(--primary)/0.15),_transparent_60%)] pb-5">
-            <Badge variant="outline" className="w-fit border-primary/30 bg-primary/10 text-primary">
-              Organization Command Center
-            </Badge>
-            <CardTitle className="text-3xl tracking-tight">Run admin work outside the project shell</CardTitle>
-            <CardDescription className="max-w-2xl text-sm leading-6">
-              Use this space for organization-level operations. Project work stays in the workspace. Security and configuration stay here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 p-4 sm:p-6 sm:grid-cols-2 lg:grid-cols-3">
-            {ACTION_CARDS.map((item) => (
-              <button
-                key={item.title}
-                type="button"
-                onClick={() => router.push(item.href)}
-                className={`group rounded-[24px] border border-border/70 bg-gradient-to-br ${item.accent} p-5 text-left transition-transform duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_20px_60px_-40px_rgba(0,0,0,0.9)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-background/75 text-foreground shadow-sm ring-1 ring-border/60">
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <div className="mt-5 space-y-2">
-                  <h2 className="text-lg font-semibold tracking-tight">{item.title}</h2>
-                  <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
-                </div>
-                <div className="mt-6 flex items-center text-sm font-medium text-foreground">
-                  Open section
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </div>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-[28px] border-border/70 bg-card/90 shadow-sm 2xl:self-start">
-          <CardHeader>
-            <CardTitle className="text-xl tracking-tight">Current context</CardTitle>
-            <CardDescription>
-              Keep project work and organization administration separate, while preserving a quick return path.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Active workspace
-              </div>
-              <div className="mt-2 text-base font-semibold">
-                {currentProject ? currentProject.name : 'No active project selected'}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {currentProject
-                  ? 'Return to workspace when you want to resume delivery work inside the selected project.'
-                  : 'Open a project from Projects to restore workspace context.'}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Recommended flow
-              </div>
-              <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    1
-                  </div>
-                  <p>Use Projects for organization-level project and user creation.</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    2
-                  </div>
-                  <p>Use Admin Panel for schema, state, and planning configuration.</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    3
-                  </div>
-                  <p>Use Admin Security for MFA, sessions, and offboarding controls.</p>
+          <Panel className="self-start">
+            <PanelHeader title="Current workspace" icon={Building2} />
+            <PanelBody>
+              <div className="flex items-center gap-3">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: currentProject?.color || 'var(--muted-foreground)' }}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {currentProject?.name || 'No active project'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {currentProject
+                      ? 'Configuration changes use this project unless you select another one.'
+                      : 'Select a project before configuring project-level settings.'}
+                  </p>
                 </div>
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => router.push('/dashboard')}>Open Projects</Button>
-              <Button variant="outline" onClick={() => router.push('/admin/panel')}>
-                Open Admin Panel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+              <div className="mt-4 grid gap-2">
+                <Button variant="outline" size="sm" onClick={() => router.push('/admin/panel')}>
+                  <Building2 />
+                  Configure project
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => router.push('/')} disabled={!currentProject}>
+                  Return to workspace
+                </Button>
+              </div>
+            </PanelBody>
+          </Panel>
+        </div>
+      </PageBody>
     </div>
   )
 }

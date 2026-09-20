@@ -2,20 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, Loader2 } from 'lucide-react'
+import { Loader2, Settings2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { AdminConfigPanel } from '@/components/project-management'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageBody, PageHeader } from '@/components/ui/page-header'
 import { useAppStore, type Project } from '@/store/app-store'
 
 export default function AdminPanelPage() {
   const router = useRouter()
   const projects = useAppStore((state) => state.projects)
   const currentProject = useAppStore((state) => state.currentProject)
-  const activeProjectId = useAppStore((state) => state.activeProjectId)
   const setCurrentProject = useAppStore((state) => state.setCurrentProject)
   const setActiveProjectId = useAppStore((state) => state.setActiveProjectId)
   const setProjects = useAppStore((state) => state.setProjects)
@@ -32,6 +33,7 @@ export default function AdminPanelPage() {
 
   const [isLoading, setIsLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [switchingProjectId, setSwitchingProjectId] = useState<string | null>(null)
   const initializedRef = useRef(false)
   const latestProjectDataRequest = useRef(0)
 
@@ -146,22 +148,34 @@ export default function AdminPanelPage() {
 
   const activateProject = useCallback(
     async (projectId: string) => {
-      const response = await fetch('/api/projects/active', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId }),
-      })
+      if (projectId === currentProject?.id) return
 
-      if (!response.ok) {
-        throw new Error('Failed to switch project')
-      }
+      setSwitchingProjectId(projectId)
+      try {
+        const response = await fetch('/api/projects/active', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId }),
+        })
 
-      const nextProject =
-        projects.find((project) => project.id === projectId) ?? currentProject ?? null
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          throw new Error(payload?.error || 'Failed to switch project')
+        }
 
-      if (nextProject) {
+        const nextProject = projects.find((project) => project.id === projectId) ?? null
+
+        if (!nextProject) {
+          throw new Error('The selected project is no longer available')
+        }
+
         setCurrentProject(nextProject)
         setActiveProjectId(nextProject.id)
+        toast.success(`Configuration context changed to ${nextProject.name}`)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to switch project')
+      } finally {
+        setSwitchingProjectId(null)
       }
     },
     [currentProject, projects, setActiveProjectId, setCurrentProject]
@@ -218,7 +232,7 @@ export default function AdminPanelPage() {
           nextProjects.find(
             (project) =>
               !project.isArchived &&
-              (project.id === activePayload.project?.id || project.id === activeProjectId)
+              project.id === activePayload.project?.id
           ) ?? nextProjects.find((project) => !project.isArchived) ?? null
 
         if (!nextProject) {
@@ -256,7 +270,7 @@ export default function AdminPanelPage() {
     return () => {
       isCancelled = true
     }
-  }, [activeProjectId, router, setActiveProjectId, setCurrentProject, setCurrentUser, setProjects])
+  }, [router, setActiveProjectId, setCurrentProject, setCurrentUser, setProjects])
 
   useEffect(() => {
     if (!currentProject?.id) return
@@ -266,12 +280,14 @@ export default function AdminPanelPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <Skeleton className="h-40 rounded-3xl" />
-          <Skeleton className="h-40 rounded-3xl" />
+      <div className="flex min-h-screen flex-col">
+        <div className="border-b border-border px-4 py-4 sm:px-6">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="mt-2 h-4 w-[min(28rem,80%)]" />
         </div>
-        <Skeleton className="h-[640px] rounded-3xl" />
+        <div className="px-4 py-4 sm:px-6">
+          <Skeleton className="h-[680px] rounded-lg" />
+        </div>
       </div>
     )
   }
@@ -309,39 +325,28 @@ export default function AdminPanelPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="rounded-3xl border-border/70 bg-card/90 shadow-sm">
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl tracking-tight">Admin Panel</CardTitle>
-                <CardDescription>
-                  Configure work item types, state models, and planning fields without the project sidebar.
-                </CardDescription>
-              </div>
-            </div>
-            {currentProject ? (
-              <Badge variant="secondary" className="w-fit rounded-full px-3 py-1 text-xs">
-                Active project: {currentProject.name}
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="w-full max-w-sm">
-            <div className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Configuration context
-            </div>
+    <div className="flex min-h-screen flex-col">
+      <PageHeader
+        title="Project configuration"
+        description="Define the work model, workflow rules, field schema, areas, and planning behavior for a project."
+        meta={
+          currentProject ? (
+            <Badge variant="outline" className="gap-1.5">
+              <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+              {currentProject.name}
+            </Badge>
+          ) : undefined
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <Settings2 className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="hidden text-xs text-muted-foreground sm:inline">Project</span>
             <Select
               value={currentProject?.id ?? ''}
-              onValueChange={(projectId) => {
-                void activateProject(projectId)
-              }}
+              onValueChange={(projectId) => void activateProject(projectId)}
+              disabled={switchingProjectId !== null}
             >
-              <SelectTrigger className="h-11 rounded-2xl">
+              <SelectTrigger className="w-[min(17rem,55vw)]" aria-label="Configuration project">
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
               <SelectContent>
@@ -352,22 +357,27 @@ export default function AdminPanelPage() {
                 ))}
               </SelectContent>
             </Select>
+            {switchingProjectId ? (
+              <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Switching project" />
+            ) : null}
           </div>
-        </CardHeader>
-      </Card>
+        }
+      />
 
       {!currentProject ? (
-        <Card className="rounded-3xl border-dashed border-border/70 bg-card/70 shadow-sm">
-          <CardContent className="flex min-h-[280px] flex-col items-center justify-center gap-3 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <div>
-              <p className="font-medium">Preparing the selected project</p>
-              <p className="text-sm text-muted-foreground">
-                Configuration options will appear once project data is loaded.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <PageBody className="flex items-center justify-center">
+          <Card className="w-full max-w-lg border-dashed">
+            <CardContent className="flex min-h-56 flex-col items-center justify-center gap-3 text-center">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Preparing project configuration</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Workflows and schema will appear as soon as the project data is ready.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </PageBody>
       ) : (
         <AdminConfigPanel />
       )}

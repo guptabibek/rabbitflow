@@ -38,7 +38,19 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowDown, ArrowUp, GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Blocks,
+  GitBranch,
+  GripVertical,
+  ListTree,
+  Loader2,
+  Map as MapIcon,
+  Save,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   isFinalStateCategory,
@@ -1079,25 +1091,12 @@ export function AdminConfigPanel() {
   )
 
   return (
-    <div className="space-y-3 p-4 md:p-5 lg:p-6">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-            <Layers className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Admin Panel</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-            Configure work item types, dynamic states, field mappings, and planning metadata.
-            </p>
-          </div>
-        </div>
-      </div>
-
+    <div className="min-h-0 flex-1">
       {configError ? (
         <InlineAlert
           tone="danger"
           title="Configuration not saved."
+          className="mx-4 mt-4 sm:mx-6"
           action={
             selectedType ? (
               <Button size="sm" variant="outline" onClick={() => void fetchTypeConfiguration(selectedType.id)}>
@@ -1110,22 +1109,26 @@ export function AdminConfigPanel() {
         </InlineAlert>
       ) : null}
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-        <div className="overflow-x-auto">
-          <TabsList className="mb-3 grid h-auto w-full min-w-[52rem] grid-cols-5 rounded-xl bg-muted/20 p-1 md:w-auto">
-            <TabsTrigger value="types" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Work Item Types</TabsTrigger>
-            <TabsTrigger value="states" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">State Management</TabsTrigger>
-            <TabsTrigger value="fields" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Field Management</TabsTrigger>
-            <TabsTrigger value="areas" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Areas</TabsTrigger>
-            <TabsTrigger value="planning" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Planning Config</TabsTrigger>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as typeof activeTab)}
+        className="min-h-0 gap-0"
+      >
+        <div className="sticky top-14 z-20 bg-background px-4 sm:px-6 lg:top-0">
+          <TabsList>
+            <TabsTrigger value="types"><Blocks />Types</TabsTrigger>
+            <TabsTrigger value="states"><GitBranch />Workflows</TabsTrigger>
+            <TabsTrigger value="fields"><ListTree />Field mapping</TabsTrigger>
+            <TabsTrigger value="areas"><MapIcon />Areas</TabsTrigger>
+            <TabsTrigger value="planning"><SlidersHorizontal />Planning</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="types" className="mt-0">
+        <TabsContent value="types" className="mt-0 min-h-[680px] border-b border-border">
           <WorkItemTypeManagement mode="screen" />
         </TabsContent>
 
-        <TabsContent value="states" className="mt-0 space-y-4">
+        <TabsContent value="states" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Workflow is configured per work item type</div>
@@ -1566,7 +1569,7 @@ export function AdminConfigPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="fields" className="mt-0 space-y-4">
+        <TabsContent value="fields" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Card>
               <CardHeader>
@@ -1705,11 +1708,11 @@ export function AdminConfigPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="areas" className="mt-0">
+        <TabsContent value="areas" className="mt-0 px-4 py-4 sm:px-6 sm:py-5">
           <AreasManagement />
         </TabsContent>
 
-        <TabsContent value="planning" className="mt-0 space-y-4">
+        <TabsContent value="planning" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Card>
               <CardHeader>
