@@ -78,6 +78,29 @@ test.describe('Workspace UX smoke coverage', () => {
     expect(workspaceToolbarBox).toEqual(loadingToolbarBox)
   })
 
+  test('workspace chrome stays mounted while switching project views', async ({ page, seed }) => {
+    const project = await seed.createProjectFixture({ name: makeProjectName('persistent-shell') })
+    await page.goto(`/projects/${project.id}/overview`)
+
+    const toolbar = page.getByTestId('workspace-toolbar')
+    await expect(toolbar).toBeVisible()
+    await page.evaluate(() => {
+      ;(window as Window & { __rabbitflowToolbar?: Element }).__rabbitflowToolbar =
+        document.querySelector('[data-testid="workspace-toolbar"]') ?? undefined
+    })
+
+    await page.getByTestId('sidebar-nav-board').click()
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/board(?:\\?|$)`))
+    await expect(page.getByTestId('workspace-shell-skeleton')).toHaveCount(0)
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { __rabbitflowToolbar?: Element }).__rabbitflowToolbar ===
+          document.querySelector('[data-testid="workspace-toolbar"]')
+      )
+    ).toBe(true)
+  })
+
   test('every admin workspace destination loads without a crash or server failure', async ({ page, seed }) => {
     const project = await seed.createProjectFixture({ name: makeProjectName('workspace-smoke') })
     const pageErrors: string[] = []

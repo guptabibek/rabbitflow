@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { WorkspaceApp } from '@/components/workspace-app'
 import {
   canonicalWorkspaceRoute,
   workspaceViewFromSlug,
@@ -23,5 +22,8 @@ export default async function ProjectViewPage({
     redirect(canonicalWorkspaceRoute(projectId, view))
   }
 
-  return <WorkspaceApp routeProjectId={projectId} routeView={view} />
+  // The persistent [projectId] layout owns WorkspaceApp. Keeping the leaf page
+  // validation-only lets view navigation update the centre content without
+  // unmounting the project header, sidebar, drawers, or client-side data.
+  return null
 }
