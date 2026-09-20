@@ -7,6 +7,9 @@ cd "$ROOT_DIR"
 
 COMPOSE=(docker compose -f docker-compose.production.yml --env-file .env.production)
 services_stopped=false
+database_changed=false
+reset_completed=false
+backup_file=""
 
 cleanup() {
   local rc=$?
@@ -17,6 +20,23 @@ cleanup() {
   unset SEED_PROJECT_DESCRIPTION SEED_PROJECT_COLOR SEED_PROJECT_ICON
   unset SEED_ORGANIZATION_NAME SEED_PRODUCT_NAME SEED_SUPPORT_EMAIL SEED_CUSTOM_DOMAIN
   unset confirm_password confirmation
+
+  if [[ "$rc" -ne 0 && "$database_changed" == "true" && "$reset_completed" == "false" && -s "$backup_file" ]]; then
+    echo "Reset failed after the database was changed. Restoring $backup_file..." >&2
+    "${COMPOSE[@]}" stop nginx cron app || true
+
+    if "${COMPOSE[@]}" exec -T postgres sh -lc \
+      'pg_restore --clean --if-exists --exit-on-error --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+      < "$backup_file"; then
+      echo "Database rollback completed." >&2
+      "${COMPOSE[@]}" exec -T redis sh -lc \
+        'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" FLUSHDB' >/dev/null || true
+    else
+      echo "AUTOMATIC ROLLBACK FAILED. Preserve this backup: $backup_file" >&2
+    fi
+
+    services_stopped=true
+  fi
 
   if [[ "$services_stopped" == "true" ]]; then
     echo "Reset did not finish. Restarting application services..." >&2
@@ -137,6 +157,7 @@ chmod 600 "$backup_file"
 sha256sum "$backup_file"
 
 echo "Resetting schema and applying migrations..."
+database_changed=true
 "${COMPOSE[@]}" run --rm -T --no-deps --entrypoint node app \
   /opt/prisma-cli/node_modules/prisma/build/index.js \
   migrate reset --force --skip-seed --skip-generate --schema=/app/prisma/schema.prisma
@@ -188,7 +209,6 @@ SQL
 
 echo "Starting production services..."
 "${COMPOSE[@]}" up -d app nginx cron
-services_stopped=false
 
 nginx_port="$(
   sed -n 's/^NGINX_PORT=//p' .env.production |
@@ -211,6 +231,9 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 [[ "$ready" == "true" ]] || fail "Application did not become ready"
+
+reset_completed=true
+services_stopped=false
 
 "${COMPOSE[@]}" ps
 
