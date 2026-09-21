@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -36,6 +36,11 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,10 +101,16 @@ export function WebhookManagement() {
   const [secret, setSecret] = useState('')
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'name' | 'url', string>>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [deliveryErrors, setDeliveryErrors] = useState<Record<string, string>>({})
 
   const fetchWebhooks = useCallback(async () => {
     if (!currentProject) return
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/webhooks?projectId=${currentProject.id}`)
       if (!res.ok) {
@@ -108,7 +119,7 @@ export function WebhookManagement() {
       const data = await res.json()
       setWebhooks(data.webhooks ?? data)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load webhooks')
+      setLoadError(error instanceof Error ? error.message : 'Failed to load webhooks')
     } finally {
       setLoading(false)
     }
@@ -117,14 +128,25 @@ export function WebhookManagement() {
   useEffect(() => { fetchWebhooks() }, [fetchWebhooks])
 
   const fetchDeliveries = async (webhookId: string) => {
-    const res = await fetch(`/api/webhooks/${webhookId}?deliveries=true`)
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to load webhook deliveries'))
-      return
-    }
+    setDeliveryErrors((previous) => ({ ...previous, [webhookId]: '' }))
+    try {
+      const res = await fetch(`/api/webhooks/${webhookId}?deliveries=true`)
+      if (!res.ok) {
+        setDeliveryErrors((previous) => ({
+          ...previous,
+          [webhookId]: 'Failed to load webhook deliveries',
+        }))
+        return
+      }
 
-    const data = await res.json()
-    setDeliveries((prev) => ({ ...prev, [webhookId]: data.deliveries ?? [] }))
+      const data = await res.json()
+      setDeliveries((prev) => ({ ...prev, [webhookId]: data.deliveries ?? [] }))
+    } catch {
+      setDeliveryErrors((previous) => ({
+        ...previous,
+        [webhookId]: 'Failed to load webhook deliveries',
+      }))
+    }
   }
 
   const toggleExpand = (id: string) => {
@@ -137,7 +159,25 @@ export function WebhookManagement() {
   }
 
   const handleCreate = async () => {
-    if (!currentProject || !url || !name) return
+    if (!currentProject) return
+    const nextErrors: typeof fieldErrors = {}
+    if (!name.trim()) nextErrors.name = 'Enter a webhook name.'
+    if (!url.trim()) {
+      nextErrors.url = 'Enter a payload URL.'
+    } else {
+      try {
+        const parsed = new URL(url.trim())
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          nextErrors.url = 'Use an HTTP or HTTPS URL.'
+        }
+      } catch {
+        nextErrors.url = 'Enter a valid absolute URL.'
+      }
+    }
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) return
+
+    setFormError(null)
     setSaving(true)
     try {
       const res = await fetch('/api/webhooks', {
@@ -145,8 +185,8 @@ export function WebhookManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: currentProject.id,
-          name,
-          url,
+          name: name.trim(),
+          url: url.trim(),
           secret: secret || undefined,
           events: selectedEvents.length ? selectedEvents : ALL_EVENTS,
         }),
@@ -161,34 +201,45 @@ export function WebhookManagement() {
       setSelectedEvents([])
       await fetchWebhooks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create webhook')
+      setFormError(error instanceof Error ? error.message : 'Failed to create webhook')
     } finally {
       setSaving(false)
     }
   }
 
   const handleToggle = async (wh: WebhookItem) => {
-    const res = await fetch(`/api/webhooks/${wh.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !wh.isActive }),
-    })
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to update webhook'))
-      return
-    }
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/webhooks/${wh.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !wh.isActive }),
+      })
+      if (!res.ok) {
+        setActionError(await getApiErrorMessage(res, 'Failed to update webhook'))
+        return
+      }
 
-    await fetchWebhooks()
+      await fetchWebhooks()
+    } catch {
+      setActionError('Failed to update webhook')
+    }
   }
 
-  const handleDelete = async (id: string) => {
-    const res = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      toast.error(await getApiErrorMessage(res, 'Failed to delete webhook'))
-      return
-    }
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string; url: string }>()
 
-    await fetchWebhooks()
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        return await getApiErrorMessage(res, 'Failed to delete webhook')
+      }
+
+      await fetchWebhooks()
+      return true
+    } catch {
+      return 'Failed to delete webhook'
+    }
   }
 
   const toggleEvent = (e: string) => {
@@ -214,7 +265,16 @@ export function WebhookManagement() {
             Send real-time event notifications to external services.
           </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open)
+            if (!open) {
+              setFormError(null)
+              setFieldErrors({})
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-3.5 w-3.5" />
@@ -224,23 +284,57 @@ export function WebhookManagement() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Webhook</DialogTitle>
+              <DialogDescription>
+                Choose the endpoint and events that should receive signed notifications.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
+              {formError ? (
+                <div data-testid="webhook-create-error">
+                  <InlineAlert tone="danger">{formError}</InlineAlert>
+                </div>
+              ) : null}
               <div className="space-y-1.5">
-                <Label>Name</Label>
+                <Label htmlFor="webhook-name">Name</Label>
                 <Input
+                  id="webhook-name"
                   placeholder="e.g. CI/CD Pipeline"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    setFieldErrors((previous) => ({ ...previous, name: undefined }))
+                    setFormError(null)
+                  }}
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? 'webhook-name-error' : undefined}
+                  data-testid="webhook-name-input"
                 />
+                {fieldErrors.name ? (
+                  <p id="webhook-name-error" className="text-xs text-destructive">
+                    {fieldErrors.name}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
-                <Label>Payload URL</Label>
+                <Label htmlFor="webhook-url">Payload URL</Label>
                 <Input
+                  id="webhook-url"
                   placeholder="https://example.com/webhook"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                    setUrl(e.target.value)
+                    setFieldErrors((previous) => ({ ...previous, url: undefined }))
+                    setFormError(null)
+                  }}
+                  aria-invalid={Boolean(fieldErrors.url)}
+                  aria-describedby={fieldErrors.url ? 'webhook-url-error' : undefined}
+                  data-testid="webhook-url-input"
                 />
+                {fieldErrors.url ? (
+                  <p id="webhook-url-error" className="text-xs text-destructive">
+                    {fieldErrors.url}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label>Secret (optional)</Label>
@@ -273,7 +367,7 @@ export function WebhookManagement() {
               <Button variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={!name || !url || saving}>
+              <Button onClick={handleCreate} disabled={saving} data-testid="webhook-create-submit">
                 {saving ? 'Creating…' : 'Create'}
               </Button>
             </DialogFooter>
@@ -281,12 +375,26 @@ export function WebhookManagement() {
         </Dialog>
       </div>
 
+      {actionError ? (
+        <div data-testid="webhook-action-error">
+          <InlineAlert tone="danger">{actionError}</InlineAlert>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-16 w-full rounded-lg" />
           ))}
         </div>
+      ) : loadError ? (
+        <ErrorState
+          title="Webhooks did not load"
+          description="The endpoint list could not be read. Nothing has changed."
+          detail={loadError}
+          onRetry={() => void fetchWebhooks()}
+          size="sm"
+        />
       ) : webhooks.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -302,13 +410,19 @@ export function WebhookManagement() {
               <CardContent className="p-3">
                 <div className="flex items-center gap-3">
                   <button
-                    className="flex-shrink-0"
+                    className="flex-shrink-0 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => toggleExpand(wh.id)}
+                    aria-expanded={expandedId === wh.id}
+                    aria-label={
+                      expandedId === wh.id
+                        ? `Hide delivery history for ${wh.name}`
+                        : `Show delivery history for ${wh.name}`
+                    }
                   >
                     {expandedId === wh.id ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown aria-hidden="true" className="h-4 w-4" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight aria-hidden="true" className="h-4 w-4" />
                     )}
                   </button>
                   <div className="min-w-0 flex-1">
@@ -341,7 +455,8 @@ export function WebhookManagement() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => handleDelete(wh.id)}
+                      aria-label="Delete webhook"
+                      onClick={() => deleteConfirm.request(wh)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -353,7 +468,18 @@ export function WebhookManagement() {
                     <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
                       Recent Deliveries
                     </h4>
-                    {!deliveries[wh.id] ? (
+                    {deliveryErrors[wh.id] ? (
+                      <InlineAlert
+                        tone="danger"
+                        action={
+                          <Button size="sm" variant="outline" onClick={() => void fetchDeliveries(wh.id)}>
+                            Retry
+                          </Button>
+                        }
+                      >
+                        {deliveryErrors[wh.id]}
+                      </InlineAlert>
+                    ) : !deliveries[wh.id] ? (
                       <Skeleton className="h-8 w-full" />
                     ) : deliveries[wh.id].length === 0 ? (
                       <p className="text-xs text-muted-foreground">No deliveries yet.</p>
@@ -366,9 +492,9 @@ export function WebhookManagement() {
                               className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs"
                             >
                               {d.success ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-success" />
                               ) : (
-                                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                                <XCircle aria-hidden="true" className="h-3.5 w-3.5 text-danger" />
                               )}
                               <span className="font-mono">{d.event}</span>
                               <span className="text-muted-foreground">try {d.attempt}</span>
@@ -393,6 +519,16 @@ export function WebhookManagement() {
           ))}
         </div>
       )}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete webhook "${deleteConfirm.target?.name ?? ''}"?`}
+        description="No further events will be delivered to this endpoint, and its delivery history will be removed. This cannot be undone."
+        onConfirm={() =>
+          deleteConfirm.target ? handleDelete(deleteConfirm.target.id) : false
+        }
+      />
     </div>
   )
 }

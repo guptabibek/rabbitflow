@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
+import { queueAssignmentEmail, queueWebhookEvent } from '@/lib/job-queue'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
@@ -407,8 +409,7 @@ export async function GET(
 
     return NextResponse.json(serializeIssueRecord(issue))
   } catch (error) {
-    console.error('Error fetching issue:', error)
-    return NextResponse.json({ error: 'Failed to fetch issue' }, { status: 500 })
+    return internalError('Error fetching issue:', error, readRequestId(request))
   }
 }
 
@@ -576,7 +577,12 @@ export async function PUT(
         return NextResponse.json(
           {
             error: 'Invalid workflow transition',
-            details: { fromStateId: currentIssue.stateId, toStateId: targetState.id },
+            details: {
+              fromStateId: currentIssue.stateId,
+              toStateId: targetState.id,
+              userMessage:
+                'That state is no longer available from the current workflow state. Refresh the item and choose one of the available State options.',
+            },
           },
           { status: 400 }
         )
@@ -824,6 +830,10 @@ export async function PUT(
         throw new Error('Updated issue could not be reloaded')
       }
 
+      if (updatedIssue.status !== currentIssue.status) {
+        await handleSlaStatusChange(id, currentIssue.status, updatedIssue.status, tx)
+      }
+
       return updatedIssue
     })
 
@@ -872,11 +882,6 @@ export async function PUT(
       })
     }
 
-    // SLA timer state transitions on status change
-    if (issue.status !== currentIssue.status) {
-      void handleSlaStatusChange(id, currentIssue.status, issue.status)
-    }
-
     if (
       data.assigneeId !== undefined &&
       data.assigneeId !== currentIssue.assigneeId &&
@@ -900,7 +905,7 @@ export async function PUT(
         },
       })
 
-      void sendWorkItemAssignmentEmail({
+      void queueAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: updatePermission.actor.userId,
@@ -975,7 +980,7 @@ export async function PUT(
         include: workItemPageIssueInclude,
       })) ?? issue
 
-    void dispatchWebhookEvent(currentIssue.projectId, 'issue.updated', {
+    void queueWebhookEvent(currentIssue.projectId, 'issue.updated', {
       issue: {
         id: finalIssue.id,
         key: finalIssue.key,
@@ -991,7 +996,7 @@ export async function PUT(
     })
 
     if (finalIssue.status !== currentIssue.status) {
-      void dispatchWebhookEvent(currentIssue.projectId, 'issue.status_changed', {
+      void queueWebhookEvent(currentIssue.projectId, 'issue.status_changed', {
         issue: {
           id: finalIssue.id,
           key: finalIssue.key,
@@ -1005,7 +1010,7 @@ export async function PUT(
     }
 
     if (finalIssue.assigneeId !== currentIssue.assigneeId) {
-      void dispatchWebhookEvent(currentIssue.projectId, 'issue.assigned', {
+      void queueWebhookEvent(currentIssue.projectId, 'issue.assigned', {
         issue: {
           id: finalIssue.id,
           key: finalIssue.key,
@@ -1036,14 +1041,10 @@ export async function PUT(
     }
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
 
-    console.error('Error updating issue:', error)
-    return NextResponse.json({ error: 'Failed to update issue' }, { status: 500 })
+    return internalError('Error updating issue:', error, readRequestId(request))
   }
 }
 
@@ -1086,7 +1087,7 @@ export async function DELETE(
       await tx.issue.delete({ where: { id } })
     })
 
-    void dispatchWebhookEvent(issue.projectId, 'issue.deleted', {
+    void queueWebhookEvent(issue.projectId, 'issue.deleted', {
       issue: {
         id,
         key: issue.key,
@@ -1103,7 +1104,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting issue:', error)
-    return NextResponse.json({ error: 'Failed to delete issue' }, { status: 500 })
+    return internalError('Error deleting issue:', error, readRequestId(request))
   }
 }

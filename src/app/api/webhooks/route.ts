@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { WEBHOOK_EVENTS, getWebhooks } from '@/lib/domain/webhook-service'
+import { assertSafeOutboundUrl } from '@/lib/domain/url-safety'
 import crypto from 'crypto'
 
 const createWebhookSchema = z.object({
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
         { error: 'Maximum 20 webhooks per project' },
         { status: 400 }
       )
+    }
+
+    // Reject URLs that point at internal infrastructure before storing them.
+    // Without this the dispatcher would happily fetch the cloud metadata service
+    // or anything on the internal network and surface the response body in the
+    // delivery log.
+    const urlCheck = await assertSafeOutboundUrl(data.url)
+    if (!urlCheck.ok) {
+      return NextResponse.json({ error: urlCheck.reason }, { status: 400 })
     }
 
     // Auto-generate secret if not provided

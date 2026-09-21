@@ -6,9 +6,48 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InlineAlert } from '@/components/ui/states'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { History, Loader2, RefreshCcw, Shield, ShieldAlert, Trash2, UserRound, XCircle } from 'lucide-react'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Metric, MetricRow } from '@/components/ui/metric'
+import { PageBody, PageHeader } from '@/components/ui/page-header'
+import { Panel, PanelBody, PanelHeader } from '@/components/ui/panel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
+import {
+  Ellipsis,
+  History,
+  KeyRound,
+  Loader2,
+  MonitorSmartphone,
+  RefreshCcw,
+  Search,
+  Shield,
+  ShieldAlert,
+  Trash2,
+  UserCheck,
+  Users,
+  XCircle,
+} from 'lucide-react'
 
 type SecurityUser = {
   id: string
@@ -49,13 +88,6 @@ type SecurityAuditEvent = {
     email: string
     avatar: string | null
   } | null
-}
-
-type SecuritySummaryCard = {
-  label: string
-  value: string
-  helper: string
-  icon: typeof Shield
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -134,55 +166,22 @@ export default function AdminSecurityPage() {
   const [auditLoading, setAuditLoading] = useState(false)
   const [operationLoading, setOperationLoading] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [pageError, setPageError] = useState<string | null>(null)
+  const accessRemoval = useDestructiveConfirm<SecurityUser>()
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
     [users, selectedUserId]
   )
 
-  const securitySummaryCards = useMemo<SecuritySummaryCard[]>(
-    () => [
-      {
-        label: 'Selected User',
-        value: selectedUser ? selectedUser.name : 'Choose an account',
-        helper: selectedUser ? selectedUser.email : 'Pick a user from the directory to inspect sessions and audit events.',
-        icon: UserRound,
-      },
-      {
-        label: 'MFA Status',
-        value: !selectedUser
-          ? 'Not selected'
-          : selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired
-            ? 'Enabled'
-            : 'Disabled',
-        helper: !selectedUser
-          ? 'No user selected.'
-          : selectedUser.mfaReenrollRequired
-            ? 'User must re-enroll on the next sign-in.'
-            : selectedUser.mfaEnabled
-              ? 'Authenticator enrollment is active.'
-              : 'User is currently exempt from enforced MFA setup.',
-        icon: Shield,
-      },
-      {
-        label: 'Visible Sessions',
-        value: selectedUser ? String(sessions.length) : '0',
-        helper: selectedUser
-          ? `${sessions.filter((session) => !session.revokedAt).length} active and ${sessions.filter((session) => session.revokedAt).length} revoked in the current view.`
-          : 'No session data loaded yet.',
-        icon: XCircle,
-      },
-      {
-        label: 'Audit Entries',
-        value: selectedUser ? String(auditEvents.length) : '0',
-        helper: selectedUser
-          ? 'Security timeline entries for the selected account.'
-          : 'Timeline appears after a user is selected.',
-        icon: History,
-      },
-    ],
-    [auditEvents.length, selectedUser, sessions]
-  )
+  const activeUsers = users.filter((user) => user.isActive).length
+  const mfaProtectedUsers = users.filter(
+    (user) => user.isActive && (user.mfaEnabled || user.mfaReenrollRequired)
+  ).length
+  const activeSessionCount = users.reduce((total, user) => total + user.activeSessions, 0)
+  const mfaAttentionCount = users.filter(
+    (user) => user.isActive && !user.mfaEnabled && !user.mfaReenrollRequired
+  ).length
 
   const loadUsers = async (search: string, keepSelection = true): Promise<string | null> => {
     const response = await fetch(`/api/admin/security/users?query=${encodeURIComponent(search)}`, {
@@ -220,6 +219,7 @@ export default function AdminSecurityPage() {
 
   const loadSessions = async (userId: string) => {
     setSessionsLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/sessions`, {
         cache: 'no-store',
@@ -236,8 +236,7 @@ export default function AdminSecurityPage() {
       setSessions(nextSessions)
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load sessions')
-      setSessions([])
+      setPageError(error instanceof Error ? error.message : 'Failed to load sessions')
     } finally {
       setSessionsLoading(false)
     }
@@ -245,6 +244,7 @@ export default function AdminSecurityPage() {
 
   const loadAudit = async (userId: string) => {
     setAuditLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/audit?limit=100`, {
         cache: 'no-store',
@@ -262,8 +262,7 @@ export default function AdminSecurityPage() {
       setAuditEvents(nextEvents)
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load security timeline')
-      setAuditEvents([])
+      setPageError(error instanceof Error ? error.message : 'Failed to load security timeline')
     } finally {
       setAuditLoading(false)
     }
@@ -288,7 +287,7 @@ export default function AdminSecurityPage() {
         await loadUsers('', false)
       } catch (error) {
         console.error(error)
-        toast.error('Failed to initialize admin security page')
+        setPageError('Failed to initialize admin security page')
       } finally {
         setIsLoading(false)
       }
@@ -309,6 +308,7 @@ export default function AdminSecurityPage() {
 
   const refreshAll = async () => {
     setIsRefreshing(true)
+    setPageError(null)
     try {
       const resolvedUserId = await loadUsers(query)
       if (resolvedUserId) {
@@ -317,7 +317,7 @@ export default function AdminSecurityPage() {
       toast.success('Security data refreshed')
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Refresh failed')
+      setPageError(error instanceof Error ? error.message : 'Refresh failed')
     } finally {
       setIsRefreshing(false)
     }
@@ -325,6 +325,7 @@ export default function AdminSecurityPage() {
 
   const resetMfaForUser = async (userId: string, revokeSessions: boolean) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/mfa/reset`, {
         method: 'POST',
@@ -344,7 +345,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'MFA reset failed')
+      setPageError(error instanceof Error ? error.message : 'MFA reset failed')
     } finally {
       setOperationLoading(false)
     }
@@ -352,6 +353,7 @@ export default function AdminSecurityPage() {
 
   const updateMfaPolicyForUser = async (userId: string, action: 'enable' | 'disable') => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/mfa`, {
         method: 'POST',
@@ -371,18 +373,15 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'MFA policy update failed')
+      setPageError(error instanceof Error ? error.message : 'MFA policy update failed')
     } finally {
       setOperationLoading(false)
     }
   }
 
   const deactivateUser = async (userId: string) => {
-    if (!confirm('Remove all access for this user and deactivate the account? This will revoke sessions, remove memberships, and clear active assignments.')) {
-      return
-    }
-
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}`, {
         method: 'DELETE',
@@ -398,9 +397,10 @@ export default function AdminSecurityPage() {
       if (resolvedUserId) {
         await Promise.all([loadSessions(resolvedUserId), loadAudit(resolvedUserId)])
       }
+      return true
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'User deactivation failed')
+      return error instanceof Error ? error.message : 'User deactivation failed'
     } finally {
       setOperationLoading(false)
     }
@@ -408,6 +408,7 @@ export default function AdminSecurityPage() {
 
   const revokeSession = async (sessionId: string) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/sessions/${sessionId}`, {
         method: 'DELETE',
@@ -427,7 +428,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Session revoke failed')
+      setPageError(error instanceof Error ? error.message : 'Session revoke failed')
     } finally {
       setOperationLoading(false)
     }
@@ -435,6 +436,7 @@ export default function AdminSecurityPage() {
 
   const revokeAllSessionsForUser = async (userId: string) => {
     setOperationLoading(true)
+    setPageError(null)
     try {
       const response = await fetch(`/api/admin/security/users/${userId}/sessions`, {
         method: 'DELETE',
@@ -460,7 +462,7 @@ export default function AdminSecurityPage() {
       }
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Bulk session revoke failed')
+      setPageError(error instanceof Error ? error.message : 'Bulk session revoke failed')
     } finally {
       setOperationLoading(false)
     }
@@ -495,337 +497,390 @@ export default function AdminSecurityPage() {
   }
 
   return (
-    <div className="w-full p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Admin Security Console</h1>
-          <p className="text-sm text-muted-foreground">
-            Enforce MFA, revoke sessions, offboard users, and review a full security action timeline.
-          </p>
-        </div>
-        <Button variant="outline" onClick={refreshAll} disabled={isRefreshing || operationLoading}>
-          {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
-          Refresh
-        </Button>
-      </div>
+    <div className="flex min-h-screen flex-col">
+      <PageHeader
+        title="Security & access"
+        description="Manage authentication policy, active sessions, account access, and the administrative audit trail."
+        meta={
+          <Badge variant="outline" className="gap-1.5">
+            <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+            Live controls
+          </Badge>
+        }
+        actions={
+          <Button size="sm" variant="outline" onClick={refreshAll} disabled={isRefreshing || operationLoading} loading={isRefreshing}>
+            {!isRefreshing ? <RefreshCcw /> : null}
+            Refresh data
+          </Button>
+        }
+      />
 
-      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-        {securitySummaryCards.map((item) => (
-          <Card key={item.label} className="rounded-3xl border-border/70 bg-card/90 shadow-sm">
-            <CardContent className="flex items-start justify-between gap-4 p-5">
-              <div className="min-w-0">
-                <div className="text-sm text-muted-foreground">{item.label}</div>
-                <div className="mt-2 truncate text-lg font-semibold tracking-tight" title={item.value}>
-                  {item.value}
-                </div>
-                <div className="mt-2 text-xs leading-5 text-muted-foreground">{item.helper}</div>
-              </div>
-              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <item.icon className="h-5 w-5" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+      <PageBody className="space-y-4">
+        {pageError ? (
+          <InlineAlert
+            tone="danger"
+            title="Security action not completed."
+            action={<Button size="sm" variant="outline" onClick={() => void refreshAll()}>Retry refresh</Button>}
+          >
+            {pageError}
+          </InlineAlert>
+        ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-[390px_minmax(0,1.18fr)_minmax(340px,0.88fr)]">
-        <Card>
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-base">Users</CardTitle>
-            <div className="space-y-1.5">
-              <Label htmlFor="security-user-search" className="text-xs text-muted-foreground">Search users</Label>
-              <Input
-                id="security-user-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Name or email"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void loadUsers(query)
-                  }
-                }}
-              />
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void loadUsers(query)}
-              disabled={isRefreshing || operationLoading}
-            >
-              Apply Filter
-            </Button>
-          </CardHeader>
-          <CardContent className="max-h-[70vh] overflow-auto p-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2">User</th>
-                  <th className="px-3 py-2">MFA</th>
-                  <th className="px-3 py-2">Sessions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const isSelected = selectedUserId === user.id
-                  return (
-                    <tr
-                      key={user.id}
-                      className={`cursor-pointer border-b transition-colors hover:bg-muted/40 ${isSelected ? 'bg-muted/60' : ''}`}
-                      onClick={() => setSelectedUserId(user.id)}
-                    >
-                      <td className="px-3 py-2 align-top">
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">Role: {user.globalRole}</div>
-                        <div className="mt-1">
-                          {user.isActive ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border-0">Active</Badge>
-                          ) : (
-                            <Badge variant="destructive">Offboarded</Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        {!user.isActive ? (
-                          <Badge variant="outline">Unavailable</Badge>
-                        ) : user.mfaEnabled || user.mfaReenrollRequired ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 border-0">Enabled</Badge>
-                        ) : (
-                          <Badge variant="outline">Disabled</Badge>
-                        )}
-                        {user.mfaReenrollRequired ? (
-                          <div className="mt-1">
-                            <Badge className="bg-amber-500/10 text-amber-600 border-0">Re-enroll required</Badge>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <div>{user.activeSessions}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {formatDateTime(user.lastSeenAt)}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {users.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-6 text-center text-sm text-muted-foreground">
-                      No users found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+        <MetricRow>
+          <Metric label="Active accounts" value={activeUsers} hint={`${users.length} total account${users.length === 1 ? '' : 's'}`} icon={Users} />
+          <Metric
+            label="MFA protected"
+            value={`${mfaProtectedUsers}/${activeUsers}`}
+            hint={activeUsers > 0 ? `${Math.round((mfaProtectedUsers / activeUsers) * 100)}% coverage` : 'No active accounts'}
+            tone={mfaAttentionCount > 0 ? 'warning' : 'success'}
+            icon={Shield}
+          />
+          <Metric label="Active sessions" value={activeSessionCount} hint="Across all visible accounts" icon={MonitorSmartphone} />
+          <Metric
+            label="Needs attention"
+            value={mfaAttentionCount}
+            hint="Active accounts without MFA"
+            tone={mfaAttentionCount > 0 ? 'danger' : 'success'}
+            icon={ShieldAlert}
+          />
+        </MetricRow>
 
-        <Card className="xl:col-span-1 2xl:col-span-1">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Sessions & Devices</CardTitle>
-              {selectedUser ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {selectedUser.name} ({selectedUser.email})
-                </p>
-              ) : null}
-            </div>
-            {selectedUser ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {selectedUser.isActive ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      void updateMfaPolicyForUser(
-                        selectedUser.id,
-                        selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired
-                          ? 'disable'
-                          : 'enable'
-                      )
-                    }
-                    disabled={operationLoading}
-                  >
-                    <Shield className="mr-2 h-4 w-4" />
-                    {selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired
-                      ? 'Disable MFA'
-                      : 'Enable MFA'}
+        <div className="grid min-h-[640px] gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <Panel className="overflow-hidden xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start">
+            <PanelHeader
+              title="User directory"
+              description={`${users.length} account${users.length === 1 ? '' : 's'} in this result`}
+              icon={Users}
+            />
+            <PanelBody padded={false} className="flex min-h-0 flex-col">
+              <div className="border-b border-border p-3">
+                <Label htmlFor="security-user-search" className="sr-only">Search users</Label>
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="security-user-search"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Search name or email"
+                      className="pl-8"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void loadUsers(query)
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void loadUsers(query)} disabled={isRefreshing || operationLoading}>
+                    Search
                   </Button>
-                ) : null}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void resetMfaForUser(selectedUser.id, true)}
-                  disabled={operationLoading || !selectedUser.isActive}
-                >
-                  {operationLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldAlert className="mr-2 h-4 w-4" />}
-                  Reset MFA + Revoke Sessions
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void resetMfaForUser(selectedUser.id, false)}
-                  disabled={operationLoading || !selectedUser.isActive}
-                >
-                  <Shield className="mr-2 h-4 w-4" />
-                  Reset MFA Only
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void revokeAllSessionsForUser(selectedUser.id)}
-                  disabled={operationLoading || !selectedUser.isActive}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Revoke All Sessions
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void deactivateUser(selectedUser.id)}
-                  disabled={operationLoading || !selectedUser.isActive}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Remove User Access
-                </Button>
+                </div>
               </div>
-            ) : null}
-          </CardHeader>
-          <CardContent className="p-0">
-            {sessionsLoading ? (
-              <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading sessions...
-              </div>
-            ) : !selectedUser ? (
-              <div className="p-6 text-sm text-muted-foreground">
-                Select a user to view enrolled devices and sessions.
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">No sessions found for selected user.</div>
-            ) : (
-              <div className="max-h-[58vh] overflow-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-3 py-2">Device</th>
-                      <th className="px-3 py-2">Security</th>
-                      <th className="px-3 py-2">Times</th>
-                      <th className="px-3 py-2">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessions.map((session) => (
-                      <tr key={session.id} className="border-b align-top">
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{session.deviceLabel || 'Unknown device'}</div>
-                          <div className="text-xs text-muted-foreground">IP: {session.ipAddress || 'N/A'}</div>
-                          <div className="max-w-[320px] truncate text-xs text-muted-foreground" title={session.userAgent || ''}>
-                            {session.userAgent || 'No user-agent'}
-                          </div>
-                        </td>
-                        <td className="space-y-1 px-3 py-2">
-                          {session.revokedAt ? (
-                            <Badge variant="outline" className="border-destructive/40 text-destructive">
-                              Revoked
-                            </Badge>
-                          ) : (
-                            <Badge className="border-0 bg-emerald-500/10 text-emerald-600">Active</Badge>
-                          )}
-                          {session.mfaBypassed ? (
-                            <div>
-                              <Badge className="border-0 bg-amber-500/10 text-amber-600">MFA bypassed</Badge>
-                            </div>
-                          ) : null}
-                          {session.mfaVerifiedAt ? (
-                            <div className="text-[11px] text-muted-foreground">
-                              MFA verified: {formatDateTime(session.mfaVerifiedAt)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
-                          <div>Created: {formatDateTime(session.createdAt)}</div>
-                          <div>Last seen: {formatDateTime(session.lastSeenAt)}</div>
-                          <div>Expires: {formatDateTime(session.expiresAt)}</div>
-                          {session.revokedAt ? (
-                            <div className="text-destructive">
-                              Revoked: {formatDateTime(session.revokedAt)} ({session.revokedReason || 'No reason'})
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={operationLoading || Boolean(session.revokedAt) || !selectedUser?.isActive}
-                            onClick={() => void revokeSession(session.id)}
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Revoke
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        <Card className="xl:col-span-2 2xl:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-base">Audit Timeline</CardTitle>
-            {selectedUser ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Who changed security state for {selectedUser.name}, and when.
-              </p>
-            ) : null}
-          </CardHeader>
-          <CardContent>
-            {auditLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading audit timeline...
-              </div>
-            ) : !selectedUser ? (
-              <div className="text-sm text-muted-foreground">
-                Select a user to view audit timeline.
-              </div>
-            ) : auditEvents.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No security events recorded for selected user.</div>
-            ) : (
-              <div className="max-h-[58vh] space-y-2 overflow-auto pr-1">
-                {auditEvents.map((event) => {
-                  const details = describeAuditDetails(event)
+              <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+                {users.map((user) => {
+                  const selected = selectedUserId === user.id
+                  const initials = user.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+
                   return (
-                    <div key={event.id} className="rounded-md border bg-muted/20 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-medium">{formatAuditAction(event.action)}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            By {event.actorUser?.name || event.actorUser?.email || 'Unknown admin'}
-                          </div>
-                          {details ? (
-                            <div className="mt-1 text-xs text-muted-foreground">{details}</div>
-                          ) : null}
-                        </div>
-                        <div className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(event.createdAt)}
-                        </div>
-                      </div>
-                    </div>
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setSelectedUserId(user.id)}
+                      aria-current={selected ? 'true' : undefined}
+                      className={`flex w-full items-start gap-2.5 rounded-md px-2.5 py-2.5 text-left outline-none transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring ${
+                        selected ? 'bg-primary-muted shadow-[inset_2px_0_0_var(--primary)]' : 'hover:bg-surface-hover'
+                      }`}
+                    >
+                      <Avatar className="size-8">
+                        <AvatarFallback className="bg-surface-sunken text-[10px] font-semibold text-muted-foreground">
+                          {initials || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-[13px] font-medium text-foreground">{user.name}</span>
+                          <span
+                            className={`size-1.5 shrink-0 rounded-full ${user.isActive ? 'bg-success' : 'bg-muted-foreground/45'}`}
+                            title={user.isActive ? 'Active account' : 'Offboarded account'}
+                          />
+                        </span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
+                        <span className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span className="capitalize">{user.globalRole}</span>
+                          <span aria-hidden="true">•</span>
+                          <span>{user.activeSessions} active session{user.activeSessions === 1 ? '' : 's'}</span>
+                        </span>
+                      </span>
+                      {user.isActive && (user.mfaEnabled || user.mfaReenrollRequired) ? (
+                        <Shield className="mt-0.5 size-3.5 shrink-0 text-success" aria-label="MFA protected" />
+                      ) : null}
+                    </button>
                   )
                 })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      <div className="text-xs text-muted-foreground flex items-center gap-2">
-        <History className="h-3.5 w-3.5" />
-        Use MFA controls, session revocation, and offboarding to lock down user access immediately.
-      </div>
+                {users.length === 0 ? (
+                  <div className="px-4 py-12 text-center">
+                    <Users className="mx-auto size-5 text-muted-foreground" />
+                    <p className="mt-2 text-sm font-medium">No users found</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Try a different name or email address.</p>
+                  </div>
+                ) : null}
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <div className="min-w-0 space-y-4">
+            {selectedUser ? (
+              <>
+                <Panel>
+                  <PanelHeader
+                    title={selectedUser.name}
+                    description={selectedUser.email}
+                    icon={UserCheck}
+                    actions={
+                      <div className="flex items-center gap-2">
+                        {selectedUser.isActive ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="hidden sm:inline-flex"
+                            onClick={() => void updateMfaPolicyForUser(
+                              selectedUser.id,
+                              selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired ? 'disable' : 'enable'
+                            )}
+                            disabled={operationLoading}
+                          >
+                            <Shield />
+                            {selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired ? 'Disable MFA' : 'Require MFA'}
+                          </Button>
+                        ) : null}
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" disabled={operationLoading}>
+                              <Ellipsis />
+                              Security actions
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuItem
+                              disabled={!selectedUser.isActive}
+                              onSelect={() => void updateMfaPolicyForUser(
+                                selectedUser.id,
+                                selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired ? 'disable' : 'enable'
+                              )}
+                            >
+                              <Shield />
+                              {selectedUser.mfaEnabled || selectedUser.mfaReenrollRequired ? 'Disable MFA policy' : 'Require MFA'}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled={!selectedUser.isActive} onSelect={() => void resetMfaForUser(selectedUser.id, false)}>
+                              <KeyRound />
+                              Reset MFA enrollment
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled={!selectedUser.isActive} onSelect={() => void resetMfaForUser(selectedUser.id, true)}>
+                              <ShieldAlert />
+                              Reset MFA and revoke sessions
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={!selectedUser.isActive || selectedUser.activeSessions === 0}
+                              onSelect={() => void revokeAllSessionsForUser(selectedUser.id)}
+                            >
+                              <XCircle />
+                              Revoke all sessions
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" disabled={!selectedUser.isActive} onSelect={() => accessRemoval.request(selectedUser)}>
+                              <Trash2 />
+                              Remove user access
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    }
+                  />
+                  <PanelBody>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={selectedUser.isActive ? 'outline' : 'destructive'}
+                        className={selectedUser.isActive ? 'border-success-border bg-success-bg text-success' : ''}
+                      >
+                        {selectedUser.isActive ? 'Active account' : 'Access removed'}
+                      </Badge>
+                      <Badge variant="outline" className="capitalize">{selectedUser.globalRole}</Badge>
+                      {selectedUser.mfaReenrollRequired ? (
+                        <Badge className="border-0 bg-warning-bg text-warning">MFA re-enrollment required</Badge>
+                      ) : selectedUser.mfaEnabled ? (
+                        <Badge className="border-0 bg-success-bg text-success">MFA enrolled</Badge>
+                      ) : (
+                        <Badge variant="outline">MFA not enrolled</Badge>
+                      )}
+                    </div>
+
+                    <dl className="mt-4 grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
+                      <div className="bg-card px-3 py-2.5">
+                        <dt className="type-label">Last seen</dt>
+                        <dd className="mt-1 text-xs font-medium text-foreground">{formatDateTime(selectedUser.lastSeenAt)}</dd>
+                      </div>
+                      <div className="bg-card px-3 py-2.5">
+                        <dt className="type-label">Active sessions</dt>
+                        <dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{selectedUser.activeSessions}</dd>
+                      </div>
+                      <div className="bg-card px-3 py-2.5">
+                        <dt className="type-label">MFA enrolled</dt>
+                        <dd className="mt-1 text-xs font-medium text-foreground">{formatDateTime(selectedUser.mfaEnabledAt)}</dd>
+                      </div>
+                    </dl>
+                  </PanelBody>
+                </Panel>
+
+                <Tabs defaultValue="sessions" className="gap-0">
+                  <Panel className="overflow-hidden">
+                    <div className="border-b border-border px-3.5 pt-1">
+                      <TabsList>
+                        <TabsTrigger value="sessions">
+                          <MonitorSmartphone /> Sessions
+                          <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{sessions.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="audit">
+                          <History /> Audit trail
+                          <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{auditEvents.length}</Badge>
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
+
+                    <TabsContent value="sessions" className="mt-0">
+                      {sessionsLoading ? (
+                        <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" /> Loading sessions…
+                        </div>
+                      ) : sessions.length === 0 ? (
+                        <div className="p-10 text-center">
+                          <MonitorSmartphone className="mx-auto size-5 text-muted-foreground" />
+                          <p className="mt-2 text-sm font-medium">No session history</p>
+                          <p className="mt-1 text-xs text-muted-foreground">This account has no recorded sessions.</p>
+                        </div>
+                      ) : (
+                        <Table density="comfortable" containerClassName="max-h-[520px]">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Device</TableHead>
+                              <TableHead>Assurance</TableHead>
+                              <TableHead>Activity</TableHead>
+                              <TableHead align="right">Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sessions.map((session) => (
+                              <TableRow key={session.id}>
+                                <TableCell className="min-w-[220px]">
+                                  <div className="font-medium">{session.deviceLabel || 'Unknown device'}</div>
+                                  <div className="mt-0.5 text-[11px] text-muted-foreground">{session.ipAddress || 'IP unavailable'}</div>
+                                  <div className="max-w-[320px] truncate text-[11px] text-muted-foreground" title={session.userAgent || ''}>
+                                    {session.userAgent || 'User agent unavailable'}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="min-w-[150px]">
+                                  <div className="flex flex-wrap gap-1">
+                                    {session.revokedAt ? (
+                                      <Badge variant="outline" className="border-danger-border bg-danger-bg text-foreground">Revoked</Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="border-success-border bg-success-bg text-success">Active</Badge>
+                                    )}
+                                    {session.mfaBypassed ? (
+                                      <Badge className="border-0 bg-warning-bg text-warning">MFA bypassed</Badge>
+                                    ) : session.mfaVerifiedAt ? (
+                                      <Badge variant="outline">MFA verified</Badge>
+                                    ) : null}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="min-w-[210px] text-xs text-muted-foreground">
+                                  <div>Last seen {formatDateTime(session.lastSeenAt)}</div>
+                                  <div>Expires {formatDateTime(session.expiresAt)}</div>
+                                  {session.revokedAt ? <div className="text-danger">Revoked {formatDateTime(session.revokedAt)}</div> : null}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    disabled={operationLoading || Boolean(session.revokedAt) || !selectedUser.isActive}
+                                    onClick={() => void revokeSession(session.id)}
+                                  >
+                                    <XCircle /> Revoke
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="audit" className="mt-0">
+                      {auditLoading ? (
+                        <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" /> Loading audit trail…
+                        </div>
+                      ) : auditEvents.length === 0 ? (
+                        <div className="p-10 text-center">
+                          <History className="mx-auto size-5 text-muted-foreground" />
+                          <p className="mt-2 text-sm font-medium">No security events</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Administrative actions for this account will appear here.</p>
+                        </div>
+                      ) : (
+                        <ol className="max-h-[520px] overflow-y-auto p-4">
+                          {auditEvents.map((event, index) => {
+                            const details = describeAuditDetails(event)
+                            return (
+                              <li key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+                                {index < auditEvents.length - 1 ? (
+                                  <span className="absolute left-[5px] top-3 h-full w-px bg-border" aria-hidden="true" />
+                                ) : null}
+                                <span className="relative mt-1.5 size-2.5 shrink-0 rounded-full border-2 border-card bg-primary" aria-hidden="true" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                    <p className="text-[13px] font-medium">{formatAuditAction(event.action)}</p>
+                                    <time className="text-[11px] text-muted-foreground">{formatDateTime(event.createdAt)}</time>
+                                  </div>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    By {event.actorUser?.name || event.actorUser?.email || 'Unknown administrator'}
+                                    {details ? ` • ${details}` : ''}
+                                  </p>
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      )}
+                    </TabsContent>
+                  </Panel>
+                </Tabs>
+              </>
+            ) : (
+              <Panel className="min-h-[420px]">
+                <PanelBody className="flex flex-col items-center justify-center text-center">
+                  <UserCheck className="size-6 text-muted-foreground" />
+                  <p className="mt-3 text-sm font-medium">Select an account</p>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    Choose a user to inspect authentication status, revoke sessions, or review administrative changes.
+                  </p>
+                </PanelBody>
+              </Panel>
+            )}
+          </div>
+        </div>
+      </PageBody>
+
+      <ConfirmDestructiveDialog
+        open={accessRemoval.isOpen}
+        onOpenChange={accessRemoval.onOpenChange}
+        title={`Remove access for ${accessRemoval.target?.name ?? 'this user'}?`}
+        description="This deactivates the account, revokes every session, removes all project memberships, and clears active work-item assignments."
+        confirmLabel="Remove user access"
+        onConfirm={() => accessRemoval.target ? deactivateUser(accessRemoval.target.id) : false}
+      />
     </div>
   )
 }

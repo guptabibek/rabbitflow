@@ -1,4 +1,11 @@
-import type { Issue, WorkItemTypeDefinition } from '../../store/app-store'
+import type {
+  Issue,
+  State,
+  StateTransition,
+  TypeStateMapping,
+  WorkItemTypeDefinition,
+} from '../../store/app-store'
+import { normalizeStateCategory } from './state-categories.ts'
 
 export const UNASSIGNED_VALUE = '__none__'
 
@@ -71,6 +78,157 @@ export function getWorkItemTypeDefinition(
   typeKey: string
 ) {
   return workItemTypes.find((workItemType) => workItemType.key === typeKey) ?? null
+}
+
+export const BOARD_STATUS_OPTIONS = [
+  'backlog',
+  'todo',
+  'in_progress',
+  'in_review',
+  'done',
+] as const satisfies readonly Issue['status'][]
+
+export type BoardStatus = (typeof BOARD_STATUS_OPTIONS)[number]
+
+const BOARD_STATUS_CATEGORY: Record<BoardStatus, ReturnType<typeof normalizeStateCategory>> = {
+  backlog: 'Proposed',
+  todo: 'Proposed',
+  in_progress: 'In Progress',
+  in_review: 'In Progress',
+  done: 'Completed',
+}
+
+/**
+ * Return only the states that the update API can accept from the current state.
+ *
+ * A project's state list is shared by every work-item type, while mappings and
+ * transition edges are type-specific. Showing the project-wide list makes
+ * invalid workflow transitions look selectable and leaves the API to reject
+ * the user's choice after they press Save.
+ *
+ * Projects with no enabled transition graph retain the server's compatibility
+ * behavior: any state mapped to the type is available. Once a graph exists,
+ * the current state and its enabled outgoing edges are the complete set.
+ */
+export function getAvailableWorkItemStates({
+  states,
+  typeStateMappings,
+  stateTransitions,
+  workItemTypeId,
+  currentStateId,
+}: {
+  states: State[]
+  typeStateMappings: TypeStateMapping[]
+  stateTransitions: StateTransition[]
+  workItemTypeId: string | null | undefined
+  currentStateId: string | null | undefined
+}) {
+  if (!workItemTypeId) {
+    return currentStateId ? states.filter((state) => state.id === currentStateId) : []
+  }
+
+  const stateById = new Map(states.map((state) => [state.id, state]))
+  const mappings = typeStateMappings
+    .filter((mapping) => mapping.workItemTypeId === workItemTypeId)
+    .sort((left, right) => left.order - right.order)
+  const mappedStates = mappings
+    .map((mapping) => stateById.get(mapping.stateId))
+    .filter((state): state is State => Boolean(state))
+
+  const typeTransitions = stateTransitions.filter(
+    (transition) => transition.workItemTypeId === workItemTypeId && transition.isEnabled
+  )
+
+  if (!currentStateId || typeTransitions.length === 0) {
+    return mappedStates
+  }
+
+  const availableStateIds = new Set([
+    currentStateId,
+    ...typeTransitions
+      .filter((transition) => transition.fromStateId === currentStateId)
+      .sort((left, right) => left.order - right.order)
+      .map((transition) => transition.toStateId),
+  ])
+
+  const available = mappedStates.filter((state) => availableStateIds.has(state.id))
+  const currentState = stateById.get(currentStateId)
+
+  if (currentState && !available.some((state) => state.id === currentState.id)) {
+    return [currentState, ...available]
+  }
+
+  return available
+}
+
+/**
+ * Mirror the board PATCH route's state resolution before a destination is
+ * shown. This keeps drag/drop and keyboard moves from offering a column that
+ * the workflow will reject after the user acts.
+ */
+export function getAvailableBoardStatuses({
+  states,
+  typeStateMappings,
+  stateTransitions,
+  workItemTypeId,
+  currentStateId,
+}: {
+  states: State[]
+  typeStateMappings: TypeStateMapping[]
+  stateTransitions: StateTransition[]
+  workItemTypeId: string | null | undefined
+  currentStateId: string | null | undefined
+}): BoardStatus[] {
+  if (!workItemTypeId) return []
+
+  const stateById = new Map(states.map((state) => [state.id, state]))
+  const mappedStates = typeStateMappings
+    .filter((mapping) => mapping.workItemTypeId === workItemTypeId)
+    .sort((left, right) => left.order - right.order)
+    .map((mapping) => stateById.get(mapping.stateId))
+    .filter((state): state is State => Boolean(state))
+
+  // Missing topology is unsafe for a board move: the API cannot resolve a
+  // target state either, so expose no cross-column destination.
+  if (mappedStates.length === 0) return []
+
+  const currentState = currentStateId
+    ? mappedStates.find((state) => state.id === currentStateId) ?? null
+    : null
+  const typeTransitions = stateTransitions.filter(
+    (transition) => transition.workItemTypeId === workItemTypeId && transition.isEnabled
+  )
+
+  return BOARD_STATUS_OPTIONS.filter((status) => {
+    const category = BOARD_STATUS_CATEGORY[status]
+    let targetState =
+      currentState && normalizeStateCategory(currentState.category) === category
+        ? currentState
+        : null
+
+    if (!targetState) {
+      const matchingStates = mappedStates.filter(
+        (state) => normalizeStateCategory(state.category) === category
+      )
+      if (status === 'done') {
+        targetState =
+          matchingStates.find((state) => state.isFinal) ??
+          matchingStates[matchingStates.length - 1] ??
+          null
+      } else {
+        targetState = matchingStates[0] ?? null
+      }
+    }
+
+    if (!targetState) return false
+    if (!currentStateId || targetState.id === currentStateId) return true
+    if (typeTransitions.length === 0) return true
+
+    return typeTransitions.some(
+      (transition) =>
+        transition.fromStateId === currentStateId && transition.toStateId === targetState.id
+    )
+  })
 }
 
 export function buildWorkItemPatchPayload(current: Issue, draft: WorkItemDraft): PatchPayload | null {

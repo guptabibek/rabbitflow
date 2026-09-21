@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/app-store'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -25,6 +26,11 @@ import {
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
 import { PRESET_COLORS } from '@/lib/ui-tokens'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 export function LabelsManagement({
   trigger,
@@ -43,17 +49,27 @@ export function LabelsManagement({
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [createNameError, setCreateNameError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
   const canManageLabels = currentProjectPermissions.includes('masterdata:manage')
   const isOpen = open ?? internalOpen
   const setIsOpen = onOpenChange ?? setInternalOpen
 
   const handleCreate = async () => {
     if (!canManageLabels) {
-      toast.error('You do not have permission to manage labels')
+      setCreateError('You do not have permission to manage labels.')
       return
     }
 
-    if (!currentProject || !name.trim()) return
+    if (!currentProject) return
+    if (!name.trim()) {
+      setCreateNameError('Enter a label name.')
+      return
+    }
+    setCreateNameError(null)
+    setCreateError(null)
     setIsCreating(true)
     try {
       const res = await fetch('/api/labels', {
@@ -71,7 +87,7 @@ export function LabelsManagement({
       setColor('#6366f1')
       toast.success('Label created')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create label')
+      setCreateError(error instanceof Error ? error.message : 'Failed to create label')
     } finally {
       setIsCreating(false)
     }
@@ -79,10 +95,17 @@ export function LabelsManagement({
 
   const handleUpdate = async (id: string) => {
     if (!canManageLabels) {
-      toast.error('You do not have permission to manage labels')
+      setEditError('You do not have permission to manage labels.')
       return
     }
 
+    if (!editName.trim()) {
+      setEditError('Enter a label name.')
+      return
+    }
+
+    setEditError(null)
+    setIsUpdating(true)
     try {
       const res = await fetch(`/api/labels/${id}`, {
         method: 'PUT',
@@ -97,14 +120,17 @@ export function LabelsManagement({
       setEditingId(null)
       toast.success('Label updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update label')
+      setEditError(error instanceof Error ? error.message : 'Failed to update label')
+    } finally {
+      setIsUpdating(false)
     }
   }
 
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
+
   const handleDelete = async (id: string) => {
     if (!canManageLabels) {
-      toast.error('You do not have permission to manage labels')
-      return
+      return 'You do not have permission to manage labels.'
     }
 
     try {
@@ -115,8 +141,9 @@ export function LabelsManagement({
 
       setLabels(labels.filter((l) => l.id !== id))
       toast.success('Label deleted')
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete label')
+      return error instanceof Error ? error.message : 'Failed to delete label'
     }
   }
 
@@ -124,17 +151,24 @@ export function LabelsManagement({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {/*
+        A caller that drives `open` itself does not want a trigger, and
+        rendering the fallback anyway put a stray "Labels" button in the
+        document flow — it surfaced as an unstyled control floating past the
+        user menu on desktop and overflowing the viewport on mobile, because
+        the workspace shell mounts this dialog as a bare sibling of the layout.
+      */}
       {trigger ? (
         <DialogTrigger asChild>{trigger}</DialogTrigger>
-      ) : (
+      ) : open === undefined ? (
         <DialogTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-1.5 h-8 text-xs">
-            <Tags className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="sm">
+            <Tags />
             Labels
           </Button>
         </DialogTrigger>
-      )}
-      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+      ) : null}
+      <DialogContent className="flex max-h-[82vh] max-w-lg flex-col gap-0 overflow-hidden p-0" data-testid="labels-management-dialog">
         <DialogHeader className="flex-shrink-0 border-b border-border/70 bg-background/95 px-4 py-4 backdrop-blur md:px-5">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -142,22 +176,42 @@ export function LabelsManagement({
             </div>
             <div>
               <div>Manage Labels</div>
-              <div className="mt-0.5 text-xs font-normal text-muted-foreground">Compact categorization for work items across the project.</div>
             </div>
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            Create, rename, recolor, and remove work item labels for this project.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-shrink-0 border-b border-border/70 bg-muted/20 px-4 py-4 md:px-5">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
             <div className="space-y-3">
+              {createError ? (
+                <div data-testid="label-create-error">
+                  <InlineAlert tone="danger">{createError}</InlineAlert>
+                </div>
+              ) : null}
               <Input
                 placeholder="Label name..."
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  setCreateNameError(null)
+                  setCreateError(null)
+                }}
                 className="h-9 w-full"
                 disabled={!canManageLabels}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                aria-label="Label name"
+                aria-invalid={Boolean(createNameError)}
+                aria-describedby={createNameError ? 'label-create-name-error' : undefined}
+                data-testid="label-create-name-input"
               />
+              {createNameError ? (
+                <p id="label-create-name-error" className="text-xs text-destructive">
+                  {createNameError}
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-1.5">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -177,7 +231,8 @@ export function LabelsManagement({
               size="sm"
               className="h-9 px-4 sm:self-start"
               onClick={handleCreate}
-              disabled={isCreating || !name.trim() || !canManageLabels}
+              disabled={isCreating || !canManageLabels}
+              data-testid="label-create-submit"
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Add
@@ -195,6 +250,11 @@ export function LabelsManagement({
               {labels.length > 0 ? <Badge variant="secondary" className="h-5 px-2 text-[10px]">{labels.length}</Badge> : null}
             </div>
             <div className="space-y-1.5">
+            {editError ? (
+              <div data-testid="label-edit-error">
+                <InlineAlert tone="danger">{editError}</InlineAlert>
+              </div>
+            ) : null}
             {labels.map((label) => (
               <div
                 key={label.id}
@@ -208,11 +268,16 @@ export function LabelsManagement({
                     />
                     <Input
                       value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
+                      onChange={(e) => {
+                        setEditName(e.target.value)
+                        setEditError(null)
+                      }}
                       className="h-8 flex-1 text-sm"
                       disabled={!canManageLabels}
                       autoFocus
                       onKeyDown={(e) => e.key === 'Enter' && handleUpdate(label.id)}
+                      aria-label={`Edit ${label.name} label name`}
+                      aria-invalid={Boolean(editError)}
                     />
                     <div className="flex gap-1">
                       {PRESET_COLORS.slice(0, 5).map((c) => (
@@ -225,8 +290,8 @@ export function LabelsManagement({
                         />
                       ))}
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)} disabled={!canManageLabels}>
-                      <Check className="h-3 w-3 text-green-500" />
+                    <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Save label" onClick={() => handleUpdate(label.id)} disabled={!canManageLabels || isUpdating}>
+                      <Check className="h-3 w-3 text-success" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Cancel editing" onClick={() => setEditingId(null)}>
                       <X className="h-3 w-3" />
@@ -249,6 +314,7 @@ export function LabelsManagement({
                         setEditingId(label.id)
                         setEditName(label.name)
                         setEditColor(label.color)
+                        setEditError(null)
                       }}
                     >
                       <Pencil className="h-3 w-3" />
@@ -259,7 +325,7 @@ export function LabelsManagement({
                       aria-label="Delete label"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
                       disabled={!canManageLabels}
-                      onClick={() => handleDelete(label.id)}
+                      onClick={() => deleteConfirm.request(label)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -278,6 +344,16 @@ export function LabelsManagement({
           </div>
         </ScrollArea>
       </DialogContent>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete label "${deleteConfirm.target?.name ?? ''}"?`}
+        description="This label will be removed from every work item currently using it. This cannot be undone."
+        onConfirm={() =>
+          deleteConfirm.target ? handleDelete(deleteConfirm.target.id) : false
+        }
+      />
     </Dialog>
   )
 }

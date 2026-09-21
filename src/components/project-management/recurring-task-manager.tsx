@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -35,6 +35,11 @@ import {
   CalendarDays,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
 
 // ---------------------------------------------------------------------------
 // Types — aligned with Prisma schema (RecurringTask model)
@@ -105,6 +110,10 @@ export function RecurringTaskManager() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editTask, setEditTask] = useState<RecurringTaskFromApi | null>(null)
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Form state
   const [title, setTitle] = useState('')
@@ -117,6 +126,7 @@ export function RecurringTaskManager() {
   const fetchTasks = useCallback(async () => {
     if (!currentProject) return
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/recurring-tasks?projectId=${encodeURIComponent(currentProject.id)}`)
       if (!res.ok) {
@@ -125,7 +135,7 @@ export function RecurringTaskManager() {
       const data = await res.json()
       setTasks(Array.isArray(data) ? data : data.tasks ?? [])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load recurring tasks')
+      setLoadError(error instanceof Error ? error.message : 'Failed to load recurring tasks')
     } finally {
       setLoading(false)
     }
@@ -140,9 +150,13 @@ export function RecurringTaskManager() {
     setPriority('medium')
     setAssigneeId('')
     setFrequency('weekly')
+    setFormError(null)
+    setTitleError(null)
   }
 
   const openEdit = (task: RecurringTaskFromApi) => {
+    setFormError(null)
+    setTitleError(null)
     setEditTask(task)
     setTitle(task.templateTitle)
     setBody(task.templateBody ?? '')
@@ -153,7 +167,13 @@ export function RecurringTaskManager() {
   }
 
   const handleCreate = async () => {
-    if (!currentProject || !title.trim()) return
+    if (!currentProject) return
+    if (!title.trim()) {
+      setTitleError('Enter a template title.')
+      return
+    }
+    setTitleError(null)
+    setFormError(null)
     setSaving(true)
     try {
       const res = await fetch('/api/recurring-tasks', {
@@ -177,7 +197,7 @@ export function RecurringTaskManager() {
       resetForm()
       await fetchTasks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create recurring task')
+      setFormError(error instanceof Error ? error.message : 'Failed to create recurring task')
     } finally {
       setSaving(false)
     }
@@ -185,6 +205,12 @@ export function RecurringTaskManager() {
 
   const handleUpdate = async () => {
     if (!editTask) return
+    if (!title.trim()) {
+      setTitleError('Enter a template title.')
+      return
+    }
+    setTitleError(null)
+    setFormError(null)
     setSaving(true)
     try {
       const res = await fetch(`/api/recurring-tasks/${editTask.id}`, {
@@ -206,13 +232,14 @@ export function RecurringTaskManager() {
       resetForm()
       await fetchTasks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update recurring task')
+      setFormError(error instanceof Error ? error.message : 'Failed to update recurring task')
     } finally {
       setSaving(false)
     }
   }
 
   const handleToggle = async (task: RecurringTaskFromApi) => {
+    setActionError(null)
     try {
       const res = await fetch(`/api/recurring-tasks/${task.id}`, {
         method: 'PUT',
@@ -225,9 +252,11 @@ export function RecurringTaskManager() {
 
       await fetchTasks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update recurring task')
+      setActionError(error instanceof Error ? error.message : 'Failed to update recurring task')
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; templateTitle: string }>()
 
   const handleDelete = async (id: string) => {
     try {
@@ -237,8 +266,9 @@ export function RecurringTaskManager() {
       }
 
       await fetchTasks()
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete recurring task')
+      return error instanceof Error ? error.message : 'Failed to delete recurring task'
     }
   }
 
@@ -252,9 +282,31 @@ export function RecurringTaskManager() {
 
   const formContent = (
     <div className="space-y-3 py-2">
+      {formError ? (
+        <div data-testid="recurring-task-form-error">
+          <InlineAlert tone="danger">{formError}</InlineAlert>
+        </div>
+      ) : null}
       <div className="space-y-1.5">
-        <Label>Title</Label>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Weekly standup notes" />
+        <Label htmlFor="recurring-task-title">Title</Label>
+        <Input
+          id="recurring-task-title"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            setTitleError(null)
+            setFormError(null)
+          }}
+          placeholder="e.g. Weekly standup notes"
+          aria-invalid={Boolean(titleError)}
+          aria-describedby={titleError ? 'recurring-task-title-error' : undefined}
+          data-testid="recurring-task-title-input"
+        />
+        {titleError ? (
+          <p id="recurring-task-title-error" className="text-xs text-destructive">
+            {titleError}
+          </p>
+        ) : null}
       </div>
       <div className="space-y-1.5">
         <Label>Description</Label>
@@ -345,11 +397,14 @@ export function RecurringTaskManager() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create Recurring Task</DialogTitle>
+              <DialogDescription>
+                Configure the work item template and how often it should be created.
+              </DialogDescription>
             </DialogHeader>
             {formContent}
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={!title.trim() || saving}>
+              <Button onClick={handleCreate} disabled={saving} data-testid="recurring-task-create-submit">
                 {saving ? 'Creating…' : 'Create'}
               </Button>
             </DialogFooter>
@@ -362,11 +417,14 @@ export function RecurringTaskManager() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Recurring Task</DialogTitle>
+            <DialogDescription>
+              Update the template or schedule used for future work items.
+            </DialogDescription>
           </DialogHeader>
           {formContent}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditTask(null); resetForm() }}>Cancel</Button>
-            <Button onClick={handleUpdate} disabled={!title.trim() || saving}>
+            <Button onClick={handleUpdate} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>
@@ -377,6 +435,14 @@ export function RecurringTaskManager() {
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
         </div>
+      ) : loadError ? (
+        <ErrorState
+          title="Recurring tasks did not load"
+          description="The schedule list could not be read. Nothing has changed."
+          detail={loadError}
+          onRetry={() => void fetchTasks()}
+          size="sm"
+        />
       ) : tasks.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -390,7 +456,7 @@ export function RecurringTaskManager() {
           {tasks.map((task) => (
             <Card key={task.id}>
               <CardContent className="flex items-center gap-3 p-3">
-                <Repeat className={`h-4 w-4 flex-shrink-0 ${task.isActive ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                <Repeat className={`h-4 w-4 flex-shrink-0 ${task.isActive ? 'text-info' : 'text-muted-foreground'}`} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{task.templateTitle}</span>
@@ -433,6 +499,7 @@ export function RecurringTaskManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
+                    aria-label="Edit recurring task"
                     onClick={() => openEdit(task)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -441,7 +508,8 @@ export function RecurringTaskManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
-                    onClick={() => handleDelete(task.id)}
+                    aria-label="Delete recurring task"
+                    onClick={() => deleteConfirm.request(task)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -451,6 +519,22 @@ export function RecurringTaskManager() {
           ))}
         </div>
       )}
+
+      {actionError ? (
+        <div data-testid="recurring-task-action-error">
+          <InlineAlert tone="danger">{actionError}</InlineAlert>
+        </div>
+      ) : null}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete recurring task "${deleteConfirm.target?.templateTitle ?? ''}"?`}
+        description="No further work items will be generated from this template. Items it already created are kept. This cannot be undone."
+        onConfirm={() =>
+          deleteConfirm.target ? handleDelete(deleteConfirm.target.id) : false
+        }
+      />
     </div>
   )
 }

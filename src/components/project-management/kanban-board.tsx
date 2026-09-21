@@ -1,13 +1,44 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, closestCorners, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { filterIssues, hasActiveFilters } from '@/lib/domain/issue-filters'
+import { IssueLoadMore } from '@/components/project-management/issue-load-more'
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Inbox, Plus } from 'lucide-react'
-import { toast } from 'sonner'
-import { useAppStore, Issue } from '@/store/app-store'
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderOpen,
+  ListFilter,
+  Plus,
+  RotateCcw,
+  SlidersHorizontal,
+  TriangleAlert,
+} from 'lucide-react'
+import { useAppStore, Issue, type BoardViewPreferences } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { EmptyState, InlineAlert } from '@/components/ui/states'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn, getApiErrorMessage } from '@/lib/utils'
+import {
+  getAvailableBoardStatuses,
+  type BoardStatus,
+} from '@/lib/domain/work-item-view'
 import { IssueCard } from './issue-card'
 
 const COLUMNS = [
@@ -18,74 +49,256 @@ const COLUMNS = [
   { id: 'done', name: 'Done', dotColor: 'bg-status-done-bar' },
 ] as const
 
+const WIP_LIMIT_COLUMNS = COLUMNS.filter((column) =>
+  ['todo', 'in_progress', 'in_review'].includes(column.id)
+)
+
+const DEFAULT_BOARD_PREFERENCES: BoardViewPreferences = {
+  collapsedStatuses: [],
+  hideCompleted: false,
+  wipLimits: {},
+}
+
 function BoardColumn({
   canCreateItem,
   children,
   count,
+  points,
   dotColor,
   id,
   name,
+  dropAllowed = true,
+  collapsed,
+  onToggleCollapsed,
+  wipLimit,
 }: {
   canCreateItem: boolean
   children: ReactNode
   count: number
+  points: number
   dotColor: string
   id: string
   name: string
+  dropAllowed?: boolean
+  collapsed: boolean
+  onToggleCollapsed: () => void
+  wipLimit?: number
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id })
+  const { isOver, setNodeRef } = useDroppable({ id, disabled: !dropAllowed })
+  const isAtWipLimit = wipLimit !== undefined && count >= wipLimit
+  const isOverWipLimit = wipLimit !== undefined && count > wipLimit
 
-  return (
-    <div
-      ref={setNodeRef}
-      role="region"
-      aria-label={name}
-      className={`flex w-64 min-w-[240px] max-w-xs flex-shrink-0 flex-col rounded-lg border border-border/50 bg-surface/50 ${
-        isOver ? 'ring-2 ring-primary/20' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${dotColor}`} />
-          <span className="text-sm font-medium text-foreground">{name}</span>
-          <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
-            {count}
-          </span>
-        </div>
+  if (collapsed) {
+    return (
+      <section
+        ref={setNodeRef}
+        aria-label={`${name}, collapsed, ${count} items${isAtWipLimit ? `, WIP limit ${wipLimit}` : ''}`}
+        className={cn(
+          'flex h-full w-12 shrink-0 flex-col items-center rounded-lg border bg-surface-sunken py-2 transition-colors duration-150',
+          isOver && dropAllowed ? 'border-primary bg-primary-muted' : 'border-border',
+          !dropAllowed && 'border-dashed opacity-45'
+        )}
+        data-drop-disabled={!dropAllowed || undefined}
+      >
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            if (canCreateItem) {
-              useAppStore.getState().setCreateIssueOpen(true)
-            }
-          }}
-          disabled={!canCreateItem}
-          aria-label="Add item"
+          size="icon-xs"
+          onClick={onToggleCollapsed}
+          aria-label={`Expand ${name} column`}
         >
-          <Plus className="h-3.5 w-3.5" />
+          <ChevronRight />
         </Button>
+        <span className={cn('mt-2 size-1.5 shrink-0 rounded-full', dotColor)} aria-hidden="true" />
+        <span className="mt-2 rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+          {count}
+        </span>
+        {isAtWipLimit ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="mt-2 text-warning"
+                aria-label={
+                  isOverWipLimit
+                    ? `Over WIP limit of ${wipLimit}`
+                    : `WIP limit of ${wipLimit} reached`
+                }
+              >
+                <TriangleAlert className="size-3.5" aria-hidden="true" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isOverWipLimit ? `${count - wipLimit!} over` : 'At'} WIP limit of {wipLimit}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        <h3 className="mt-3 [writing-mode:vertical-rl] text-[11px] font-semibold text-foreground">
+          {name}
+        </h3>
+      </section>
+    )
+  }
+
+  return (
+    <section
+      ref={setNodeRef}
+      aria-label={`${name}, ${count} items`}
+      className={cn(
+        'flex h-full w-[17.5rem] shrink-0 flex-col rounded-lg border bg-surface-sunken transition-colors duration-150',
+        isOver && dropAllowed ? 'border-primary bg-primary-muted' : 'border-border',
+        !dropAllowed && 'border-dashed opacity-45'
+      )}
+      data-drop-disabled={!dropAllowed || undefined}
+    >
+      {/* Sticky so the column you are dropping into names itself even when the
+          list under it has been scrolled a long way down. */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 rounded-t-lg border-b border-border bg-surface-sunken px-2.5 py-2">
+        <span className={cn('size-1.5 shrink-0 rounded-full', dotColor)} aria-hidden="true" />
+        <h3 className="type-heading min-w-0 flex-1 truncate text-foreground">{name}</h3>
+
+        <span className="shrink-0 rounded-full bg-card px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+          {count}
+        </span>
+
+        {/* Committed effort per column is the number a standup actually asks
+            for, and the board already has every value it needs to total it. */}
+        {points > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {points}pt
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{points} story points in this column</TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        {isAtWipLimit ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-warning-bg px-1.5 py-px text-[10px] font-medium text-warning"
+                aria-label={
+                  isOverWipLimit
+                    ? `Over WIP limit of ${wipLimit}`
+                    : `WIP limit of ${wipLimit} reached`
+                }
+              >
+                <TriangleAlert className="size-3" aria-hidden="true" />
+                {count}/{wipLimit}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isOverWipLimit ? `${count - wipLimit!} over` : 'At'} WIP limit of {wipLimit}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        {canCreateItem ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                // Revealed on hover or keyboard focus, so five identical "+"
+                // buttons do not compete with the column names at rest.
+                className="shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/board:opacity-100"
+                onClick={() => useAppStore.getState().setCreateIssueOpen(true)}
+                aria-label={`Add item to ${name}`}
+              >
+                <Plus />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add item to {name}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0"
+              onClick={onToggleCollapsed}
+              aria-label={`Collapse ${name} column`}
+            >
+              <ChevronLeft />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Collapse {name}</TooltipContent>
+        </Tooltip>
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-2">{children}</div>
-    </div>
+      <div className="flex-1 space-y-1.5 overflow-y-auto p-1.5">{children}</div>
+    </section>
   )
 }
 
 export function KanbanBoard() {
   const {
+    boardViewPreferencesByProject,
     currentProject,
     currentProjectPermissions,
     filters,
     isLoading,
     issues,
+    states,
+    stateTransitions,
+    typeStateMappings,
     updateIssue,
+    workItemTypes,
     workItemTypeFilter,
+    setCreateIssueOpen,
+    setBoardViewPreferences,
   } = useAppStore()
   const [activeIssue, setActiveIssue] = useState<Issue | null>(null)
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const [movingIssueId, setMovingIssueId] = useState<string | null>(null)
+  const [mobileStatus, setMobileStatus] = useState<BoardStatus>('backlog')
+  const [announcement, setAnnouncement] = useState('')
   const canCreateWorkItems = currentProjectPermissions.includes('workitem:create')
   const canUpdateBoard = currentProjectPermissions.includes('board:update')
+  const boardPreferences = currentProject
+    ? boardViewPreferencesByProject[currentProject.id] ?? DEFAULT_BOARD_PREFERENCES
+    : DEFAULT_BOARD_PREFERENCES
+
+  // Columns beyond the viewport were previously unreachable-looking: the board
+  // scrolled, but overlay scrollbars meant nothing indicated that Done and
+  // Cancelled existed off-screen. Track whether content remains to the right so
+  // the edge fade can say so.
+  const boardScrollRef = useRef<HTMLDivElement | null>(null)
+  const [hasHiddenColumns, setHasHiddenColumns] = useState(false)
+  const [hasPreviousColumns, setHasPreviousColumns] = useState(false)
+
+  const updateOverflowState = useCallback(() => {
+    const element = boardScrollRef.current
+    if (!element) return
+
+    const remaining = element.scrollWidth - element.clientWidth - element.scrollLeft
+    setHasHiddenColumns(remaining > 8)
+    setHasPreviousColumns(element.scrollLeft > 8)
+  }, [])
+
+  /** Pages by roughly one column, so a click lands on a column boundary. */
+  const scrollBoard = useCallback((direction: -1 | 1) => {
+    const element = boardScrollRef.current
+    if (!element) return
+    element.scrollBy({ left: direction * 292, behavior: 'smooth' })
+  }, [])
+
+  useEffect(() => {
+    updateOverflowState()
+
+    const element = boardScrollRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateOverflowState)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [
+    boardPreferences.collapsedStatuses,
+    boardPreferences.hideCompleted,
+    updateOverflowState,
+    issues.length,
+  ])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -94,46 +307,71 @@ export function KanbanBoard() {
   )
 
   const filteredIssues = useMemo(
-    () =>
-      issues.filter((issue) => {
-        if (workItemTypeFilter !== 'all' && issue.workItemType !== workItemTypeFilter) return false
-        if (filters.assigneeId && issue.assignee?.id !== filters.assigneeId) return false
-        if (filters.priority && issue.priority !== filters.priority) return false
-        if (filters.type && issue.workItemType !== filters.type) return false
-        if (
-          filters.labelIds.length > 0 &&
-          !filters.labelIds.every((labelId) =>
-            issue.labels.some(({ label }) => label.id === labelId)
-          )
-        ) {
-          return false
-        }
-        if (filters.search) {
-          const search = filters.search.toLowerCase()
-          if (
-            !issue.title.toLowerCase().includes(search) &&
-            !issue.key.toLowerCase().includes(search) &&
-            !issue.description?.toLowerCase().includes(search)
-          ) {
-            return false
-          }
-        }
-        if (filters.iterationId && issue.iteration?.id !== filters.iterationId) return false
-        if (filters.areaId && issue.area?.id !== filters.areaId) return false
-        return true
-      }),
+    () => filterIssues(issues, filters, { workItemTypeTab: workItemTypeFilter }),
     [filters, issues, workItemTypeFilter]
   )
 
   const issuesByStatus = useMemo(
     () =>
-      COLUMNS.map((column) => ({
-        ...column,
-        issues: filteredIssues
+      COLUMNS.map((column) => {
+        const columnIssues = filteredIssues
           .filter((issue) => issue.status === column.id)
-          .sort((left, right) => left.columnOrder - right.columnOrder),
-      })),
+          .sort((left, right) => left.columnOrder - right.columnOrder)
+
+        return {
+          ...column,
+          issues: columnIssues,
+          points: columnIssues.reduce((total, issue) => total + (issue.storyPoints ?? 0), 0),
+        }
+      }),
     [filteredIssues]
+  )
+
+  const visibleColumns = boardPreferences.hideCompleted
+    ? issuesByStatus.filter((column) => column.id !== 'done')
+    : issuesByStatus
+  const mobileColumn = visibleColumns.find((column) => column.id === mobileStatus) ?? visibleColumns[0]
+
+  const toggleColumnCollapsed = useCallback(
+    (status: BoardStatus) => {
+      if (!currentProject) return
+      const collapsed = new Set(boardPreferences.collapsedStatuses)
+      if (collapsed.has(status)) collapsed.delete(status)
+      else collapsed.add(status)
+      setBoardViewPreferences(currentProject.id, {
+        collapsedStatuses: Array.from(collapsed),
+      })
+    },
+    [boardPreferences.collapsedStatuses, currentProject, setBoardViewPreferences]
+  )
+
+  const setWipLimit = useCallback(
+    (status: BoardStatus, rawValue: string) => {
+      if (!currentProject) return
+      const nextLimits = { ...boardPreferences.wipLimits }
+      const parsed = Number.parseInt(rawValue, 10)
+      if (!rawValue || Number.isNaN(parsed) || parsed < 1) delete nextLimits[status]
+      else nextLimits[status] = Math.min(parsed, 999)
+      setBoardViewPreferences(currentProject.id, { wipLimits: nextLimits })
+    },
+    [boardPreferences.wipLimits, currentProject, setBoardViewPreferences]
+  )
+
+  const filtersActive = hasActiveFilters(filters, { workItemTypeTab: workItemTypeFilter })
+  const totalVisible = filteredIssues.length
+
+  const availableStatusesFor = useCallback(
+    (issue: Issue) => {
+      const typeDefinition = workItemTypes.find((definition) => definition.key === issue.workItemType)
+      return getAvailableBoardStatuses({
+        states,
+        typeStateMappings,
+        stateTransitions,
+        workItemTypeId: typeDefinition?.id,
+        currentStateId: issue.stateRecord?.id,
+      })
+    },
+    [stateTransitions, states, typeStateMappings, workItemTypes]
   )
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -141,17 +379,64 @@ export function KanbanBoard() {
     if (issue) setActiveIssue(issue)
   }
 
+  const moveIssue = useCallback(
+    async (
+      issue: Issue,
+      targetStatus: BoardStatus,
+      beforeItemId: string | null = null
+    ) => {
+      if (!currentProject) return
+
+      setMoveError(null)
+      if (!canUpdateBoard) {
+        setMoveError('You do not have permission to update this board.')
+        return
+      }
+
+      if (!availableStatusesFor(issue).includes(targetStatus)) {
+        setMoveError(
+          `${issue.key} cannot move directly to ${COLUMNS.find((column) => column.id === targetStatus)?.name ?? targetStatus}. Open the item to see its available workflow states.`
+        )
+        return
+      }
+
+      setMovingIssueId(issue.id)
+      try {
+        const response = await fetch('/api/board', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: currentProject.id,
+            itemId: issue.id,
+            toStatus: targetStatus,
+            beforeItemId,
+          }),
+        })
+
+        if (!response.ok) {
+          setMoveError(await getApiErrorMessage(response, 'Failed to move work item'))
+          return
+        }
+
+        const updated = await response.json()
+        updateIssue(issue.id, updated)
+        setAnnouncement(`${issue.key} moved to ${COLUMNS.find((column) => column.id === targetStatus)?.name ?? targetStatus}.`)
+      } catch (error) {
+        console.error('Failed to move board card:', error)
+        setMoveError('The work item could not be moved. Check your connection and try again.')
+      } finally {
+        setMovingIssueId(null)
+      }
+    },
+    [availableStatusesFor, canUpdateBoard, currentProject, updateIssue]
+  )
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     const draggedIssue = issues.find((candidate) => candidate.id === active.id)
     setActiveIssue(null)
 
     if (!currentProject || !draggedIssue || !over) {
-      return
-    }
-
-    if (!canUpdateBoard) {
-      toast.error('You do not have permission to update the board')
       return
     }
 
@@ -175,41 +460,17 @@ export function KanbanBoard() {
       return
     }
 
-    try {
-      const response = await fetch('/api/board', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: currentProject.id,
-          itemId: draggedIssue.id,
-          toStatus: targetStatus,
-          beforeItemId,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to move work item')
-        return
-      }
-
-      const updated = await response.json()
-      updateIssue(draggedIssue.id, updated)
-    } catch (error) {
-      console.error('Failed to move board card:', error)
-      toast.error('Failed to move work item')
-    }
+    await moveIssue(draggedIssue, targetStatus as BoardStatus, beforeItemId)
   }
 
   if (!currentProject) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-        <Inbox className="mb-4 h-12 w-12 text-muted-foreground/30" />
-        <h3 className="mb-1 text-lg font-semibold text-foreground">No project selected</h3>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          Select a project from the sidebar to view the board
-        </p>
-      </div>
+      <EmptyState
+        size="lg"
+        icon={FolderOpen}
+        title="No project selected"
+        description="The board shows one project's work in flight. Choose a project from the switcher in the top bar."
+      />
     )
   }
 
@@ -219,52 +480,264 @@ export function KanbanBoard() {
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveIssue(null)}
     >
-      <div className="flex h-full gap-4 overflow-x-auto p-4" role="region" aria-label="Kanban board">
-        {issuesByStatus.map((column) => (
-          <BoardColumn
-            key={column.id}
-            canCreateItem={canCreateWorkItems}
-            id={column.id}
-            name={column.name}
-            dotColor={column.dotColor}
-            count={column.issues.length}
-          >
-            <>
-              {isLoading && column.issues.length === 0 ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-24 w-full rounded-lg" />
-                  <Skeleton className="h-24 w-full rounded-lg" />
-                </div>
-              ) : (
-                <SortableContext
-                  items={column.issues.map((issue) => issue.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {column.issues.map((issue) => (
-                    <IssueCard key={issue.id} issue={issue} />
-                  ))}
-                </SortableContext>
-              )}
+      <div className="group/board flex h-full min-h-0 flex-col">
+        <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
+        <IssueLoadMore className="mx-4 mt-3 shrink-0" />
 
-              {!isLoading && column.issues.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                    <Inbox className="h-4 w-4 text-muted-foreground/50" />
+        <div className="mx-4 mt-2 flex shrink-0 justify-end">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="board-layout-button">
+                <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+                Board layout
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Board layout</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These display choices are remembered on this device for {currentProject.name}.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="board-hide-completed" className="text-xs font-medium">
+                  Hide completed column
+                </Label>
+                <Switch
+                  id="board-hide-completed"
+                  checked={boardPreferences.hideCompleted}
+                  onCheckedChange={(checked) =>
+                    setBoardViewPreferences(currentProject.id, { hideCompleted: checked })
+                  }
+                />
+              </div>
+
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-semibold text-foreground">WIP limits</legend>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Set a limit to warn when a working column is full. Leave blank for no limit.
+                </p>
+                {WIP_LIMIT_COLUMNS.map((column) => (
+                  <div key={column.id} className="flex items-center justify-between gap-3">
+                    <Label htmlFor={`wip-limit-${column.id}`} className="text-xs font-normal">
+                      {column.name}
+                    </Label>
+                    <Input
+                      id={`wip-limit-${column.id}`}
+                      type="number"
+                      min={1}
+                      max={999}
+                      inputMode="numeric"
+                      value={boardPreferences.wipLimits[column.id] ?? ''}
+                      onChange={(event) => setWipLimit(column.id, event.target.value)}
+                      className="h-8 w-20 text-right"
+                      aria-label={`${column.name} WIP limit`}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">No items</p>
-                </div>
-              ) : null}
-            </>
-          </BoardColumn>
-        ))}
-      </div>
-      <DragOverlay>
-        {activeIssue ? (
-          <div className="shadow-2xl">
-            <IssueCard issue={activeIssue} isDragging />
-          </div>
+                ))}
+              </fieldset>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() =>
+                  setBoardViewPreferences(currentProject.id, DEFAULT_BOARD_PREFERENCES)
+                }
+                disabled={
+                  !boardPreferences.hideCompleted &&
+                  boardPreferences.collapsedStatuses.length === 0 &&
+                  Object.keys(boardPreferences.wipLimits).length === 0
+                }
+              >
+                <RotateCcw className="size-3.5" aria-hidden="true" />
+                Reset board layout
+              </Button>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {moveError ? (
+          <InlineAlert
+            tone="danger"
+            title="Move not completed."
+            className="mx-4 mt-3 shrink-0"
+            action={
+              <Button size="sm" variant="outline" onClick={() => setMoveError(null)}>
+                Dismiss
+              </Button>
+            }
+          >
+            {moveError}
+          </InlineAlert>
         ) : null}
+
+        {!isLoading && totalVisible === 0 && filtersActive ? (
+          <EmptyState
+            size="lg"
+            icon={ListFilter}
+            title="No items match these filters"
+            description="Every item on this board is filtered out. Widen or clear the filters to bring the columns back."
+          />
+        ) : (
+          <>
+            {mobileColumn ? (
+              <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3 md:hidden" aria-label="Mobile Kanban board" data-testid="mobile-board">
+                <div className="sticky top-0 z-20 mb-3 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur">
+                  <Label htmlFor="mobile-board-status" className="text-xs font-medium">Board status</Label>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <select
+                      id="mobile-board-status"
+                      value={mobileColumn.id}
+                      onChange={(event) => setMobileStatus(event.target.value as BoardStatus)}
+                      className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      {visibleColumns.map((column) => <option key={column.id} value={column.id}>{column.name} ({column.issues.length})</option>)}
+                    </select>
+                    {canCreateWorkItems ? <Button type="button" className="min-h-11" onClick={() => setCreateIssueOpen(true)}><Plus className="size-4" /> Add</Button> : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{mobileColumn.issues.length} item{mobileColumn.issues.length === 1 ? '' : 's'}</span>
+                    <span>{mobileColumn.points} story points</span>
+                    {boardPreferences.wipLimits[mobileColumn.id] !== undefined ? <span className={mobileColumn.issues.length >= boardPreferences.wipLimits[mobileColumn.id]! ? 'text-warning' : ''}>WIP {mobileColumn.issues.length}/{boardPreferences.wipLimits[mobileColumn.id]}</span> : null}
+                  </div>
+                </div>
+                {isLoading && mobileColumn.issues.length === 0 ? <div className="space-y-2"><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div> : (
+                  <SortableContext items={mobileColumn.issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {mobileColumn.issues.map((issue) => <IssueCard key={issue.id} issue={issue} isMoving={movingIssueId === issue.id} moveOptions={COLUMNS.filter((candidate) => candidate.id !== issue.status && availableStatusesFor(issue).includes(candidate.id)).map((candidate) => ({ id: candidate.id, label: candidate.name }))} onMove={(status) => void moveIssue(issue, status)} />)}
+                      {!isLoading && mobileColumn.issues.length === 0 ? <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No work in {mobileColumn.name}.{canCreateWorkItems ? <Button type="button" variant="link" className="min-h-11 px-1" onClick={() => setCreateIssueOpen(true)}>Create an item</Button> : null}</div> : null}
+                    </div>
+                  </SortableContext>
+                )}
+              </section>
+            ) : null}
+
+          <div
+            className="scroll-affordance-shell relative hidden min-h-0 flex-1 md:block"
+            data-overflowing={hasHiddenColumns}
+          >
+            {/*
+              A gradient alone could not carry this: the fade resolves to the
+              page background, and at the right edge what sits under it is a
+              white column card, so on a light theme the hint was invisible and
+              the Done column simply looked cut off. A real control says there
+              is more and moves you there — and it only exists when it has
+              somewhere to go.
+            */}
+            {hasPreviousColumns ? (
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Scroll to previous columns"
+                onClick={() => scrollBoard(-1)}
+                className="absolute left-1.5 top-1/2 z-20 -translate-y-1/2 rounded-full shadow-md"
+              >
+                <ChevronLeft />
+              </Button>
+            ) : null}
+
+            {hasHiddenColumns ? (
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Scroll to further columns"
+                onClick={() => scrollBoard(1)}
+                className="absolute right-1.5 top-1/2 z-20 -translate-y-1/2 rounded-full shadow-md"
+              >
+                <ChevronRight />
+              </Button>
+            ) : null}
+
+            <div
+              ref={boardScrollRef}
+              onScroll={updateOverflowState}
+              className="scroll-affordance-x flex h-full gap-3 overflow-x-auto px-4 py-3"
+              role="region"
+              aria-label="Kanban board"
+              tabIndex={0}
+            >
+              {visibleColumns.map((column) => (
+                <BoardColumn
+                  key={column.id}
+                  canCreateItem={canCreateWorkItems}
+                  id={column.id}
+                  name={column.name}
+                  dotColor={column.dotColor}
+                  count={column.issues.length}
+                  points={column.points}
+                  collapsed={boardPreferences.collapsedStatuses.includes(column.id)}
+                  onToggleCollapsed={() => toggleColumnCollapsed(column.id)}
+                  wipLimit={boardPreferences.wipLimits[column.id]}
+                  dropAllowed={
+                    !activeIssue || availableStatusesFor(activeIssue).includes(column.id)
+                  }
+                >
+                  <>
+                    {isLoading && column.issues.length === 0 ? (
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-[5.5rem] w-full" />
+                        <Skeleton className="h-[5.5rem] w-full" />
+                      </div>
+                    ) : (
+                      <SortableContext
+                        items={column.issues.map((issue) => issue.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {column.issues.map((issue) => (
+                          <IssueCard
+                            key={issue.id}
+                            issue={issue}
+                            isMoving={movingIssueId === issue.id}
+                            moveOptions={COLUMNS.filter(
+                              (candidate) =>
+                                candidate.id !== issue.status &&
+                                availableStatusesFor(issue).includes(candidate.id)
+                            ).map((candidate) => ({ id: candidate.id, label: candidate.name }))}
+                            onMove={(status) => void moveIssue(issue, status)}
+                          />
+                        ))}
+                      </SortableContext>
+                    )}
+
+                    {/*
+                      An empty column is a drop target, so it says so rather
+                      than repeating a generic "No items" under a grey icon.
+                    */}
+                    {!isLoading && column.issues.length === 0 ? (
+                      <div className="flex min-h-[5rem] items-center justify-center rounded-md border border-dashed border-border px-2 py-6 text-center">
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          Drop work here
+                          {canCreateWorkItems ? (
+                            <>
+                              {' or '}
+                              <button
+                                type="button"
+                                onClick={() => setCreateIssueOpen(true)}
+                                className="rounded-sm text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                              >
+                                add an item
+                              </button>
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                </BoardColumn>
+              ))}
+            </div>
+          </div>
+          </>
+        )}
+      </div>
+
+      <DragOverlay dropAnimation={{ duration: 160, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+        {activeIssue ? <IssueCard issue={activeIssue} isDragging /> : null}
       </DragOverlay>
     </DndContext>
   )

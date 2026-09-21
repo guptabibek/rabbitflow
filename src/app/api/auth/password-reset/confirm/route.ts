@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import {
   deletePasswordResetOtp,
   getPasswordResetOtp,
+  hashOtpCode,
   isOtpExpired,
   reachedOtpAttemptLimit,
+  secretsMatch,
   updatePasswordResetOtp,
 } from '@/lib/auth-otp'
 import { hashPassword } from '@/lib/auth'
+import { revokeAllUserSessions } from '@/lib/auth-session'
 
 const confirmSchema = z.object({
   email: z.string().email(),
@@ -22,6 +26,16 @@ export async function POST(request: NextRequest) {
     const { email, otp, newPassword } = confirmSchema.parse(body)
 
     const normalizedEmail = email.trim().toLowerCase()
+
+    // A 6-digit OTP is only 10^6 wide; the per-challenge attempt counter alone
+    // does not stop an attacker re-requesting codes to keep guessing.
+    const limited = await enforceRateLimit(
+      request,
+      RATE_LIMITS.passwordResetConfirm,
+      normalizedEmail
+    )
+    if (limited) return limited
+
     const payload = await getPasswordResetOtp(normalizedEmail)
 
     if (!payload || isOtpExpired(payload.expiresAt)) {
@@ -32,7 +46,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (payload.code !== otp.trim()) {
+    if (!secretsMatch(payload.codeHash, hashOtpCode(otp))) {
       const nextAttempts = payload.attempts + 1
 
       if (reachedOtpAttemptLimit(nextAttempts)) {
@@ -72,6 +86,11 @@ export async function POST(request: NextRequest) {
     }
 
     await deletePasswordResetOtp(normalizedEmail)
+
+    // A password reset is the remedy for a suspected compromise, so every
+    // pre-existing session must be invalidated — otherwise an attacker who is
+    // already signed in keeps their session for the remainder of its 30-day TTL.
+    await revokeAllUserSessions(payload.userId, 'PASSWORD_RESET')
 
     return NextResponse.json({ message: 'Password reset successful' })
   } catch (error) {

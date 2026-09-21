@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/app.fixture'
 import { E2E_TEST_PASSWORD, TEST_ACCOUNTS, makeSignupEmail } from './support/env'
-import { expectToast, login, logout } from './support/ui'
+import { login, logout } from './support/ui'
 
 test.describe('Authentication', () => {
   test.describe.configure({ mode: 'parallel' })
@@ -66,7 +66,7 @@ test.describe('Authentication', () => {
       const duplicateResponse = await duplicateResponsePromise
 
       expect(duplicateResponse.status()).toBe(409)
-      await expectToast(page, /already exists/i)
+      await expect(page.getByRole('alert').filter({ hasText: /already exists/i })).toBeVisible()
 
       await page.goto('/login')
       await page.getByTestId('login-email-input').fill(TEST_ACCOUNTS.member.email)
@@ -81,7 +81,7 @@ test.describe('Authentication', () => {
       const loginResponse = await loginResponsePromise
 
       expect(loginResponse.status()).toBe(401)
-      await expectToast(page, /invalid email or password/i)
+      await expect(page.getByRole('alert').filter({ hasText: /invalid email or password/i })).toBeVisible()
     } finally {
       await seed.deleteUserByEmail(duplicateEmail)
     }
@@ -122,12 +122,10 @@ test.describe('Authentication', () => {
           response.url().includes('/api/auth/login') && response.request().method() === 'POST'
       )
 
-      await Promise.allSettled([
-        page.getByTestId('login-submit-button').click(),
-        page.getByTestId('login-submit-button').click(),
-      ])
-
-      await expect(page.getByTestId('login-submit-button')).toBeDisabled()
+      const submitButton = page.getByTestId('login-submit-button')
+      await submitButton.click()
+      await expect(submitButton).toBeDisabled()
+      await submitButton.evaluate((button: HTMLButtonElement) => button.click())
 
       const loginResponse = await loginResponsePromise
       expect(loginResponse.ok()).toBeTruthy()
@@ -150,7 +148,7 @@ test.describe('Authentication', () => {
       await page.getByTestId('login-password-input').fill(E2E_TEST_PASSWORD)
       await page.getByTestId('login-submit-button').click()
 
-      await expectToast(page, /injected login failure/i)
+      await expect(page.getByRole('alert').filter({ hasText: /injected login failure/i })).toBeVisible()
       await expect(page).toHaveURL(/\/login$/)
     } finally {
       await seed.deleteUserByEmail(email)

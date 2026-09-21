@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState as EmptyStatePanel, InlineAlert } from '@/components/ui/states'
 import {
   BarChart3,
   TrendingUp,
@@ -112,7 +114,20 @@ function MiniStackedBar({ segments }: {
   )
 }
 
-function StatCard({ label, value, icon: Icon, trend, description, iconBg, iconColor }: {
+/**
+ * A figure in a report.
+ *
+ * The previous version gave each number a 36px tinted icon square and its own
+ * shadowed card, so a row of four spent 160px of height and most of its ink on
+ * decoration — the icon colours were chosen per call site and carried no
+ * meaning, and the raw Tailwind palette tints they used ignored the theme
+ * entirely. Every colour here now comes from a semantic token.
+ *
+ * The signature is unchanged so all fifteen call sites keep working; `iconBg`
+ * is accepted and deliberately ignored, and `iconColor` now tints only the
+ * small leading glyph.
+ */
+function StatCard({ label, value, icon: Icon, trend, description, iconColor }: {
   label: string
   value: string | number
   icon: React.ElementType
@@ -122,24 +137,22 @@ function StatCard({ label, value, icon: Icon, trend, description, iconBg, iconCo
   iconColor?: string
 }) {
   return (
-    <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-            <div className="flex items-center gap-2">
-              <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
-              {trend === 'up' && <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
-              {trend === 'down' && <TrendingDown className="h-3.5 w-3.5 text-red-500" />}
-            </div>
-            {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
-          </div>
-          <div className={`h-9 w-9 rounded-lg ${iconBg || 'bg-primary/10'} flex items-center justify-center flex-shrink-0`}>
-            <Icon className={`h-4 w-4 ${iconColor || 'text-primary'}`} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="min-w-0 rounded-lg border border-border bg-card px-3.5 py-3">
+      <div className="flex items-center gap-1.5">
+        <Icon className={`size-3.5 shrink-0 ${iconColor || 'text-muted-foreground'}`} aria-hidden="true" />
+        <span className="type-label truncate">{label}</span>
+      </div>
+      <div className="mt-1.5 flex items-baseline gap-2">
+        <span className="type-numeric text-[1.375rem] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          {value}
+        </span>
+        {trend === 'up' ? <TrendingUp className="size-3.5 text-success" aria-label="Trending up" /> : null}
+        {trend === 'down' ? <TrendingDown className="size-3.5 text-danger" aria-label="Trending down" /> : null}
+      </div>
+      {description ? (
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">{description}</p>
+      ) : null}
+    </div>
   )
 }
 
@@ -156,7 +169,7 @@ function BurndownChart({ data }: {
           <div key={i} className="flex-1 min-w-0 flex flex-col items-center gap-px h-full justify-end">
             <div className="w-full flex items-end gap-px h-full">
               <div
-                className="flex-1 bg-blue-500/30 rounded-t min-h-[1px] transition-all"
+                className="flex-1 bg-info/30 rounded-t min-h-[1px] transition-all"
                 style={{ height: `${(d.ideal / maxVal) * 100}%` }}
                 title={`Ideal: ${d.ideal}`}
               />
@@ -178,7 +191,7 @@ function BurndownChart({ data }: {
           <span className="text-muted-foreground">Remaining</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-2 w-4 rounded bg-blue-500/30" />
+          <div className="h-2 w-4 rounded bg-info/30" />
           <span className="text-muted-foreground">Ideal</span>
         </div>
       </div>
@@ -253,8 +266,8 @@ function TrendLine({ data, colorClass = 'bg-primary' }: {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <Inbox className="h-8 w-8 text-muted-foreground/30 mb-2" />
+    <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border py-6 text-center">
+      <Inbox className="size-4 text-muted-foreground/50" aria-hidden="true" />
       <p className="text-xs text-muted-foreground">{message}</p>
     </div>
   )
@@ -262,9 +275,9 @@ function EmptyState({ message }: { message: string }) {
 
 function LoadingCards({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="status" aria-label="Loading report">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="h-24 rounded-xl" />
+        <Skeleton key={i} className="h-[4.75rem]" />
       ))}
     </div>
   )
@@ -288,9 +301,9 @@ const priorityColorMap: Record<string, string> = {
 }
 
 const healthColors: Record<string, { bg: string; text: string; label: string }> = {
-  healthy: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', label: 'Healthy' },
-  'at-risk': { bg: 'bg-amber-500/10', text: 'text-amber-500', label: 'At Risk' },
-  critical: { bg: 'bg-red-500/10', text: 'text-red-500', label: 'Critical' },
+  healthy: { bg: 'bg-success/10', text: 'text-success', label: 'Healthy' },
+  'at-risk': { bg: 'bg-warning/10', text: 'text-warning', label: 'At Risk' },
+  critical: { bg: 'bg-danger/10', text: 'text-danger', label: 'Critical' },
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +318,7 @@ export function ReportsView() {
   const [dayRange, setDayRange] = useState('30')
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const reportAbortRef = useRef<AbortController | null>(null)
 
   // Data states
   const [executive, setExecutive] = useState<Record<string, unknown> | null>(null)
@@ -356,7 +370,7 @@ export function ReportsView() {
   const visibleBurndown = activeSelectedSprint ? burndown : null
 
   const fetchApi = useCallback(async (url: string) => {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: reportAbortRef.current?.signal })
     if (!res.ok) {
       throw new Error(await getApiErrorMessage(res, 'Failed to load report data'))
     }
@@ -372,6 +386,8 @@ export function ReportsView() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
+    reportAbortRef.current?.abort()
+    reportAbortRef.current = new AbortController()
     const load = async () => {
       setIsLoading(true)
       setLoadError(null)
@@ -466,6 +482,7 @@ export function ReportsView() {
           }
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
         console.error('Failed to load report data:', error)
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : 'Failed to load report data')
@@ -474,8 +491,17 @@ export function ReportsView() {
       if (!cancelled) setIsLoading(false)
     }
     load()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      reportAbortRef.current?.abort()
+    }
   }, [projectId, activeTab, activeSelectedSprint, dayRange, fetchApi, withTeam])
+
+  const cancelReport = () => {
+    reportAbortRef.current?.abort()
+    setIsLoading(false)
+    setLoadError('Report loading was cancelled. Change a filter or tab to start a new request.')
+  }
 
   const handleExport = () => {
     if (!projectId) return
@@ -487,77 +513,82 @@ export function ReportsView() {
 
   if (!currentProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-        <BarChart3 className="h-12 w-12 text-muted-foreground/20 mb-3" />
-        <p className="text-sm text-muted-foreground">Select a project to view reports</p>
-      </div>
+      <EmptyStatePanel
+        size="lg"
+        icon={BarChart3}
+        title="No project selected"
+        description="Reports are scoped to a project. Choose one from the switcher in the top bar."
+      />
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Reports & Analytics</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-            <SelectTrigger className="h-7 w-[160px] text-xs">
-              <SelectValue placeholder="All teams" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Teams</SelectItem>
-              {teams.map((team) => (
-                <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={dayRange} onValueChange={setDayRange}>
-            <SelectTrigger className="h-7 w-[100px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">7 days</SelectItem>
-              <SelectItem value="14">14 days</SelectItem>
-              <SelectItem value="30">30 days</SelectItem>
-              <SelectItem value="60">60 days</SelectItem>
-              <SelectItem value="90">90 days</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={handleExport}>
-            <Download className="h-3 w-3" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1">
-        <div className="p-4">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)} className="space-y-4">
-            <TabsList className="h-8 p-0.5 gap-0 bg-muted/50 w-full justify-start overflow-x-auto flex-nowrap">
-              <TabsTrigger value="overview" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Overview</TabsTrigger>
-              <TabsTrigger value="agile" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Agile</TabsTrigger>
-              <TabsTrigger value="productivity" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Productivity</TabsTrigger>
-              <TabsTrigger value="work-items" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Work Items</TabsTrigger>
-              <TabsTrigger value="quality" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Quality</TabsTrigger>
-              <TabsTrigger value="dora" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">DORA</TabsTrigger>
-              <TabsTrigger value="forecast" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Forecast</TabsTrigger>
-              <TabsTrigger value="time-tracking" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Time</TabsTrigger>
-              <TabsTrigger value="audit" className="text-xs px-2.5 h-7 data-[state=active]:bg-background">Audit</TabsTrigger>
+    <div className="flex h-full min-h-0 flex-col">
+      {/*
+        The tab strip belongs to the header, flush against its bottom rule, so
+        it reads as navigation within the page rather than as a floating
+        control bar. The scope filters sit with the title because they change
+        what every tab below them means.
+      */}
+      <PageHeader
+        title="Reports"
+        description={activeScopeLabel}
+        actions={
+          <>
+            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+              <SelectTrigger size="sm" className="w-[9.5rem]" aria-label="Filter by team">
+                <SelectValue placeholder="All teams" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All teams</SelectItem>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={dayRange} onValueChange={setDayRange}>
+              <SelectTrigger size="sm" className="w-[6.5rem]" aria-label="Reporting period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 days</SelectItem>
+                <SelectItem value="14">14 days</SelectItem>
+                <SelectItem value="30">30 days</SelectItem>
+                <SelectItem value="60">60 days</SelectItem>
+                <SelectItem value="90">90 days</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download />
+              <span className="hidden md:inline">Export CSV</span>
+            </Button>
+            {isLoading ? <Button variant="outline" size="sm" onClick={cancelReport}>Cancel loading</Button> : null}
+          </>
+        }
+        tabs={
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)}>
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="agile">Agile</TabsTrigger>
+              <TabsTrigger value="productivity">Productivity</TabsTrigger>
+              <TabsTrigger value="work-items">Work items</TabsTrigger>
+              <TabsTrigger value="quality">Quality</TabsTrigger>
+              <TabsTrigger value="dora">DORA</TabsTrigger>
+              <TabsTrigger value="forecast">Forecast</TabsTrigger>
+              <TabsTrigger value="time-tracking">Time</TabsTrigger>
+              <TabsTrigger value="audit">Audit</TabsTrigger>
             </TabsList>
+          </Tabs>
+        }
+      />
 
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
-              <span>{activeScopeLabel}</span>
-            </div>
-
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-4 py-4 sm:px-6 sm:py-5">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportTab)} className="space-y-4">
             {loadError ? (
-              <Card className="border-destructive/30 bg-destructive/5">
-                <CardContent className="px-4 py-3 text-sm text-destructive">
-                  {loadError}
-                </CardContent>
-              </Card>
+              <InlineAlert tone="danger" title="This report could not load.">
+                {loadError}
+              </InlineAlert>
             ) : null}
 
             {/* ---------------------------------------------------------------- */}
@@ -588,8 +619,8 @@ export function ReportsView() {
                         label="Open Bugs"
                         value={(executive as { totals?: { openBugs?: number } }).totals?.openBugs ?? 0}
                         icon={Bug}
-                        iconBg="bg-red-500/10"
-                        iconColor="text-red-500"
+                        iconBg="bg-danger/10"
+                        iconColor="text-danger"
                       />
                       <StatCard
                         label="Projects"
@@ -639,6 +670,10 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium">Project Health</CardTitle>
+                        <p className="text-xs text-muted-foreground">
+                          Critical above 30% open bugs, or below 10% complete with no active work.
+                          At risk above 15% open bugs or below 30% complete.
+                        </p>
                       </CardHeader>
                       <CardContent className="px-4 pb-4">
                         <div className="space-y-2">
@@ -667,7 +702,7 @@ export function ReportsView() {
                                 <div className="flex gap-4 text-[11px] text-muted-foreground flex-shrink-0">
                                   <span>{project.completedIssues}/{project.totalIssues}</span>
                                   {project.openBugs > 0 && (
-                                    <span className="text-red-400">{project.openBugs} bugs</span>
+                                    <span className="text-danger">{project.openBugs} bugs</span>
                                   )}
                                 </div>
                               </div>
@@ -687,7 +722,7 @@ export function ReportsView() {
                       <CardContent className="px-4 pb-4">
                         <TrendLine
                           data={(bugMetrics as { trend?: Array<{ date: string; count: number }> }).trend || []}
-                          colorClass="bg-red-500"
+                          colorClass="bg-danger"
                         />
                       </CardContent>
                     </Card>
@@ -866,8 +901,8 @@ export function ReportsView() {
                         label="Created"
                         value={(completion as { summary?: { created?: number } }).summary?.created ?? 0}
                         icon={ArrowUpRight}
-                        iconBg="bg-blue-500/10"
-                        iconColor="text-blue-500"
+                        iconBg="bg-info/10"
+                        iconColor="text-info"
                         description={`Last ${dayRange} days`}
                       />
                       <StatCard
@@ -881,8 +916,8 @@ export function ReportsView() {
                         label="Completion Rate"
                         value={`${(completion as { summary?: { rate?: number } }).summary?.rate ?? 0}%`}
                         icon={Target}
-                        iconBg="bg-amber-500/10"
-                        iconColor="text-amber-500"
+                        iconBg="bg-warning/10"
+                        iconColor="text-warning"
                       />
                     </div>
                   )}
@@ -904,11 +939,11 @@ export function ReportsView() {
                                 {display.map((d, i) => (
                                   <div key={i} className="flex-1 min-w-0 flex items-end gap-px h-full">
                                     <div
-                                      className="flex-1 bg-blue-500/40 rounded-t min-h-[1px]"
+                                      className="flex-1 bg-info/40 rounded-t min-h-[1px]"
                                       style={{ height: `${(d.created / max) * 100}%` }}
                                     />
                                     <div
-                                      className="flex-1 bg-emerald-500 rounded-t min-h-[1px]"
+                                      className="flex-1 bg-success rounded-t min-h-[1px]"
                                       style={{ height: `${(d.completed / max) * 100}%` }}
                                     />
                                   </div>
@@ -916,11 +951,11 @@ export function ReportsView() {
                               </div>
                               <div className="flex gap-4 text-[11px]">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="h-2 w-4 rounded bg-blue-500/40" />
+                                  <div className="h-2 w-4 rounded bg-info/40" />
                                   <span className="text-muted-foreground">Created</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  <div className="h-2 w-4 rounded bg-emerald-500" />
+                                  <div className="h-2 w-4 rounded bg-success" />
                                   <span className="text-muted-foreground">Completed</span>
                                 </div>
                               </div>
@@ -1089,7 +1124,7 @@ export function ReportsView() {
                             label: b.range,
                             value: b.count,
                           }))}
-                          colorClass="bg-amber-500"
+                          colorClass="bg-warning"
                         />
                       </CardContent>
                     </Card>
@@ -1100,7 +1135,7 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                          <AlertTriangle className="h-3.5 w-3.5 text-warning" />
                           Blocked Items
                           <Badge variant="outline" className="text-[10px] ml-1">
                             {(blocked as { count?: number })?.count ?? 0}
@@ -1113,7 +1148,7 @@ export function ReportsView() {
                             <div className="space-y-2">
                               {((blocked as { blockedItems: Array<{ issue: { key: string; title: string; status: string }; blockedBy: { key: string; title: string } }> }).blockedItems || []).slice(0, 15).map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded bg-muted/20">
-                                  <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 flex-shrink-0" />
+                                  <AlertTriangle className="h-3 w-3 text-warning mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0">
                                     <p className="text-[11px] font-medium truncate">
                                       <span className="text-muted-foreground font-mono">{item.issue.key}</span>{' '}
@@ -1135,7 +1170,7 @@ export function ReportsView() {
                     <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-medium flex items-center gap-2">
-                          <GitBranch className="h-3.5 w-3.5 text-orange-500" />
+                          <GitBranch className="h-3.5 w-3.5 text-chart-2" />
                           Reopened Items
                           <Badge variant="outline" className="text-[10px] ml-1">
                             {(reopened as { count?: number })?.count ?? 0}
@@ -1148,7 +1183,7 @@ export function ReportsView() {
                             <div className="space-y-2">
                               {((reopened as { items: Array<{ key?: string; title?: string; reopenedAt: string }> }).items).slice(0, 15).map((item, i) => (
                                 <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded bg-muted/20">
-                                  <GitBranch className="h-3 w-3 text-orange-500 mt-0.5 flex-shrink-0" />
+                                  <GitBranch className="h-3 w-3 text-chart-2 mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0">
                                     <p className="text-[11px] font-medium truncate">
                                       <span className="text-muted-foreground font-mono">{item.key}</span>{' '}
@@ -1184,10 +1219,10 @@ export function ReportsView() {
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <StatCard label="Total Bugs" value={bm.summary.totalBugs} icon={Bug} iconBg="bg-red-500/10" iconColor="text-red-500" />
-                      <StatCard label="Open Bugs" value={bm.summary.openBugs} icon={AlertTriangle} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
+                      <StatCard label="Total Bugs" value={bm.summary.totalBugs} icon={Bug} iconBg="bg-danger/10" iconColor="text-danger" />
+                      <StatCard label="Open Bugs" value={bm.summary.openBugs} icon={AlertTriangle} iconBg="bg-warning/10" iconColor="text-warning" />
                       <StatCard label="Resolved" value={bm.summary.resolvedBugs} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
-                      <StatCard label="Avg Resolution" value={`${bm.summary.avgResolutionDays}d`} icon={Timer} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
+                      <StatCard label="Avg Resolution" value={`${bm.summary.avgResolutionDays}d`} icon={Timer} iconBg="bg-info/10" iconColor="text-info" />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1196,7 +1231,7 @@ export function ReportsView() {
                           <CardTitle className="text-sm font-medium">Bug Trend</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-4">
-                          <TrendLine data={bm.trend} colorClass="bg-red-500" />
+                          <TrendLine data={bm.trend} colorClass="bg-danger" />
                         </CardContent>
                       </Card>
 
@@ -1209,10 +1244,10 @@ export function ReportsView() {
                             segments={bm.bySeverity.map((s) => ({
                               label: s.severity,
                               value: s.count,
-                              colorClass: s.severity === 'critical' ? 'bg-red-600' :
-                                s.severity === 'high' ? 'bg-orange-500' :
-                                s.severity === 'medium' ? 'bg-amber-500' :
-                                s.severity === 'low' ? 'bg-emerald-500' : 'bg-muted-foreground/30',
+                              colorClass: s.severity === 'critical' ? 'bg-danger' :
+                                s.severity === 'high' ? 'bg-chart-2' :
+                                s.severity === 'medium' ? 'bg-warning' :
+                                s.severity === 'low' ? 'bg-success' : 'bg-muted-foreground/30',
                             }))}
                           />
                         </CardContent>
@@ -1226,7 +1261,7 @@ export function ReportsView() {
                       <CardContent className="px-4 pb-4">
                         <MiniBarChart
                           data={bm.byPriority.map((p) => ({ label: p.priority, value: p.count }))}
-                          colorClass="bg-red-500/70"
+                          colorClass="bg-danger/70"
                         />
                       </CardContent>
                     </Card>
@@ -1253,32 +1288,32 @@ export function ReportsView() {
                         label="Deployment Freq"
                         value={`${d.deploymentFrequency.perWeek}/wk`}
                         icon={Zap}
-                        iconBg="bg-emerald-500/10"
-                        iconColor="text-emerald-500"
+                        iconBg="bg-success/10"
+                        iconColor="text-success"
                         description={`${d.deploymentFrequency.total} deployments`}
                       />
                       <StatCard
                         label="Lead Time"
                         value={`${d.leadTimeForChanges.avgDays}d`}
                         icon={Clock}
-                        iconBg="bg-blue-500/10"
-                        iconColor="text-blue-500"
+                        iconBg="bg-info/10"
+                        iconColor="text-info"
                         description="Creation to done"
                       />
                       <StatCard
                         label="Change Failure"
                         value={`${d.changeFailureRate.rate}%`}
                         icon={AlertTriangle}
-                        iconBg="bg-amber-500/10"
-                        iconColor="text-amber-500"
+                        iconBg="bg-warning/10"
+                        iconColor="text-warning"
                         description={`${d.changeFailureRate.bugsCreated} bugs / ${d.changeFailureRate.totalCompleted} completed`}
                       />
                       <StatCard
                         label="MTTR"
                         value={`${d.mttr.days}d`}
                         icon={Timer}
-                        iconBg="bg-purple-500/10"
-                        iconColor="text-purple-500"
+                        iconBg="bg-chart-5/10"
+                        iconColor="text-chart-5"
                         description={`${d.mttr.resolvedCount} bugs resolved`}
                       />
                     </div>
@@ -1292,7 +1327,7 @@ export function ReportsView() {
                           <div className="space-y-1.5">
                             {d.deploymentFrequency.deployments.map((dep, i) => (
                               <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted/20 text-[11px]">
-                                <Zap className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                <Zap className="h-3 w-3 text-success flex-shrink-0" />
                                 <span className="font-medium">{dep.name}</span>
                                 {dep.date && (
                                   <span className="text-muted-foreground ml-auto">
@@ -1323,9 +1358,9 @@ export function ReportsView() {
                               <Badge
                                 variant="outline"
                                 className={`text-[10px] border-0 ${
-                                  metric.rating === 'Elite' ? 'bg-emerald-500/10 text-emerald-500' :
-                                  metric.rating === 'High' ? 'bg-blue-500/10 text-blue-500' :
-                                  'bg-amber-500/10 text-amber-500'
+                                  metric.rating === 'Elite' ? 'bg-success/10 text-success' :
+                                  metric.rating === 'High' ? 'bg-info/10 text-info' :
+                                  'bg-warning/10 text-warning'
                                 }`}
                               >
                                 {metric.rating}
@@ -1356,16 +1391,16 @@ export function ReportsView() {
                   velocityHistory?: Array<{ sprintName: string; completedPoints: number; committedPoints: number }>
                 }
                 const confColors: Record<string, string> = {
-                  high: 'text-emerald-500 bg-emerald-500/10',
-                  medium: 'text-amber-500 bg-amber-500/10',
-                  low: 'text-red-500 bg-red-500/10',
+                  high: 'text-success bg-success/10',
+                  medium: 'text-warning bg-warning/10',
+                  low: 'text-danger bg-danger/10',
                 }
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <StatCard label="Avg Velocity" value={`${f.avgVelocity} pts`} icon={TrendingUp} iconBg="bg-primary/10" iconColor="text-primary" />
-                      <StatCard label="Remaining Work" value={`${f.totalRemainingPoints} pts`} icon={Layers} iconBg="bg-amber-500/10" iconColor="text-amber-500" description={`${f.totalRemainingItems} items`} />
-                      <StatCard label="Predicted Sprints" value={f.predictedSprints ?? '—'} icon={Target} iconBg="bg-blue-500/10" iconColor="text-blue-500" description="To complete backlog" />
+                      <StatCard label="Remaining Work" value={`${f.totalRemainingPoints} pts`} icon={Layers} iconBg="bg-warning/10" iconColor="text-warning" description={`${f.totalRemainingItems} items`} />
+                      <StatCard label="Predicted Sprints" value={f.predictedSprints ?? '—'} icon={Target} iconBg="bg-info/10" iconColor="text-info" description="To complete backlog" />
                       <Card className="border-border/50 bg-card transition-shadow hover:shadow-md">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
@@ -1376,8 +1411,8 @@ export function ReportsView() {
                               </Badge>
                               <p className="text-[11px] text-muted-foreground">{f.predictability}% predictable</p>
                             </div>
-                            <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                              <Gauge className="h-4 w-4 text-purple-500" />
+                            <div className="h-9 w-9 rounded-lg bg-chart-5/10 flex items-center justify-center">
+                              <Gauge className="h-4 w-4 text-chart-5" />
                             </div>
                           </div>
                         </CardContent>
@@ -1420,9 +1455,9 @@ export function ReportsView() {
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <StatCard label="Estimated" value={`${tt.summary.totalEstimated}h`} icon={Clock} iconBg="bg-blue-500/10" iconColor="text-blue-500" />
+                      <StatCard label="Estimated" value={`${tt.summary.totalEstimated}h`} icon={Clock} iconBg="bg-info/10" iconColor="text-info" />
                       <StatCard label="Completed" value={`${tt.summary.totalCompleted}h`} icon={CheckCircle2} iconBg="bg-category-done-bg" iconColor="text-category-done" />
-                      <StatCard label="Remaining" value={`${tt.summary.totalRemaining}h`} icon={Timer} iconBg="bg-amber-500/10" iconColor="text-amber-500" />
+                      <StatCard label="Remaining" value={`${tt.summary.totalRemaining}h`} icon={Timer} iconBg="bg-warning/10" iconColor="text-warning" />
                       <StatCard label="Items Tracked" value={tt.summary.itemCount} icon={Layers} iconBg="bg-primary/10" iconColor="text-primary" />
                     </div>
 
@@ -1488,7 +1523,7 @@ export function ReportsView() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <StatCard label="Total Activities" value={a.pagination.total} icon={Activity} iconBg="bg-primary/10" iconColor="text-primary" description={`Last ${dayRange} days`} />
-                      <StatCard label="Action Types" value={a.actionSummary.length} icon={Shield} iconBg="bg-purple-500/10" iconColor="text-purple-500" />
+                      <StatCard label="Action Types" value={a.actionSummary.length} icon={Shield} iconBg="bg-chart-5/10" iconColor="text-chart-5" />
                       <StatCard label="Active Users" value={a.userSummary.length} icon={Users} iconBg="bg-type-story-bg" iconColor="text-type-story" />
                     </div>
 

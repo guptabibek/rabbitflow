@@ -5,6 +5,7 @@ import { useAppStore, User } from '@/store/app-store'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -48,6 +49,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from './confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 type MemberWithUser = {
   id: string
@@ -68,7 +74,7 @@ type GlobalUser = {
 const ROLE_OPTIONS = [
   { value: 'Admin', label: 'Admin', icon: Shield, tone: 'bg-role-admin-bg text-role-admin' },
   { value: 'PM', label: 'PM', icon: Briefcase, tone: 'bg-role-pm-bg text-role-pm' },
-  { value: 'DevOps', label: 'DevOps', icon: Shield, tone: 'bg-sky-500/10 text-sky-600 dark:text-sky-300' },
+  { value: 'DevOps', label: 'DevOps', icon: Shield, tone: 'bg-info-bg text-info' },
   { value: 'Dev', label: 'Developer', icon: Wrench, tone: 'bg-role-dev-bg text-role-dev' },
   { value: 'QA', label: 'QA', icon: Bug, tone: 'bg-role-qa-bg text-role-qa' },
   { value: 'Viewer', label: 'Viewer', icon: Eye, tone: 'bg-role-viewer-bg text-role-viewer' },
@@ -101,6 +107,9 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [addRole, setAddRole] = useState<(typeof ROLE_OPTIONS)[number]['value']>('Dev')
   const [isAdding, setIsAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [selectedUserError, setSelectedUserError] = useState<string | null>(null)
+  const memberRemoval = useDestructiveConfirm<MemberWithUser>()
 
   // Create new user state
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -109,6 +118,9 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const [newUserPassword, setNewUserPassword] = useState('')
   const [newUserRole, setNewUserRole] = useState<(typeof ROLE_OPTIONS)[number]['value']>('Dev')
   const [assignNewUserToProject, setAssignNewUserToProject] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createFieldErrors, setCreateFieldErrors] = useState<Partial<Record<'name' | 'email' | 'password', string>>>({})
+  const [memberActionError, setMemberActionError] = useState<string | null>(null)
 
   const canManageMembers = currentProjectPermissions.includes('project:members:manage')
   const isSystemAdmin = currentUser?.globalRole === 'admin'
@@ -204,7 +216,13 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   }, [addMemberOpen, showCreateForm, currentProject, searchGlobalUsers])
 
   const handleAddExistingUser = async () => {
-    if (!currentProject || !selectedUserId) return
+    if (!currentProject) return
+    if (!selectedUserId) {
+      setSelectedUserError('Select a user to add.')
+      return
+    }
+    setSelectedUserError(null)
+    setAddError(null)
     setIsAdding(true)
     try {
       const res = await fetch(`/api/projects/${currentProject.id}/members`, {
@@ -214,7 +232,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to add member')
+        setAddError(error.error || 'Failed to add member')
         return
       }
       toast.success('Member added to project')
@@ -222,14 +240,26 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       setAddMemberOpen(false)
       refreshMembers()
     } catch {
-      toast.error('Failed to add member')
+      setAddError('Failed to add member')
     } finally {
       setIsAdding(false)
     }
   }
 
   const handleCreateAndAdd = async () => {
-    if (!currentProject || !newUserEmail || !newUserName || newUserPassword.length < 8) return
+    if (!currentProject) return
+    const nextErrors: typeof createFieldErrors = {}
+    if (!newUserName.trim()) nextErrors.name = 'Enter the user’s name.'
+    if (!newUserEmail.trim()) {
+      nextErrors.email = 'Enter an email address.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUserEmail.trim())) {
+      nextErrors.email = 'Enter a valid email address.'
+    }
+    if (newUserPassword.length < 8) nextErrors.password = 'Use at least 8 characters.'
+    setCreateFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) return
+
+    setCreateError(null)
     setIsAdding(true)
     try {
       const res = await fetch('/api/users', {
@@ -246,7 +276,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       })
       if (!res.ok) {
         const error = await res.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to create user')
+        setCreateError(error.error || 'Failed to create user')
         return
       }
       const payload = await res.json().catch(() => ({}))
@@ -267,7 +297,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       setAddMemberOpen(false)
       refreshMembers()
     } catch {
-      toast.error('Failed to create user')
+      setCreateError('Failed to create user')
     } finally {
       setIsAdding(false)
     }
@@ -284,10 +314,14 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
     setNewUserPassword('')
     setNewUserRole('Dev')
     setAssignNewUserToProject(false)
+    setAddError(null)
+    setSelectedUserError(null)
+    setCreateError(null)
+    setCreateFieldErrors({})
   }
 
   const handleRemoveMember = async (memberId: string) => {
-    if (!currentProject || !confirm('Remove this member from the project?')) return
+    if (!currentProject) return false
 
     try {
       const res = await fetch(`/api/projects/${currentProject.id}/members/${memberId}`, {
@@ -300,14 +334,16 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
 
       toast.success('Member removed')
       refreshMembers()
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove member')
+      return error instanceof Error ? error.message : 'Failed to remove member'
     }
   }
 
   const handleUpdateRole = async (memberId: string, newRole: string) => {
     if (!currentProject) return
 
+    setMemberActionError(null)
     try {
       const res = await fetch(`/api/projects/${currentProject.id}/members/${memberId}`, {
         method: 'PATCH',
@@ -322,13 +358,14 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       toast.success('Role updated')
       refreshMembers()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update role')
+      setMemberActionError(error instanceof Error ? error.message : 'Failed to update role')
     }
   }
 
   const handleUpdateFeatureGrants = async (memberId: string, nextPermissions: string[]) => {
     if (!currentProject) return
 
+    setMemberActionError(null)
     try {
       const res = await fetch(`/api/projects/${currentProject.id}/members/${memberId}`, {
         method: 'PATCH',
@@ -343,7 +380,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
       toast.success('Feature access updated')
       refreshMembers()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update feature access')
+      setMemberActionError(error instanceof Error ? error.message : 'Failed to update feature access')
     }
   }
 
@@ -356,7 +393,8 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
   const selectedUser = searchResults.find((u) => u.id === selectedUserId)
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" data-testid="member-management-trigger">
@@ -385,14 +423,33 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                   </Badge>
                 )}
               </div>
-              <div className="mt-0.5 text-xs font-normal text-muted-foreground">
-                Compact access management for project membership and roles.
-              </div>
             </div>
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            Manage project membership, roles, and feature access.
+          </DialogDescription>
         </DialogHeader>
 
-        {loadError ? <div className="border-b px-4 py-3 text-sm text-destructive md:px-5">{loadError}</div> : null}
+        {loadError ? (
+          <div className="border-b px-4 py-3 md:px-5">
+            <InlineAlert
+              tone="danger"
+              title="Members could not be loaded."
+              action={
+                <Button variant="outline" size="sm" onClick={refreshMembers}>
+                  Retry
+                </Button>
+              }
+            >
+              {loadError}
+            </InlineAlert>
+          </div>
+        ) : null}
+        {memberActionError ? (
+          <div className="border-b px-4 py-3 md:px-5" data-testid="member-action-error">
+            <InlineAlert tone="danger">{memberActionError}</InlineAlert>
+          </div>
+        ) : null}
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border/60 bg-muted/15 px-4 py-3 md:px-5">
@@ -426,11 +483,21 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                     <DialogTitle className="text-base font-semibold tracking-tight">
                       {showCreateForm ? 'Create New User' : 'Add Member to Project'}
                     </DialogTitle>
+                    <DialogDescription className="text-xs">
+                      {showCreateForm
+                        ? 'Create an account and optionally add it to this project.'
+                        : 'Choose an existing account and assign its project role.'}
+                    </DialogDescription>
                   </DialogHeader>
 
                   {!showCreateForm ? (
                     /* ── Add existing user ─────────────────────────── */
                     <div className="space-y-3 px-4 py-4 md:px-5">
+                      {addError ? (
+                        <div data-testid="member-add-error">
+                          <InlineAlert tone="danger">{addError}</InlineAlert>
+                        </div>
+                      ) : null}
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Search Users
@@ -442,6 +509,8 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             onChange={(e) => {
                               setUserSearchQuery(e.target.value)
                               setSelectedUserId(null)
+                              setSelectedUserError(null)
+                              setAddError(null)
                             }}
                             placeholder="Search by name or email..."
                             className="h-9 pl-8 text-sm"
@@ -452,7 +521,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
 
                       {searchError ? <p className="text-xs text-destructive">{searchError}</p> : null}
 
-                      <ScrollArea className="max-h-[200px]">
+                      <ScrollArea className="h-[200px]">
                         {isSearching ? (
                           <div className="space-y-1.5 py-1">
                             {Array.from({ length: 3 }).map((_, i) => (
@@ -479,7 +548,11 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                             {searchResults.map((user) => (
                               <button
                                 key={user.id}
-                                onClick={() => setSelectedUserId(user.id)}
+                                onClick={() => {
+                                  setSelectedUserId(user.id)
+                                  setSelectedUserError(null)
+                                  setAddError(null)
+                                }}
                                 data-testid={`member-search-result-${user.id}`}
                                 className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors ${
                                   selectedUserId === user.id
@@ -512,6 +585,12 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         )}
                       </ScrollArea>
 
+                      {selectedUserError ? (
+                        <p className="text-xs text-destructive" data-testid="member-selection-error">
+                          {selectedUserError}
+                        </p>
+                      ) : null}
+
                       {selectedUserId && (
                         <div>
                           <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -543,7 +622,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                       <Button
                         className="h-9 w-full text-xs"
                         onClick={handleAddExistingUser}
-                        disabled={!selectedUserId || isAdding}
+                        disabled={isAdding}
                         data-testid="member-management-add-existing-submit"
                       >
                         {isAdding ? 'Adding...' : `Add ${selectedUser?.name ?? 'User'} to Project`}
@@ -576,17 +655,33 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                   ) : (
                     /* ── Create new user ───────────────────────────── */
                     <div className="space-y-3 px-4 py-4 md:px-5">
+                      {createError ? (
+                        <div data-testid="member-create-error">
+                          <InlineAlert tone="danger">{createError}</InlineAlert>
+                        </div>
+                      ) : null}
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Name
                         </label>
                         <Input
                           value={newUserName}
-                          onChange={(e) => setNewUserName(e.target.value)}
+                          onChange={(e) => {
+                            setNewUserName(e.target.value)
+                            setCreateFieldErrors((previous) => ({ ...previous, name: undefined }))
+                            setCreateError(null)
+                          }}
                           placeholder="John Doe"
                           className="h-9 text-sm"
                           data-testid="member-management-create-name-input"
+                          aria-invalid={Boolean(createFieldErrors.name)}
+                          aria-describedby={createFieldErrors.name ? 'member-create-name-error' : undefined}
                         />
+                        {createFieldErrors.name ? (
+                          <p id="member-create-name-error" className="mt-1 text-xs text-destructive">
+                            {createFieldErrors.name}
+                          </p>
+                        ) : null}
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -595,11 +690,22 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         <Input
                           type="email"
                           value={newUserEmail}
-                          onChange={(e) => setNewUserEmail(e.target.value)}
+                          onChange={(e) => {
+                            setNewUserEmail(e.target.value)
+                            setCreateFieldErrors((previous) => ({ ...previous, email: undefined }))
+                            setCreateError(null)
+                          }}
                           placeholder="john@example.com"
                           className="h-9 text-sm"
                           data-testid="member-management-create-email-input"
+                          aria-invalid={Boolean(createFieldErrors.email)}
+                          aria-describedby={createFieldErrors.email ? 'member-create-email-error' : undefined}
                         />
+                        {createFieldErrors.email ? (
+                          <p id="member-create-email-error" className="mt-1 text-xs text-destructive">
+                            {createFieldErrors.email}
+                          </p>
+                        ) : null}
                       </div>
                       <label className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2 text-xs">
                         <input
@@ -641,11 +747,22 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         <Input
                           type="password"
                           value={newUserPassword}
-                          onChange={(e) => setNewUserPassword(e.target.value)}
+                          onChange={(e) => {
+                            setNewUserPassword(e.target.value)
+                            setCreateFieldErrors((previous) => ({ ...previous, password: undefined }))
+                            setCreateError(null)
+                          }}
                           placeholder="Minimum 8 characters"
                           className="h-9 text-sm"
                           data-testid="member-management-create-password-input"
+                          aria-invalid={Boolean(createFieldErrors.password)}
+                          aria-describedby={createFieldErrors.password ? 'member-create-password-error' : undefined}
                         />
+                        {createFieldErrors.password ? (
+                          <p id="member-create-password-error" className="mt-1 text-xs text-destructive">
+                            {createFieldErrors.password}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -658,9 +775,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                         <Button
                           className="h-9 flex-1 text-xs"
                           onClick={handleCreateAndAdd}
-                          disabled={
-                            !newUserEmail || !newUserName || newUserPassword.length < 8 || isAdding
-                          }
+                          disabled={isAdding}
                           data-testid="member-management-create-submit"
                         >
                           {isAdding
@@ -808,7 +923,7 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
-                                  onClick={() => handleRemoveMember(member.id)}
+                                  onClick={() => memberRemoval.request(member)}
                                 >
                                   <Trash2 className="mr-2 h-3.5 w-3.5" />
                                   Remove
@@ -826,6 +941,17 @@ export function MemberManagement({ trigger }: { trigger?: React.ReactNode } = {}
           </ScrollArea>
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      <ConfirmDestructiveDialog
+        open={memberRemoval.isOpen}
+        onOpenChange={memberRemoval.onOpenChange}
+        title={`Remove ${memberRemoval.target?.user.name ?? 'this member'}?`}
+        description={`They will lose access to ${currentProject?.name ?? 'this project'}. Their account and work-item history will remain.`}
+        confirmLabel="Remove member"
+        onConfirm={() =>
+          memberRemoval.target ? handleRemoveMember(memberRemoval.target.id) : false
+        }
+      />
+    </>
   )
 }

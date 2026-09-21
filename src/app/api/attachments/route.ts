@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId } from '@/lib/api-error'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/domain/audit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
+import { sanitizeDisplayFileName, validateUploadBuffer } from '@/lib/domain/file-upload'
+import {
+  ensureBucketDir,
+  resolveStoredFilePath,
+  storedNameFromFilePath,
+} from '@/lib/domain/upload-storage'
 
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 
@@ -39,8 +46,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(attachments)
   } catch (error) {
-    console.error('Error fetching attachments:', error)
-    return NextResponse.json({ error: 'Failed to fetch attachments' }, { status: 500 })
+    return internalError('Error fetching attachments:', error, readRequestId(request))
   }
 }
 
@@ -77,23 +83,43 @@ export async function POST(request: NextRequest) {
     const auth = await requireProjectPermission(request, issue.projectId, 'workitem:update')
     if (!auth.ok) return auth.response
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'attachments')
-    await mkdir(uploadDir, { recursive: true })
+    const buffer = Buffer.from(await file.arrayBuffer())
 
-    const extension = path.extname(file.name) || ''
-    const safeName = `${issue.id}-${Date.now()}${extension}`
+    // Validate by content. This endpoint previously performed no type check at
+    // all and derived the stored extension from the client-supplied filename,
+    // so any file — including HTML or SVG — could be served as active content
+    // from this application's own origin.
+    const validation = validateUploadBuffer(buffer, file.name, {
+      allow: 'attachment',
+      maxBytes: MAX_ATTACHMENT_SIZE,
+      namePrefix: issue.id,
+    })
+
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
+    // Stored outside public/ so the static handler cannot serve it. Reads go
+    // through GET /api/attachments/[attachmentId], which authorises against the
+    // parent work item first.
+    const uploadDir = await ensureBucketDir('attachments')
+
+    const safeName = validation.storedFileName
     const filePath = path.join(uploadDir, safeName)
-    await writeFile(filePath, Buffer.from(await file.arrayBuffer()))
+    await writeFile(filePath, buffer)
 
     let attachment
     try {
       attachment = await db.attachment.create({
         data: {
           issueId,
-          fileName: file.name,
-          filePath: `/uploads/attachments/${safeName}`,
+          // Display name only — never used to build a path.
+          fileName: sanitizeDisplayFileName(file.name),
+          // Bare filename: the serving route resolves it inside the bucket.
+          filePath: safeName,
           fileSize: file.size,
-          mimeType: file.type || 'application/octet-stream',
+          // Record the type we detected, not the one the client claimed.
+          mimeType: validation.detectedType,
           uploadedBy: auth.actor.userId,
         },
         include: {
@@ -112,7 +138,7 @@ export async function POST(request: NextRequest) {
       action: 'attachment_added',
       details: {
         key: issue.key,
-        fileName: file.name,
+        fileName: attachment.fileName,
       },
     })
 
@@ -120,8 +146,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(attachment, { status: 201 })
   } catch (error) {
-    console.error('Error creating attachment:', error)
-    return NextResponse.json({ error: 'Failed to create attachment' }, { status: 500 })
+    return internalError('Error creating attachment:', error, readRequestId(request))
   }
 }
 
@@ -150,11 +175,16 @@ export async function DELETE(request: NextRequest) {
 
     await db.attachment.delete({ where: { id } })
 
-    const filePath = path.join(process.cwd(), 'public', attachment.filePath)
-    try {
-      await unlink(filePath)
-    } catch {
-      // File may already be missing — not critical
+    // Resolved through the bucket helper, which refuses any name that would
+    // escape it — including legacy rows holding a full `/uploads/...` path.
+    const storedPath = resolveStoredFilePath(
+      'attachments',
+      storedNameFromFilePath(attachment.filePath)
+    )
+    if (storedPath) {
+      await unlink(storedPath).catch(() => {
+        // File may already be missing — not worth failing the delete over.
+      })
     }
 
     await createAuditLog({
@@ -172,7 +202,6 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting attachment:', error)
-    return NextResponse.json({ error: 'Failed to delete attachment' }, { status: 500 })
+    return internalError('Error deleting attachment:', error, readRequestId(request))
   }
 }

@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -40,6 +41,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types — aligned with actual API / Prisma schema
@@ -125,6 +131,9 @@ export function TestPlanManager() {
   const [runDuration, setRunDuration] = useState('')
 
   const [saving, setSaving] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // -----------------------------------------------------------------------
   // Data fetching
@@ -133,6 +142,7 @@ export function TestPlanManager() {
   const fetchPlans = useCallback(async () => {
     if (!currentProject) return
     setLoading(true)
+    setListError(null)
     try {
       const res = await fetch(`/api/test-plans?projectId=${encodeURIComponent(currentProject.id)}`)
       if (!res.ok) {
@@ -143,7 +153,7 @@ export function TestPlanManager() {
       setPlans(Array.isArray(data) ? data : data.plans ?? [])
     } catch (error) {
       setPlans([])
-      toast.error(error instanceof Error ? error.message : 'Failed to load test plans')
+      setListError(error instanceof Error ? error.message : 'Failed to load test plans')
     } finally {
       setLoading(false)
     }
@@ -154,6 +164,7 @@ export function TestPlanManager() {
   const fetchPlanDetail = async (plan: TestPlanFromApi) => {
     setCasesLoading(true)
     setSelectedPlan(plan)
+    setDetailError(null)
     try {
       const res = await fetch(`/api/test-plans/${plan.id}`)
       if (!res.ok) {
@@ -165,7 +176,7 @@ export function TestPlanManager() {
       setCases(data.testCases ?? [])
     } catch (error) {
       setCases([])
-      toast.error(error instanceof Error ? error.message : 'Failed to load test plan')
+      setDetailError(error instanceof Error ? error.message : 'Failed to load test plan')
     } finally {
       setCasesLoading(false)
     }
@@ -176,7 +187,12 @@ export function TestPlanManager() {
   // -----------------------------------------------------------------------
 
   const handleCreatePlan = async () => {
-    if (!currentProject || !planTitle.trim()) return
+    if (!currentProject) return
+    setActionError(null)
+    if (!planTitle.trim()) {
+      setActionError('Test plan title is required.')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch('/api/test-plans', {
@@ -198,18 +214,26 @@ export function TestPlanManager() {
       await fetchPlans()
       toast.success('Test plan created')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create test plan')
+      setActionError(error instanceof Error ? error.message : 'Failed to create test plan')
     } finally {
       setSaving(false)
     }
   }
 
   const handleCreateCase = async () => {
-    if (!selectedPlan || !caseTitle.trim()) return
+    if (!selectedPlan) return
+    setActionError(null)
+    if (!caseTitle.trim()) {
+      setActionError('Test case title is required.')
+      return
+    }
     const validSteps = caseSteps
       .filter((s) => s.action.trim())
       .map((s, i) => ({ order: i + 1, action: s.action.trim(), expectedResult: s.expectedResult?.trim() || undefined }))
-    if (validSteps.length === 0) return
+    if (validSteps.length === 0) {
+      setActionError('Add at least one test step with an action.')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch('/api/test-plans', {
@@ -233,7 +257,7 @@ export function TestPlanManager() {
       await fetchPlanDetail(selectedPlan)
       toast.success('Test case created')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create test case')
+      setActionError(error instanceof Error ? error.message : 'Failed to create test case')
     } finally {
       setSaving(false)
     }
@@ -241,6 +265,11 @@ export function TestPlanManager() {
 
   const handleRunTest = async () => {
     if (!runDialogCase) return
+    setActionError(null)
+    if (runDuration && (!Number.isInteger(Number(runDuration)) || Number(runDuration) < 0)) {
+      setActionError('Duration must be a whole number of seconds greater than or equal to 0.')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch('/api/test-runs', {
@@ -265,11 +294,13 @@ export function TestPlanManager() {
       }
       toast.success('Test result recorded')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to record test result')
+      setActionError(error instanceof Error ? error.message : 'Failed to record test result')
     } finally {
       setSaving(false)
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; title: string }>()
 
   const handleDeletePlan = async (id: string) => {
     try {
@@ -284,13 +315,15 @@ export function TestPlanManager() {
       }
       await fetchPlans()
       toast.success('Test plan deleted')
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete test plan')
+      return error instanceof Error ? error.message : 'Failed to delete test plan'
     }
   }
 
   const handleStatusChange = async (newStatus: string) => {
     if (!selectedPlan) return
+    setActionError(null)
     try {
       const res = await fetch(`/api/test-plans/${selectedPlan.id}`, {
         method: 'PUT',
@@ -304,7 +337,7 @@ export function TestPlanManager() {
       await fetchPlanDetail(selectedPlan)
       await fetchPlans()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update test plan status')
+      setActionError(error instanceof Error ? error.message : 'Failed to update test plan status')
     }
   }
 
@@ -341,11 +374,11 @@ export function TestPlanManager() {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'passed':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'failed':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       case 'blocked':
-        return <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+        return <AlertCircle className="h-3.5 w-3.5 text-chart-2" />
       case 'skipped':
         return <Clock className="h-3.5 w-3.5 text-muted-foreground" />
       default:
@@ -356,11 +389,11 @@ export function TestPlanManager() {
   const priorityColor = (p: string) => {
     switch (p) {
       case 'critical':
-        return 'text-red-600 bg-red-500/10'
+        return 'text-danger bg-danger/10'
       case 'high':
-        return 'text-orange-600 bg-orange-500/10'
+        return 'text-chart-2 bg-chart-2/10'
       case 'medium':
-        return 'text-yellow-600 bg-yellow-500/10'
+        return 'text-warning bg-warning/10'
       default:
         return 'text-muted-foreground bg-muted/50'
     }
@@ -368,10 +401,10 @@ export function TestPlanManager() {
 
   const planStatusColor = (s: string) => {
     switch (s) {
-      case 'active': return 'bg-green-500/10 text-green-600'
-      case 'completed': return 'bg-blue-500/10 text-blue-600'
+      case 'active': return 'bg-success/10 text-success'
+      case 'completed': return 'bg-info/10 text-info'
       case 'archived': return 'bg-muted text-muted-foreground'
-      default: return 'bg-yellow-500/10 text-yellow-600'
+      default: return 'bg-warning/10 text-warning'
     }
   }
 
@@ -391,15 +424,16 @@ export function TestPlanManager() {
       <div className="w-72 flex-shrink-0 border-r flex flex-col">
         <div className="flex items-center justify-between border-b p-3">
           <h3 className="text-sm font-semibold">Test Plans</h3>
-          <Dialog open={createPlanOpen} onOpenChange={setCreatePlanOpen}>
+          <Dialog open={createPlanOpen} onOpenChange={(next) => { setCreatePlanOpen(next); if (!next) setActionError(null) }}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
+              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Add test step">
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create Test Plan</DialogTitle>
+                <DialogDescription>Create a container for related test cases and runs.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
                 <div className="space-y-1.5">
@@ -411,6 +445,7 @@ export function TestPlanManager() {
                   <Textarea value={planDesc} onChange={(e) => setPlanDesc(e.target.value)} placeholder="Optional" rows={3} />
                 </div>
               </div>
+              {actionError ? <InlineAlert tone="danger" title="Plan not created.">{actionError}</InlineAlert> : null}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreatePlanOpen(false)}>Cancel</Button>
                 <Button onClick={handleCreatePlan} disabled={!planTitle.trim() || saving}>
@@ -425,6 +460,13 @@ export function TestPlanManager() {
             <div className="space-y-2 p-3">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
+          ) : listError ? (
+            <ErrorState
+              title="Test plans did not load"
+              detail={listError}
+              onRetry={() => void fetchPlans()}
+              size="sm"
+            />
           ) : plans.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
               No test plans yet.
@@ -487,7 +529,7 @@ export function TestPlanManager() {
                     <SelectItem value="archived">Archived</SelectItem>
                   </SelectContent>
                 </Select>
-                <Dialog open={createCaseOpen} onOpenChange={(open) => { setCreateCaseOpen(open); if (!open) resetCaseForm() }}>
+                <Dialog open={createCaseOpen} onOpenChange={(open) => { setCreateCaseOpen(open); if (!open) { resetCaseForm(); setActionError(null) } }}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="gap-1">
                       <Plus className="h-3.5 w-3.5" />
@@ -497,6 +539,7 @@ export function TestPlanManager() {
                   <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Add Test Case</DialogTitle>
+                      <DialogDescription>Add executable steps and their expected results.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3 py-2">
                       <div className="space-y-1.5">
@@ -551,6 +594,7 @@ export function TestPlanManager() {
                             </div>
                             {caseSteps.length > 1 && (
                               <Button type="button" variant="ghost" size="icon" className="h-7 w-7 mt-0.5 flex-shrink-0"
+                                aria-label="Remove test step"
                                 onClick={() => removeStep(idx)}>
                                 <X className="h-3 w-3" />
                               </Button>
@@ -559,6 +603,7 @@ export function TestPlanManager() {
                         ))}
                       </div>
                     </div>
+                    {actionError ? <InlineAlert tone="danger" title="Case not added.">{actionError}</InlineAlert> : null}
                     <DialogFooter>
                       <Button variant="outline" onClick={() => { setCreateCaseOpen(false); resetCaseForm() }}>Cancel</Button>
                       <Button onClick={handleCreateCase} disabled={!caseTitle.trim() || !caseSteps.some(s => s.action.trim()) || saving}>
@@ -571,12 +616,29 @@ export function TestPlanManager() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
-                  onClick={() => handleDeletePlan(selectedPlan.id)}
+                  aria-label="Delete test plan"
+                  onClick={() => deleteConfirm.request(selectedPlan)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
+
+            {actionError ? (
+              <InlineAlert tone="danger" title="Action not completed." className="mx-3 mt-3">
+                {actionError}
+              </InlineAlert>
+            ) : null}
+            {detailError ? (
+              <InlineAlert
+                tone="danger"
+                title="Test plan details did not load."
+                className="mx-3 mt-3"
+                action={<Button size="sm" variant="outline" onClick={() => void fetchPlanDetail(selectedPlan)}>Retry</Button>}
+              >
+                {detailError}
+              </InlineAlert>
+            ) : null}
 
             {/* Summary badges */}
             {summary && (
@@ -588,11 +650,11 @@ export function TestPlanManager() {
                 </div>
                 <div className="flex gap-2">
                   <Badge variant="outline" className="text-xs gap-1">
-                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    <CheckCircle2 className="h-3 w-3 text-success" />
                     {summary.passed} passed
                   </Badge>
                   <Badge variant="outline" className="text-xs gap-1">
-                    <XCircle className="h-3 w-3 text-red-500" />
+                    <XCircle className="h-3 w-3 text-danger" />
                     {summary.failed} failed
                   </Badge>
                   <Badge variant="outline" className="text-xs gap-1">
@@ -667,10 +729,11 @@ export function TestPlanManager() {
       </div>
 
       {/* Run test dialog */}
-      <Dialog open={!!runDialogCase} onOpenChange={() => setRunDialogCase(null)}>
+      <Dialog open={!!runDialogCase} onOpenChange={(next) => { if (!next) { setRunDialogCase(null); setActionError(null) } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Test Result</DialogTitle>
+            <DialogDescription>Record the outcome, duration, and any notes from this run.</DialogDescription>
           </DialogHeader>
           {runDialogCase && (
             <div className="space-y-3 py-2">
@@ -712,6 +775,7 @@ export function TestPlanManager() {
               </div>
             </div>
           )}
+          {actionError ? <InlineAlert tone="danger" title="Result not recorded.">{actionError}</InlineAlert> : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunDialogCase(null)}>Cancel</Button>
             <Button onClick={handleRunTest} disabled={saving}>
@@ -720,6 +784,17 @@ export function TestPlanManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete test plan "${deleteConfirm.target?.title ?? ''}"?`}
+        description="All test cases and recorded runs belonging to this plan will be deleted. This cannot be undone."
+        onConfirm={async () => {
+          if (!deleteConfirm.target) return false
+          return handleDeletePlan(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

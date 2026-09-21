@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/app-store'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -15,9 +16,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Camera, Lock, Settings, Shield, User } from 'lucide-react'
+import { Bell, Camera, Lock, Settings, Shield, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
+import { NotificationPreferences } from './notification-preferences'
 
 interface UserProfileProps {
   open: boolean
@@ -35,6 +38,9 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
   const [isSaving, setIsSaving] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -46,12 +52,23 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
 
   const handleSaveProfile = async () => {
     if (!currentUser) return
+    const nextName = name.trim()
+    const nextEmail = email.trim()
+    setProfileError(null)
+    if (!nextName) {
+      setProfileError('Full name is required.')
+      return
+    }
+    if (!/^\S+@\S+\.\S+$/.test(nextEmail)) {
+      setProfileError('Enter a valid email address.')
+      return
+    }
     setIsSaving(true)
     try {
       const res = await fetch(`/api/users/${currentUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), avatar: avatar.trim() || null }),
+        body: JSON.stringify({ name: nextName, email: nextEmail, avatar: avatar.trim() || null }),
       })
       if (!res.ok) {
         throw new Error(await getApiErrorMessage(res, 'Failed to update profile'))
@@ -61,18 +78,20 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
       setCurrentUser({ ...currentUser, name: updated.name, email: updated.email, avatar: updated.avatar })
       toast.success('Profile updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update profile')
+      setProfileError(error instanceof Error ? error.message : 'Failed to update profile')
+    } finally {
+      setIsSaving(false)
     }
-    setIsSaving(false)
   }
 
   const handleChangePassword = async () => {
+    setPasswordError(null)
     if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters')
+      setPasswordError('Password must be at least 8 characters.')
       return
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match')
+      setPasswordError('Passwords do not match.')
       return
     }
     setIsChangingPassword(true)
@@ -91,9 +110,10 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
       setNewPassword('')
       setConfirmPassword('')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to change password')
+      setPasswordError(error instanceof Error ? error.message : 'Failed to change password')
+    } finally {
+      setIsChangingPassword(false)
     }
-    setIsChangingPassword(false)
   }
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +124,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
     formData.append('file', file)
 
     setIsUploadingAvatar(true)
+    setAvatarError(null)
     try {
       const res = await fetch(`/api/users/${currentUser.id}/avatar`, {
         method: 'POST',
@@ -122,7 +143,7 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
       })
       toast.success('Avatar updated')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to upload avatar')
+      setAvatarError(error instanceof Error ? error.message : 'Failed to upload avatar')
     } finally {
       setIsUploadingAvatar(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -145,6 +166,9 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             <User className="h-5 w-5 text-primary" />
             Profile Settings
           </DialogTitle>
+          <DialogDescription>
+            Update your account details, notification preferences, and password.
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="w-full">
@@ -155,6 +179,12 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
                 className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-sm"
               >
                 <Settings className="h-3.5 w-3.5" /> Profile
+              </TabsTrigger>
+              <TabsTrigger
+                value="notifications"
+                className="gap-1.5 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-1 pb-2 text-sm"
+              >
+                <Bell className="h-3.5 w-3.5" /> Notifications
               </TabsTrigger>
               <TabsTrigger
                 value="security"
@@ -201,6 +231,9 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
                 </Badge>
               </div>
             </div>
+            {avatarError ? (
+              <InlineAlert tone="danger" title="Avatar not updated.">{avatarError}</InlineAlert>
+            ) : null}
 
             <Separator />
 
@@ -208,21 +241,27 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Full Name</Label>
+                  <Label htmlFor="profile-full-name">Full Name</Label>
                   <Input
+                    id="profile-full-name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    aria-invalid={Boolean(profileError && !name.trim())}
+                    onChange={(e) => { setName(e.target.value); setProfileError(null) }}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Email</Label>
+                  <Label htmlFor="profile-email">Email</Label>
                   <Input
+                    id="profile-email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); setProfileError(null) }}
                   />
                 </div>
               </div>
+              {profileError ? (
+                <InlineAlert tone="danger" title="Profile not saved.">{profileError}</InlineAlert>
+              ) : null}
               <div className="space-y-1.5">
                 <Label>Avatar URL</Label>
                 <Input
@@ -238,6 +277,10 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
             </div>
           </TabsContent>
 
+          <TabsContent value="notifications" className="p-4 mt-0 sm:p-6">
+            <NotificationPreferences />
+          </TabsContent>
+
           <TabsContent value="security" className="p-4 mt-0 space-y-4 sm:p-6">
             <div>
               <h3 className="font-semibold mb-1">Change Password</h3>
@@ -248,30 +291,38 @@ export function UserProfile({ open, onOpenChange }: UserProfileProps) {
 
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Current Password</Label>
+                <Label htmlFor="profile-current-password">Current Password</Label>
                 <Input
+                  id="profile-current-password"
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>New Password</Label>
+                <Label htmlFor="profile-new-password">New Password</Label>
                 <Input
+                  id="profile-new-password"
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  aria-invalid={Boolean(passwordError && newPassword.length < 8)}
+                  onChange={(e) => { setNewPassword(e.target.value); setPasswordError(null) }}
                   placeholder="Minimum 8 characters"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Confirm New Password</Label>
+                <Label htmlFor="profile-confirm-password">Confirm New Password</Label>
                 <Input
+                  id="profile-confirm-password"
                   type="password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  aria-invalid={Boolean(passwordError && newPassword !== confirmPassword)}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(null) }}
                 />
               </div>
+              {passwordError ? (
+                <InlineAlert tone="danger" title="Password not changed.">{passwordError}</InlineAlert>
+              ) : null}
               <Button
                 onClick={handleChangePassword}
                 disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}

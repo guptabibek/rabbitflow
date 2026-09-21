@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOnboarding, type OnboardingStep } from '@/hooks/use-onboarding'
+import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
@@ -117,7 +118,7 @@ function OnboardingStepItem({
       {/* Status indicator */}
       <div className="mt-0.5 flex-shrink-0">
         {isCompleted ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          <CheckCircle2 className="h-5 w-5 text-success" />
         ) : (
           <div
             className={cn(
@@ -191,7 +192,56 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
     recordEvent,
   } = useOnboarding()
 
-  const [isExpanded, setIsExpanded] = useState(true)
+  /**
+   * Expanded only while the user is genuinely new.
+   *
+   * Ten always-open steps occupied roughly two thirds of the dashboard, so a
+   * returning user's first impression of their own workspace was a to-do list
+   * about the product rather than their work. Once they are past the first
+   * couple of steps it collapses to a one-line progress summary they can reopen.
+   *
+   * The choice is remembered per project, so collapsing it stays collapsed.
+   */
+  const currentProject = useAppStore((state) => state.currentProject)
+  const storageKey = `rabbitflow:onboarding-expanded:${currentProject?.id ?? 'default'}`
+
+  /**
+   * `null` until we can actually decide.
+   *
+   * The previous version computed the default in `useState`'s initialiser,
+   * which runs on the first render — before the status request has resolved.
+   * Progress therefore always read as zero, the "barely started" branch always
+   * won, and the checklist opened for everyone on every visit no matter how
+   * much of it they had finished.
+   */
+  const [expandedChoice, setExpandedChoice] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      if (stored !== null) return stored === 'true'
+    } catch {
+      // Private browsing or blocked storage: fall through to the default.
+    }
+    return null
+  })
+
+  const completedCount =
+    status?.completedCount ??
+    status?.steps?.filter((step) => step.isCompleted).length ??
+    0
+
+  // No stored preference: open only for someone who has barely started.
+  const isExpanded = expandedChoice ?? (status ? completedCount < 3 : false)
+
+  const handleExpandedChange = (next: boolean) => {
+    setExpandedChoice(next)
+    if (!storageKey) return
+    try {
+      window.localStorage.setItem(storageKey, String(next))
+    } catch {
+      // Preference is a convenience; never fail the render over it.
+    }
+  }
 
   if (!showChecklist || !status || isLoading) return null
 
@@ -214,47 +264,57 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
   }
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/80 shadow-lg backdrop-blur-sm" data-testid="onboarding-checklist">
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+    <div
+      className="overflow-hidden rounded-lg border border-border bg-card"
+      data-testid="onboarding-checklist"
+    >
+      <Collapsible open={isExpanded} onOpenChange={handleExpandedChange}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center gap-3 px-3.5 py-2.5">
           <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-2 text-left">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">Getting Started</span>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                {completedVisible}/{totalVisible}
+            <button
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-expanded={isExpanded}
+            >
+              <Sparkles className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="type-heading shrink-0 text-foreground">Set up this project</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                {completedVisible} of {totalVisible}
               </span>
+
+              {/* Collapsed, the bar is the whole summary — it sits inline with
+                  the label rather than on a row of its own, so a returning user
+                  spends 40px on onboarding instead of 570. */}
+              <span className="mx-1 hidden min-w-0 max-w-[16rem] flex-1 sm:block">
+                <Progress
+                  value={status.progressPercent}
+                  className="h-1"
+                  data-testid="onboarding-progress-bar"
+                />
+              </span>
+
               {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               )}
             </button>
           </CollapsibleTrigger>
 
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={dismissAll}
-            className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground"
-            title="Dismiss onboarding checklist"
+            aria-label="Dismiss setup checklist"
             data-testid="onboarding-dismiss-all-button"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Progress bar */}
-        <div className="px-4 pb-2">
-          <Progress
-            value={status.progressPercent}
-            className="h-1.5 bg-muted"
-            data-testid="onboarding-progress-bar"
-          />
+            <X />
+          </Button>
         </div>
 
         {/* Steps */}
         <CollapsibleContent>
-          <div className="space-y-0.5 px-2 pb-3">
+          <div className="space-y-0.5 border-t border-border p-1.5">
             {visibleSteps.map((step) => (
               <OnboardingStepItem
                 key={step.key}
@@ -279,7 +339,10 @@ export function OnboardingChecklistCompact() {
   if (!showChecklist || !status) return null
 
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-primary/[0.06] px-3 py-2">
+    <div
+      className="flex items-center gap-2 rounded-lg bg-primary/[0.06] px-3 py-2"
+      data-testid="onboarding-checklist-compact"
+    >
       <Sparkles className="h-3.5 w-3.5 text-primary" />
       <div className="flex-1">
         <div className="flex items-center justify-between">

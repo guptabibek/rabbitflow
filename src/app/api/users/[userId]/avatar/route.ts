@@ -3,6 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
+import { validateUploadBuffer } from '@/lib/domain/file-upload'
+import {
+  avatarFileName,
+  ensureBucketDir,
+  removeExistingAvatars,
+} from '@/lib/domain/upload-storage'
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
@@ -26,25 +32,46 @@ export async function POST(
       return NextResponse.json({ error: 'Image file is required' }, { status: 400 })
     }
 
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image uploads are allowed' }, { status: 400 })
-    }
-
+    // Check the declared size before buffering so an oversized body is rejected
+    // without reading it all into memory.
     if (file.size > MAX_AVATAR_SIZE) {
       return NextResponse.json({ error: 'Avatar must be 5MB or smaller' }, { status: 400 })
     }
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars')
-    await mkdir(uploadDir, { recursive: true })
-
-    const safeExtension = path.extname(file.name) || '.png'
-    const fileName = `${id}-${Date.now()}${safeExtension}`
-    const destination = path.join(uploadDir, fileName)
     const buffer = Buffer.from(await file.arrayBuffer())
+
+    // Validate by content, not by the client-supplied MIME type or filename. The
+    // previous implementation trusted `file.type` and took the extension from
+    // `file.name`, which let an HTML payload be stored as `<id>-<ts>.html` and
+    // served as active content from this application's own origin.
+    const validation = validateUploadBuffer(buffer, file.name, {
+      allow: 'image',
+      maxBytes: MAX_AVATAR_SIZE,
+      namePrefix: id,
+    })
+
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+
+    // Outside public/, alongside attachments. Reads go through
+    // GET /api/users/[userId]/avatar/image, which requires a session.
+    const uploadDir = await ensureBucketDir('avatars')
+
+    // Replace rather than accumulate: the old implementation wrote a
+    // timestamped name and never deleted the previous file.
+    await removeExistingAvatars(id)
+
+    const fileName = avatarFileName(id, validation.extension)
+    const destination = path.join(uploadDir, fileName)
 
     await writeFile(destination, buffer)
 
-    const avatarPath = `/uploads/avatars/${fileName}`
+    // A URL the client can use directly, so no component needs to know where
+    // files live. The version parameter busts caches when the image changes;
+    // the serving route locates the file from the user id alone, never from a
+    // client-supplied name.
+    const avatarPath = `/api/users/${id}/avatar/image?v=${Date.now()}`
 
     const user = await db.user.update({
       where: { id },

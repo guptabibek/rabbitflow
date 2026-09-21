@@ -12,3 +12,14 @@ coverage
 .env.*
 !.env.docker.example
 README.md
+
+# Test and audit artefacts that have no place in the build context
+tests
+playwright.config.ts
+playwright-report
+test-results
+docs
+.vs
+.github
+prisma/dev.db
+var

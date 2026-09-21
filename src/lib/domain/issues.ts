@@ -1,5 +1,9 @@
 import { db } from '@/lib/db'
-import { customFieldValuesToRecord, getProjectWorkItemTypeDefinition } from '@/lib/domain/work-item-schema'
+import {
+  customFieldValuesToRecord,
+  getProjectWorkItemTypeDefinition,
+  UnknownWorkItemTypeError,
+} from '@/lib/domain/work-item-schema'
 import { isStateMappedToType } from '@/lib/domain/state-machine'
 
 type IssueReferenceValidationInput = {
@@ -51,6 +55,34 @@ const issueCoreRelations = {
       icon: true,
       color: true,
       hierarchyLevel: true,
+    },
+  },
+  // Board and list consumers need only active blocking dependencies. Keeping
+  // this narrow avoids loading the full relation graph for every work item.
+  sourceRelations: {
+    where: {
+      relationType: 'blocked_by',
+      targetIssue: { status: { notIn: ['done', 'cancelled'] } },
+    },
+    select: {
+      id: true,
+      relationType: true,
+      targetIssue: {
+        select: { id: true, key: true, title: true, status: true, workItemType: true },
+      },
+    },
+  },
+  targetRelations: {
+    where: {
+      relationType: 'blocks',
+      sourceIssue: { status: { notIn: ['done', 'cancelled'] } },
+    },
+    select: {
+      id: true,
+      relationType: true,
+      sourceIssue: {
+        select: { id: true, key: true, title: true, status: true, workItemType: true },
+      },
     },
   },
   _count: { select: { comments: true, subIssues: true, attachments: true } },
@@ -150,7 +182,18 @@ export async function validateIssueReferences(input: IssueReferenceValidationInp
     customFields,
   } = input
 
-  const typeDefinition = await getProjectWorkItemTypeDefinition(projectId, workItemType)
+  // The type key comes straight from the request body, so an unknown value is a
+  // client error. Returned as a validation message rather than thrown, since
+  // route handlers here only catch ZodError and everything else became a 500.
+  let typeDefinition: Awaited<ReturnType<typeof getProjectWorkItemTypeDefinition>>
+  try {
+    typeDefinition = await getProjectWorkItemTypeDefinition(projectId, workItemType)
+  } catch (error) {
+    if (error instanceof UnknownWorkItemTypeError) {
+      return error.message
+    }
+    throw error
+  }
 
   if (parentIssueId) {
     if (currentIssueId && currentIssueId === parentIssueId) {

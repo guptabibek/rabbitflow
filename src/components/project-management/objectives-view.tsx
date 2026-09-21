@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/app-store'
 import {
   AlertDialog,
@@ -21,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -30,9 +32,12 @@ import {
   Plus,
   ChevronRight,
   Trash2,
+  Link2,
+  TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
 
 type KeyResult = {
   id: string
@@ -41,6 +46,16 @@ type KeyResult = {
   targetValue: number
   unit: string
   status: string
+  issue: {
+    id: string
+    key: string
+    title: string
+    status: string
+    priority: string
+    dueDate: string | null
+    isOverdue: boolean
+    blockers: Array<{ id: string; key: string; title: string; status: string }>
+  } | null
 }
 
 type Objective = {
@@ -54,10 +69,18 @@ type Objective = {
   keyResults: KeyResult[]
   owner: { id: string; name: string } | null
   _count?: { keyResults: number }
+  progressSource: string
+  delivery: {
+    linkedCount: number
+    overdueCount: number
+    blockedCount: number
+    confidence: { state: 'no_data' | 'on_track' | 'watch' | 'at_risk'; label: string }
+  }
 }
 
 export function ObjectivesView() {
-  const { currentProject } = useAppStore()
+  const router = useRouter()
+  const { currentProject, issues } = useAppStore()
   const [objectives, setObjectives] = useState<Objective[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [createObjOpen, setCreateObjOpen] = useState(false)
@@ -68,25 +91,34 @@ export function ObjectivesView() {
   const [newKRTitle, setNewKRTitle] = useState('')
   const [newKRTarget, setNewKRTarget] = useState(100)
   const [newKRUnit, setNewKRUnit] = useState('%')
+  const [newKRIssueId, setNewKRIssueId] = useState('')
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [objectiveError, setObjectiveError] = useState<string | null>(null)
+  const [objectiveTitleError, setObjectiveTitleError] = useState<string | null>(null)
+  const [keyResultError, setKeyResultError] = useState<string | null>(null)
+  const [keyResultFieldErrors, setKeyResultFieldErrors] = useState<Partial<Record<'title' | 'target' | 'unit', string>>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const projectId = currentProject?.id
 
   const fetchObjectives = useCallback(async () => {
     if (!projectId) return
     setIsLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/objectives?projectId=${projectId}`)
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to load objectives'))
+        setLoadError(await getApiErrorMessage(res, 'Failed to load objectives'))
         setObjectives([])
         return
       }
 
       setObjectives(await res.json())
     } catch {
-      toast.error('Failed to load objectives')
+      setLoadError('Failed to load objectives')
     } finally {
       setIsLoading(false)
     }
@@ -95,7 +127,13 @@ export function ObjectivesView() {
   useEffect(() => { fetchObjectives() }, [fetchObjectives])
 
   const createObjective = async () => {
-    if (!projectId || !newTitle.trim()) return
+    if (!projectId) return
+    if (!newTitle.trim()) {
+      setObjectiveTitleError('Enter an objective title.')
+      return
+    }
+    setObjectiveTitleError(null)
+    setObjectiveError(null)
     setIsSubmitting(true)
     try {
       const res = await fetch('/api/objectives', {
@@ -109,7 +147,7 @@ export function ObjectivesView() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to create objective'))
+        setObjectiveError(await getApiErrorMessage(res, 'Failed to create objective'))
         return
       }
 
@@ -119,19 +157,26 @@ export function ObjectivesView() {
       await fetchObjectives()
       toast.success('Objective created')
     } catch {
-      toast.error('Failed to create objective')
+      setObjectiveError('Failed to create objective')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const addKeyResult = async () => {
-    if (!selectedObjId || !newKRTitle.trim()) return
+    if (!selectedObjId) return
+    const nextErrors: typeof keyResultFieldErrors = {}
+    if (!newKRTitle.trim()) nextErrors.title = 'Enter a key result title.'
     if (Number.isNaN(newKRTarget) || newKRTarget < 0) {
-      toast.error('Key result target must be zero or greater')
+      nextErrors.target = 'Enter a target of zero or greater.'
+    }
+    if (!newKRUnit.trim()) nextErrors.unit = 'Enter a unit.'
+    setKeyResultFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
       return
     }
 
+    setKeyResultError(null)
     setIsSubmitting(true)
     try {
       const res = await fetch('/api/objectives', {
@@ -141,29 +186,32 @@ export function ObjectivesView() {
           objectiveId: selectedObjId,
           title: newKRTitle.trim(),
           targetValue: newKRTarget,
-          unit: newKRUnit,
+          unit: newKRUnit.trim(),
+          issueId: newKRIssueId || null,
         }),
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to add key result'))
+        setKeyResultError(await getApiErrorMessage(res, 'Failed to add key result'))
         return
       }
 
       setNewKRTitle('')
       setNewKRTarget(100)
       setNewKRUnit('%')
+      setNewKRIssueId('')
       setCreateKROpen(false)
       await fetchObjectives()
       toast.success('Key result added')
     } catch {
-      toast.error('Failed to add key result')
+      setKeyResultError('Failed to add key result')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const updateKRValue = async (krId: string, currentValue: number) => {
+    setActionError(null)
     try {
       const res = await fetch(`/api/key-results/${krId}`, {
         method: 'PUT',
@@ -172,13 +220,13 @@ export function ObjectivesView() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to update key result'))
+        setActionError(await getApiErrorMessage(res, 'Failed to update key result'))
         return
       }
 
       await fetchObjectives()
     } catch {
-      toast.error('Failed to update key result')
+      setActionError('Failed to update key result')
     }
   }
 
@@ -186,10 +234,11 @@ export function ObjectivesView() {
     if (!pendingDelete) return
 
     setIsSubmitting(true)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/objectives/${pendingDelete.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to delete objective'))
+        setDeleteError(await getApiErrorMessage(res, 'Failed to delete objective'))
         return
       }
 
@@ -197,7 +246,7 @@ export function ObjectivesView() {
       await fetchObjectives()
       toast.success('Objective deleted')
     } catch {
-      toast.error('Failed to delete objective')
+      setDeleteError('Failed to delete objective')
     } finally {
       setIsSubmitting(false)
     }
@@ -205,11 +254,18 @@ export function ObjectivesView() {
 
   const statusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-      case 'completed': return 'bg-green-500/10 text-green-600 border-green-500/20'
-      case 'cancelled': return 'bg-red-500/10 text-red-600 border-red-500/20'
-      default: return 'bg-gray-500/10 text-gray-600 border-gray-500/20'
+      case 'active': return 'bg-info/10 text-info border-info/20'
+      case 'completed': return 'bg-success/10 text-success border-success/20'
+      case 'cancelled': return 'bg-danger/10 text-danger border-danger/20'
+      default: return 'bg-muted text-muted-foreground border-border'
     }
+  }
+
+  const confidenceColor = (status: Objective['delivery']['confidence']['state']) => {
+    if (status === 'on_track') return 'bg-success/10 text-success border-success/20'
+    if (status === 'watch') return 'bg-warning/10 text-warning border-warning/20'
+    if (status === 'at_risk') return 'bg-danger/10 text-danger border-danger/20'
+    return 'bg-muted text-muted-foreground border-border'
   }
 
   if (!projectId) {
@@ -230,11 +286,24 @@ export function ObjectivesView() {
           </h2>
           <p className="text-sm text-muted-foreground mt-1">Track team goals and measure progress</p>
         </div>
-        <Button onClick={() => setCreateObjOpen(true)} className="gap-1.5">
+        <Button
+          onClick={() => {
+            setObjectiveError(null)
+            setObjectiveTitleError(null)
+            setCreateObjOpen(true)
+          }}
+          className="gap-1.5"
+        >
           <Plus className="h-4 w-4" />
           New Objective
         </Button>
       </div>
+
+      {actionError ? (
+        <div data-testid="objective-action-error">
+          <InlineAlert tone="danger">{actionError}</InlineAlert>
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="space-y-4">
@@ -242,6 +311,14 @@ export function ObjectivesView() {
             <Card key={i} className="animate-pulse h-32" />
           ))}
         </div>
+      ) : loadError ? (
+        <ErrorState
+          title="Objectives did not load"
+          description="The goals and key results could not be read. Nothing has changed."
+          detail={loadError}
+          onRetry={() => void fetchObjectives()}
+          size="sm"
+        />
       ) : objectives.length === 0 ? (
         <Card className="py-16 text-center">
           <Target className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -250,9 +327,9 @@ export function ObjectivesView() {
       ) : (
         <div className="space-y-4">
           {objectives.map((obj) => (
-            <Card key={obj.id} className="transition-shadow hover:shadow-md">
+            <Card key={obj.id} data-testid={`objective-card-${obj.id}`} className="transition-shadow hover:shadow-md">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{obj.title}</CardTitle>
@@ -263,6 +340,20 @@ export function ObjectivesView() {
                     {obj.description && (
                       <p className="text-sm text-muted-foreground mt-1">{obj.description}</p>
                     )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline" className={confidenceColor(obj.delivery.confidence.state)}>
+                        {obj.delivery.confidence.label}
+                      </Badge>
+                      <span>{obj.progressSource}</span>
+                      <span>{obj.delivery.linkedCount} linked work item{obj.delivery.linkedCount === 1 ? '' : 's'}</span>
+                      {obj.endDate ? <span>Target {new Date(obj.endDate).toLocaleDateString()}</span> : <span>No target date</span>}
+                    </div>
+                    {obj.delivery.overdueCount > 0 || obj.delivery.blockedCount > 0 ? (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-danger" role="status">
+                        <TriangleAlert className="size-3.5" aria-hidden="true" />
+                        {obj.delivery.overdueCount} overdue · {obj.delivery.blockedCount} blocked
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right mr-4">
@@ -273,7 +364,13 @@ export function ObjectivesView() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => { setSelectedObjId(obj.id); setCreateKROpen(true) }}
+                      aria-label="Add key result"
+                      onClick={() => {
+                        setSelectedObjId(obj.id)
+                        setKeyResultError(null)
+                        setKeyResultFieldErrors({})
+                        setCreateKROpen(true)
+                      }}
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -281,7 +378,11 @@ export function ObjectivesView() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => setPendingDelete({ id: obj.id, title: obj.title })}
+                          aria-label="Delete objective"
+                      onClick={() => {
+                        setDeleteError(null)
+                        setPendingDelete({ id: obj.id, title: obj.title })
+                      }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -305,6 +406,18 @@ export function ObjectivesView() {
                                 {kr.currentValue}/{kr.targetValue} {kr.unit}
                               </span>
                             </div>
+                            {kr.issue ? (
+                              <button
+                                type="button"
+                                className="mt-2 flex items-center gap-1.5 rounded-sm text-xs text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                                onClick={() => router.push(`/work-items/${encodeURIComponent(kr.issue!.id)}`)}
+                              >
+                                <Link2 className="size-3" aria-hidden="true" />
+                                {kr.issue.key} · {kr.issue.title}
+                                {kr.issue.isOverdue ? <Badge variant="outline" className="ml-1 border-danger/20 bg-danger/10 text-danger">Overdue</Badge> : null}
+                                {kr.issue.blockers.length > 0 ? <Badge variant="outline" className="ml-1 border-warning/20 bg-warning/10 text-warning">Blocked by {kr.issue.blockers.map((blocker) => blocker.key).join(', ')}</Badge> : null}
+                              </button>
+                            ) : <p className="mt-2 text-xs text-muted-foreground">No delivery work linked</p>}
                           </div>
                           <Input
                             type="number"
@@ -314,7 +427,9 @@ export function ObjectivesView() {
                             max={kr.targetValue * 2}
                             onBlur={(e) => {
                               const val = Number.parseFloat(e.target.value)
-                              if (!Number.isNaN(val) && val !== kr.currentValue) {
+                              if (Number.isNaN(val) || val < 0) {
+                                setActionError('Key result progress must be zero or greater.')
+                              } else if (val !== kr.currentValue) {
                                 updateKRValue(kr.id, val)
                               }
                             }}
@@ -331,19 +446,49 @@ export function ObjectivesView() {
       )}
 
       {/* Create Objective Dialog */}
-      <Dialog open={createObjOpen} onOpenChange={setCreateObjOpen}>
+      <Dialog
+        open={createObjOpen}
+        onOpenChange={(open) => {
+          setCreateObjOpen(open)
+          if (!open) {
+            setObjectiveError(null)
+            setObjectiveTitleError(null)
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Objective</DialogTitle>
+            <DialogDescription>
+              Define the outcome this project should achieve.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {objectiveError ? (
+              <div data-testid="objective-create-error">
+                <InlineAlert tone="danger">{objectiveError}</InlineAlert>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Title</label>
+              <label htmlFor="objective-title" className="text-sm font-medium">Title</label>
               <Input
+                id="objective-title"
                 value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
+                onChange={(e) => {
+                  setNewTitle(e.target.value)
+                  setObjectiveTitleError(null)
+                  setObjectiveError(null)
+                }}
                 placeholder="What do you want to achieve?"
+                aria-invalid={Boolean(objectiveTitleError)}
+                aria-describedby={objectiveTitleError ? 'objective-title-error' : undefined}
+                data-testid="objective-title-input"
               />
+              {objectiveTitleError ? (
+                <p id="objective-title-error" className="text-xs text-destructive">
+                  {objectiveTitleError}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Description</label>
@@ -356,7 +501,7 @@ export function ObjectivesView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateObjOpen(false)}>Cancel</Button>
-            <Button onClick={createObjective} disabled={!newTitle.trim() || isSubmitting}>
+            <Button onClick={createObjective} disabled={isSubmitting} data-testid="objective-create-submit">
               {isSubmitting ? 'Creating…' : 'Create'}
             </Button>
           </DialogFooter>
@@ -364,19 +509,49 @@ export function ObjectivesView() {
       </Dialog>
 
       {/* Add Key Result Dialog */}
-      <Dialog open={createKROpen} onOpenChange={setCreateKROpen}>
+      <Dialog
+        open={createKROpen}
+        onOpenChange={(open) => {
+          setCreateKROpen(open)
+          if (!open) {
+            setKeyResultError(null)
+            setKeyResultFieldErrors({})
+            setNewKRIssueId('')
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add Key Result</DialogTitle>
+            <DialogDescription>
+              Add a measurable result that contributes to this objective.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {keyResultError ? (
+              <div data-testid="key-result-create-error">
+                <InlineAlert tone="danger">{keyResultError}</InlineAlert>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Title</label>
+              <label htmlFor="key-result-title" className="text-sm font-medium">Title</label>
               <Input
+                id="key-result-title"
                 value={newKRTitle}
-                onChange={(e) => setNewKRTitle(e.target.value)}
+                onChange={(e) => {
+                  setNewKRTitle(e.target.value)
+                  setKeyResultFieldErrors((previous) => ({ ...previous, title: undefined }))
+                  setKeyResultError(null)
+                }}
                 placeholder="Measurable outcome"
+                aria-invalid={Boolean(keyResultFieldErrors.title)}
+                aria-describedby={keyResultFieldErrors.title ? 'key-result-title-error' : undefined}
               />
+              {keyResultFieldErrors.title ? (
+                <p id="key-result-title-error" className="text-xs text-destructive">
+                  {keyResultFieldErrors.title}
+                </p>
+              ) : null}
             </div>
             <div className="flex gap-3">
               <div className="flex-1 space-y-1.5">
@@ -384,28 +559,65 @@ export function ObjectivesView() {
                 <Input
                   type="number"
                   value={newKRTarget}
-                  onChange={(e) => setNewKRTarget(Number(e.target.value))}
+                  onChange={(e) => {
+                    setNewKRTarget(Number(e.target.value))
+                    setKeyResultFieldErrors((previous) => ({ ...previous, target: undefined }))
+                    setKeyResultError(null)
+                  }}
+                  aria-invalid={Boolean(keyResultFieldErrors.target)}
                 />
+                {keyResultFieldErrors.target ? (
+                  <p className="text-xs text-destructive">{keyResultFieldErrors.target}</p>
+                ) : null}
               </div>
               <div className="w-24 space-y-1.5">
                 <label className="text-sm font-medium">Unit</label>
                 <Input
                   value={newKRUnit}
-                  onChange={(e) => setNewKRUnit(e.target.value)}
+                  onChange={(e) => {
+                    setNewKRUnit(e.target.value)
+                    setKeyResultFieldErrors((previous) => ({ ...previous, unit: undefined }))
+                    setKeyResultError(null)
+                  }}
+                  aria-invalid={Boolean(keyResultFieldErrors.unit)}
                 />
+                {keyResultFieldErrors.unit ? (
+                  <p className="text-xs text-destructive">{keyResultFieldErrors.unit}</p>
+                ) : null}
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="key-result-work-item" className="text-sm font-medium">Linked delivery work (optional)</label>
+              <select
+                id="key-result-work-item"
+                value={newKRIssueId}
+                onChange={(event) => setNewKRIssueId(event.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <option value="">No linked work item</option>
+                {issues.map((issue) => <option key={issue.id} value={issue.id}>{issue.key} · {issue.title}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Link the measurable result to the work that delivers it so risks remain traceable.</p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateKROpen(false)}>Cancel</Button>
-            <Button onClick={addKeyResult} disabled={!newKRTitle.trim() || isSubmitting}>
+            <Button onClick={addKeyResult} disabled={isSubmitting}>
               {isSubmitting ? 'Adding…' : 'Add'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete objective?</AlertDialogTitle>
@@ -415,9 +627,16 @@ export function ObjectivesView() {
                 : 'This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError ? <InlineAlert tone="danger">{deleteError}</InlineAlert> : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={deleteObjective} disabled={isSubmitting}>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void deleteObjective()
+              }}
+              disabled={isSubmitting}
+            >
               {isSubmitting ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>

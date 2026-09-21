@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -12,6 +11,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
@@ -31,6 +31,11 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { fetchWithRetry, getApiErrorMessage, parseJsonResponse } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,6 +75,7 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Form
   const [provider, setProvider] = useState<GitLink['provider']>('github')
@@ -105,7 +111,6 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load git links'
       setLoadError(message)
-      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -114,7 +119,19 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
   useEffect(() => { fetchLinks() }, [fetchLinks])
 
   const handleCreate = async () => {
-    if (!url) return
+    const trimmedUrl = url.trim()
+    if (!trimmedUrl) {
+      setActionError('Enter the URL of the branch, commit, or pull request.')
+      return
+    }
+    try {
+      const parsed = new URL(trimmedUrl)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error()
+    } catch {
+      setActionError('Enter a valid HTTP or HTTPS URL.')
+      return
+    }
+    setActionError(null)
     setSaving(true)
     try {
       const res = await fetch('/api/git-links', {
@@ -125,8 +142,8 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
           projectId,
           provider,
           linkType,
-          externalUrl: url,
-          externalId: ref || url,
+          externalUrl: trimmedUrl,
+          externalId: ref.trim() || trimmedUrl,
           title: title || undefined,
         }),
       })
@@ -139,13 +156,15 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
       setRef('')
       await fetchLinks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create git link')
+      setActionError(error instanceof Error ? error.message : 'Failed to create git link')
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const deleteConfirm = useDestructiveConfirm<GitLink>()
+
+  const handleDelete = async (id: string): Promise<string | void> => {
     try {
       const res = await fetch(`/api/git-links/${id}`, { method: 'DELETE' })
       if (!res.ok) {
@@ -154,7 +173,7 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
 
       await fetchLinks()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete git link')
+      return error instanceof Error ? error.message : 'Failed to delete git link'
     }
   }
 
@@ -200,7 +219,11 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
         </div>
       </div>
 
-      {loadError ? <p className="text-[11px] text-destructive">{loadError}</p> : null}
+      {loadError ? (
+        <InlineAlert tone="danger" title="Git links unavailable." action={<Button size="sm" variant="outline" onClick={() => void fetchLinks()}>Retry</Button>}>
+          {loadError}
+        </InlineAlert>
+      ) : null}
 
       {loading ? (
         <Skeleton className="h-8 w-full" />
@@ -239,7 +262,8 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 opacity-0 group-hover:opacity-100 text-destructive"
-                onClick={() => handleDelete(link.id)}
+                onClick={() => deleteConfirm.request(link)}
+                aria-label="Remove linked git resource"
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
@@ -252,7 +276,11 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Link Git Reference</DialogTitle>
+            <DialogDescription>
+              Add a branch, commit, or pull request URL to this work item.
+            </DialogDescription>
           </DialogHeader>
+          {actionError ? <InlineAlert tone="danger" title="Git link was not saved.">{actionError}</InlineAlert> : null}
           <div className="space-y-3 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -287,7 +315,7 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
               <Label>URL</Label>
               <Input
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => { setUrl(e.target.value); setActionError(null) }}
                 placeholder="https://github.com/org/repo/tree/feature-branch"
               />
             </div>
@@ -316,6 +344,21 @@ export function GitLinksPanel({ issueId, projectId }: GitLinksPanelProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title="Remove git link?"
+        description={
+          deleteConfirm.target
+            ? `This unlinks the ${deleteConfirm.target.linkType.replace('_', ' ')} "${deleteConfirm.target.title ?? deleteConfirm.target.externalUrl}" from this work item. The branch, commit or pull request itself is not affected.`
+            : ''
+        }
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (deleteConfirm.target) return handleDelete(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

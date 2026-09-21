@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAreaAccessScope } from '@/lib/domain/access-control'
 import { requireProjectPermission } from '@/lib/domain/auth'
+import { findCyclicNodeIds } from '@/lib/domain/dependency-cycle'
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,12 +58,14 @@ export async function GET(request: NextRequest) {
     const edges = relations.filter(
       (relation) => visibleIds.has(relation.sourceIssueId) && visibleIds.has(relation.targetIssueId)
     )
+    const cyclicNodeIds = [...findCyclicNodeIds(edges)]
 
     return NextResponse.json({
       nodes: issueId
         ? visibleIssues.filter((issue) => issue.id === issueId || edges.some((edge) => edge.sourceIssueId === issue.id || edge.targetIssueId === issue.id))
         : visibleIssues,
       edges,
+      cyclicNodeIds,
     })
   } catch (error) {
     console.error('Error fetching dependency graph:', error)

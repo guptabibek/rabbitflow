@@ -34,11 +34,43 @@ export async function GET(request: NextRequest) {
       include: {
         project: { select: { id: true, key: true, name: true, color: true } },
         assignee: { select: { id: true, name: true, avatar: true } },
+        area: { select: { id: true, name: true } },
+        iteration: {
+          select: {
+            id: true,
+            name: true,
+            iterationType: true,
+            team: { select: { id: true, name: true } },
+          },
+        },
+        linkedKeyResults: {
+          select: {
+            objective: { select: { id: true, title: true } },
+          },
+        },
         parentIssue: { select: { id: true, key: true, title: true, workItemType: true } },
         typeDefinition: { select: { key: true, name: true, hierarchyLevel: true, color: true } },
         sourceRelations: {
           where: { relationType: { in: ['blocks', 'blocked_by'] } },
-          select: { id: true, relationType: true, targetIssueId: true },
+          select: {
+            id: true,
+            relationType: true,
+            targetIssueId: true,
+            targetIssue: {
+              select: { id: true, key: true, title: true, status: true, startDate: true, dueDate: true },
+            },
+          },
+        },
+        targetRelations: {
+          where: { relationType: { in: ['blocks', 'blocked_by'] } },
+          select: {
+            id: true,
+            relationType: true,
+            sourceIssueId: true,
+            sourceIssue: {
+              select: { id: true, key: true, title: true, status: true, startDate: true, dueDate: true },
+            },
+          },
         },
       },
     })
@@ -62,9 +94,16 @@ export async function GET(request: NextRequest) {
         priority: issue.priority,
         workItemType: issue.workItemType,
         hierarchyLevel,
+        version: issue.version,
+        parentIssueId: issue.parentIssueId,
         startDate: start.toISOString(),
         endDate: end.toISOString(),
         assignee: issue.assignee,
+        area: issue.area,
+        iteration: issue.iteration,
+        objectives: Array.from(
+          new Map(issue.linkedKeyResults.map((entry) => [entry.objective.id, entry.objective])).values()
+        ),
         project: issue.project,
         epicGroupId: epicKey,
         epicGroupLabel:
@@ -73,11 +112,20 @@ export async function GET(request: NextRequest) {
             : issue.parentIssue
               ? `${issue.parentIssue.key} · ${issue.parentIssue.title}`
               : 'Unparented roadmap items',
-        dependencies: issue.sourceRelations.map((relation) => ({
-          id: relation.id,
-          relationType: relation.relationType,
-          targetIssueId: relation.targetIssueId,
-        })),
+        dependencies: [
+          ...issue.sourceRelations.map((relation) => ({
+            id: relation.id,
+            relationType: relation.relationType,
+            direction: 'outgoing',
+            linkedIssue: relation.targetIssue,
+          })),
+          ...issue.targetRelations.map((relation) => ({
+            id: relation.id,
+            relationType: relation.relationType,
+            direction: 'incoming',
+            linkedIssue: relation.sourceIssue,
+          })),
+        ],
       }
     })
 

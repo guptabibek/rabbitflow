@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
@@ -198,7 +199,7 @@ export async function PUT(
     })
 
     if (existing.iterationType === 'sprint' && existing.status !== 'Active' && iteration.status === 'Active') {
-      void dispatchWebhookEvent(existing.projectId, 'sprint.started', {
+      void queueWebhookEvent(existing.projectId, 'sprint.started', {
         iteration: {
           id: iteration.id,
           name: iteration.name,
@@ -210,7 +211,7 @@ export async function PUT(
     }
 
     if (existing.iterationType === 'sprint' && existing.status !== 'Closed' && iteration.status === 'Closed') {
-      void dispatchWebhookEvent(existing.projectId, 'sprint.completed', {
+      void queueWebhookEvent(existing.projectId, 'sprint.completed', {
         iteration: {
           id: iteration.id,
           name: iteration.name,

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
+import { revokeAllUserSessions } from '@/lib/auth-session'
+import { invalidateUserMfaChallenges } from '@/lib/auth-otp'
+import { createSecurityAuditEvent } from '@/lib/security-audit'
 import { z } from 'zod'
 
 const updateUserSchema = z.object({
@@ -112,6 +115,18 @@ export async function PUT(
   }
 }
 
+/**
+ * Deactivate a user.
+ *
+ * This previously called `db.user.delete()`. Because `Issue.reporterId` cascaded
+ * from `User`, that deleted every work item the user had ever reported, along
+ * with those items' comments, attachments, activity and relations — an
+ * unrecoverable loss of project history triggered by ordinary offboarding.
+ *
+ * Deactivation is the correct operation for a system that keeps an audit trail:
+ * the account can no longer authenticate, every session is revoked, and the
+ * history they authored stays intact and attributable.
+ */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
@@ -125,13 +140,49 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await db.user.delete({
+    if (auth.user.id === id) {
+      return NextResponse.json(
+        { error: 'You cannot deactivate your own account.', code: 'CANNOT_DEACTIVATE_SELF' },
+        { status: 400 }
+      )
+    }
+
+    const target = await db.user.findUnique({
       where: { id },
+      select: { id: true, isActive: true },
     })
 
-    return NextResponse.json({ success: true })
+    if (!target) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    await db.user.update({
+      where: { id },
+      data: {
+        isActive: false,
+        deactivatedAt: new Date(),
+        // Clear MFA enrolment so a future reactivation re-enrols cleanly.
+        mfaReenrollRequired: true,
+      },
+    })
+
+    const revoked = await revokeAllUserSessions(id, 'USER_DEACTIVATED')
+    await invalidateUserMfaChallenges(id)
+
+    await createSecurityAuditEvent({
+      actorUserId: auth.user.id,
+      targetUserId: id,
+      action: 'USER_DEACTIVATED',
+      details: { revokedSessions: revoked.count, viaEndpoint: 'DELETE /api/users/[userId]' },
+    })
+
+    return NextResponse.json({
+      success: true,
+      deactivated: true,
+      revokedSessions: revoked.count,
+    })
   } catch (error) {
-    console.error('Error deleting user:', error)
-    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
+    console.error('Error deactivating user:', error)
+    return NextResponse.json({ error: 'Failed to deactivate user' }, { status: 500 })
   }
 }

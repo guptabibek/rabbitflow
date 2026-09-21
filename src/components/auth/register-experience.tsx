@@ -4,11 +4,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { AuthShell } from '@/components/auth/auth-shell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InlineAlert } from '@/components/ui/states'
 import { type ResolvedProjectBranding } from '@/lib/domain/project-branding'
 
 function toErrorMessage(value: unknown, fallback: string): string {
@@ -32,17 +32,20 @@ function toErrorMessage(value: unknown, fallback: string): string {
 
 type RegisterExperienceProps = {
   branding: ResolvedProjectBranding
+  registrationEnabled: boolean
 }
 
-export function RegisterExperience({ branding }: RegisterExperienceProps) {
+export function RegisterExperience({ branding, registrationEnabled }: RegisterExperienceProps) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault()
+    setFormError(null)
     setIsLoading(true)
     try {
       const response = await fetch('/api/auth/register', {
@@ -54,14 +57,14 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
       const payload = await response.json()
 
       if (!response.ok) {
-        toast.error(toErrorMessage(payload?.error, 'Registration failed'))
+        setFormError(toErrorMessage(payload?.error, 'Registration failed'))
         return
       }
 
       router.push('/dashboard')
       router.refresh()
     } catch {
-      toast.error('Network error. Please try again.')
+      setFormError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -70,8 +73,16 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
   return (
     <AuthShell
       branding={branding}
-      title={`Create your ${branding.displayName} account`}
-      description="Set up your identity once and continue into the workspace immediately after registration."
+      title={
+        registrationEnabled
+          ? `Create your ${branding.displayName} account`
+          : 'Account registration is managed by your administrator'
+      }
+      description={
+        registrationEnabled
+          ? 'Set up your identity once and continue into the workspace immediately after registration.'
+          : `Ask your ${branding.displayName} administrator to create an account for you.`
+      }
       footer={
         <div className="text-center">
           <span className="text-muted-foreground">Already have an account? </span>
@@ -81,7 +92,9 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
         </div>
       }
     >
+      {registrationEnabled ? (
       <form onSubmit={handleRegister} className="space-y-5" data-testid="register-form">
+        {formError ? <InlineAlert tone="danger" title="Account was not created.">{formError}</InlineAlert> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">Full Name</Label>
@@ -89,7 +102,7 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
               id="name"
               placeholder="John Doe"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); setFormError(null) }}
               required
               autoFocus
               autoComplete="name"
@@ -103,7 +116,7 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => { setEmail(event.target.value); setFormError(null) }}
               required
               autoComplete="email"
               data-testid="register-email-input"
@@ -117,18 +130,22 @@ export function RegisterExperience({ branding }: RegisterExperienceProps) {
             type="password"
             placeholder="Minimum 8 characters"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => { setPassword(event.target.value); setFormError(null) }}
             required
             minLength={8}
             autoComplete="new-password"
             data-testid="register-password-input"
           />
         </div>
-        <Button type="submit" className="w-full" disabled={isLoading} data-testid="register-submit-button">
-          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        <Button type="submit" className="w-full" loading={isLoading} data-testid="register-submit-button">
           Create Account
         </Button>
       </form>
+      ) : (
+        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground" data-testid="registration-disabled-message">
+          Self-service registration is unavailable. Contact your administrator for access.
+        </div>
+      )}
     </AuthShell>
   )
 }

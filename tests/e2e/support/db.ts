@@ -42,8 +42,15 @@ type CreateIssueInput = {
   assigneeEmail?: string
   title?: string
   description?: string
+  workItemType?: string
   status?: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled'
   priority?: 'lowest' | 'low' | 'medium' | 'high' | 'highest'
+  stateId?: string
+  iterationId?: string | null
+  storyPoints?: number | null
+  estimatedHours?: number | null
+  startDate?: Date | null
+  dueDate?: Date | null
 }
 
 type CreateNotificationInput = {
@@ -55,6 +62,14 @@ type CreateNotificationInput = {
   entityType?: string | null
   entityId?: string | null
   actorEmail?: string | null
+}
+
+type CreateRetrospectiveInput = {
+  projectId: string
+  iterationId?: string | null
+  title?: string
+  actionItem?: string
+  authorEmail?: string
 }
 
 export async function ensureUserAccount({
@@ -232,7 +247,16 @@ export async function createLabelFixture(projectId: string, name = makeProjectNa
   })
 }
 
-export async function createSprintFixture(projectId: string, teamId?: string | null) {
+export async function createSprintFixture(
+  projectId: string,
+  teamId?: string | null,
+  overrides: {
+    goal?: string | null
+    status?: string
+    startDate?: Date | null
+    endDate?: Date | null
+  } = {}
+) {
   const name = makeProjectName('sprint')
   return db.iteration.create({
     data: {
@@ -241,7 +265,10 @@ export async function createSprintFixture(projectId: string, teamId?: string | n
       name,
       path: name,
       iterationType: 'sprint',
-      status: 'Planned',
+      status: overrides.status ?? 'Planned',
+      goal: overrides.goal ?? null,
+      startDate: overrides.startDate ?? null,
+      endDate: overrides.endDate ?? null,
     },
   })
 }
@@ -252,8 +279,15 @@ export async function createIssueFixture({
   assigneeEmail,
   title = makeIssueTitle('issue'),
   description = `${E2E_PREFIX}: seeded issue`,
+  workItemType = 'task',
   status = 'todo',
   priority = 'medium',
+  stateId,
+  iterationId,
+  storyPoints,
+  estimatedHours,
+  startDate,
+  dueDate,
 }: CreateIssueInput) {
   const [project, reporter, assignee, state, existingCount] = await Promise.all([
     db.project.findUniqueOrThrow({ where: { id: projectId }, select: { id: true, key: true } }),
@@ -262,7 +296,7 @@ export async function createIssueFixture({
       ? db.user.findUnique({ where: { email: assigneeEmail }, select: { id: true } })
       : Promise.resolve(null),
     db.state.findFirst({
-      where: { projectId, category: status },
+      where: stateId ? { id: stateId, projectId } : { projectId, category: status },
       orderBy: { order: 'asc' },
       select: { id: true },
     }),
@@ -277,14 +311,110 @@ export async function createIssueFixture({
       key: `${project.key}-${issueNumber}`,
       title,
       description,
-      workItemType: 'task',
+      workItemType,
       status,
       priority,
       reporterId: reporter.id,
       assigneeId: assignee?.id ?? null,
       stateId: state?.id ?? null,
+      iterationId: iterationId ?? null,
+      storyPoints: storyPoints ?? null,
+      estimatedHours: estimatedHours ?? null,
+      startDate: startDate ?? null,
+      dueDate: dueDate ?? null,
       columnOrder: issueNumber * 10,
     },
+  })
+}
+
+export async function createObjectiveFixture({
+  projectId,
+  issueId,
+  title = makeProjectName('objective'),
+  currentValue = 25,
+  targetValue = 100,
+}: {
+  projectId: string
+  issueId?: string | null
+  title?: string
+  currentValue?: number
+  targetValue?: number
+}) {
+  const owner = await db.user.findUniqueOrThrow({
+    where: { email: TEST_ACCOUNTS.admin.email },
+    select: { id: true },
+  })
+  return db.objective.create({
+    data: {
+      projectId,
+      ownerId: owner.id,
+      title,
+      status: 'on_track',
+      keyResults: {
+        create: {
+          title: `${title} result`,
+          currentValue,
+          targetValue,
+          unit: '%',
+          issueId: issueId ?? null,
+        },
+      },
+    },
+    include: { keyResults: true },
+  })
+}
+
+export async function getIssueFixture(issueId: string) {
+  return db.issue.findUnique({ where: { id: issueId } })
+}
+
+export async function createRetrospectiveFixture({
+  projectId,
+  iterationId = null,
+  title = makeProjectName('retrospective'),
+  actionItem = `${E2E_PREFIX}: retrospective follow-up`,
+  authorEmail = TEST_ACCOUNTS.admin.email,
+}: CreateRetrospectiveInput) {
+  const author = await db.user.findUniqueOrThrow({
+    where: { email: authorEmail },
+    select: { id: true },
+  })
+
+  return db.retrospective.create({
+    data: {
+      projectId,
+      iterationId,
+      title,
+      facilitatorId: author.id,
+      items: {
+        create: {
+          category: 'action_item',
+          content: actionItem,
+          authorId: author.id,
+        },
+      },
+    },
+    include: { items: true },
+  })
+}
+
+export async function createIssueRelationFixture(
+  sourceIssueId: string,
+  targetIssueId: string,
+  relationType: 'blocked_by' | 'blocks' | 'related' = 'blocked_by'
+) {
+  return db.issueRelation.create({ data: { sourceIssueId, targetIssueId, relationType } })
+}
+
+export async function ageIssueFixture(issueId: string, days: number) {
+  const updatedAt = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  return db.issue.update({ where: { id: issueId }, data: { updatedAt } })
+}
+
+export async function getRetroActionItem(itemId: string) {
+  return db.retroItem.findUnique({
+    where: { id: itemId },
+    include: { actionItemIssue: { include: { assignee: true } } },
   })
 }
 
@@ -368,4 +498,97 @@ export async function getNotificationByTitle(email: string, title: string) {
       title,
     },
   })
+}
+
+export async function getTypeWorkflow(projectId: string, workItemType: string) {
+  return db.workItemTypeDefinition.findUniqueOrThrow({
+    where: {
+      projectId_key: {
+        projectId,
+        key: workItemType,
+      },
+    },
+    include: {
+      stateMappings: {
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        include: { state: true },
+      },
+      stateTransitions: {
+        where: { isEnabled: true },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      },
+    },
+  })
+}
+/**
+ * A state the issue can legally move to in one step.
+ *
+ * The workflow is a real state machine: `New → Development in Progress → …`,
+ * and `PUT /api/issues/:id` rejects anything else with "Invalid workflow
+ * transition". Tests that want to prove a state change saves should ask for a
+ * reachable target rather than jumping to Done, which is several hops away and
+ * fails for reasons that have nothing to do with what they are testing.
+ *
+ * Falls back to any other state mapped to the type when a project has no
+ * explicit transitions, which is the same "allow anything mapped" rule the
+ * server applies in that case.
+ */
+export async function getAllowedNextState(issueId: string) {
+  const issue = await db.issue.findUniqueOrThrow({
+    where: { id: issueId },
+    select: { projectId: true, stateId: true, workItemType: true },
+  })
+
+  const type = await db.workItemTypeDefinition.findFirst({
+    where: { projectId: issue.projectId, key: issue.workItemType },
+    select: { id: true },
+  })
+
+  if (!type || !issue.stateId) return null
+
+  const transition = await db.stateTransition.findFirst({
+    where: {
+      projectId: issue.projectId,
+      workItemTypeId: type.id,
+      fromStateId: issue.stateId,
+      isEnabled: true,
+    },
+    orderBy: { order: 'asc' },
+    select: { toState: true },
+  })
+
+  if (transition) return transition.toState
+
+  const mapping = await db.workItemTypeStateMapping.findFirst({
+    where: { workItemTypeId: type.id, stateId: { not: issue.stateId } },
+    select: { state: true },
+  })
+
+  return mapping?.state ?? null
+}
+
+/**
+ * Put an issue into the project's Done state directly.
+ *
+ * The workflow is a state machine, so reaching Done from New takes six legal
+ * hops. Where "a completed work item exists" is a *precondition* rather than
+ * the thing under test — the onboarding checklist, for instance — driving all
+ * six through the UI adds minutes and failure surface without testing more.
+ * The transition rules themselves are covered by the API tests.
+ */
+export async function completeIssue(issueId: string) {
+  const issue = await db.issue.findUniqueOrThrow({
+    where: { id: issueId },
+    select: { projectId: true },
+  })
+
+  const done = await getDoneState(issue.projectId)
+  if (!done) throw new Error(`Project ${issue.projectId} has no Done state`)
+
+  await db.issue.update({
+    where: { id: issueId },
+    data: { stateId: done.id, status: 'done', completedDate: new Date() },
+  })
+
+  return done
 }

@@ -32,7 +32,10 @@ export async function getProjectPermissionRules(
 }
 
 export async function invalidateProjectPermissionRuleCache(projectId: string) {
-  await cacheInvalidate(`acl-rules:${projectId}`)
+  await cacheInvalidate(
+    `acl-rules:${projectId}`,
+    `project:${projectId}:bootstrap:*`
+  )
 }
 
 function toPermissionRules(rules: ProjectPermissionRuleRecord[]): PermissionRuleInput[] {
@@ -161,6 +164,16 @@ export function applyAreaScopeFilter<T extends Record<string, unknown>>(
   }
   if (scope.allowUnassigned) {
     orClauses.push({ areaId: null })
+  }
+
+  if (orClauses.length === 0) {
+    return {
+      ...where,
+      AND: [
+        ...(((where.AND as Array<Record<string, unknown>> | undefined) ?? [])),
+        { id: { in: [] } },
+      ],
+    }
   }
 
   return {

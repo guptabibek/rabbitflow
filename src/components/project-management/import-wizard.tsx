@@ -15,6 +15,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
   DialogFooter,
@@ -34,7 +35,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { InlineAlert } from '@/components/ui/states'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,21 +84,24 @@ export function ImportWizard() {
   const [loading, setLoading] = useState(false)
   const [jobs, setJobs] = useState<ImportJob[]>([])
   const [jobsLoaded, setJobsLoaded] = useState(false)
+  const [jobsError, setJobsError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const fetchJobs = useCallback(async () => {
     if (!currentProject) return
+    setJobsError(null)
     try {
       const res = await fetch(`/api/import?projectId=${currentProject.id}`)
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to load import history'))
-        setJobs([])
+        setJobsError(await getApiErrorMessage(res, 'Failed to load import history'))
         return
       }
 
       const data = await res.json()
       setJobs(Array.isArray(data) ? data : (data.jobs ?? []))
+      setJobsError(null)
     } catch {
-      toast.error('Failed to load import history')
+      setJobsError('Failed to load import history')
     }
     finally {
       setJobsLoaded(true)
@@ -108,17 +112,19 @@ export function ImportWizard() {
     const f = e.target.files?.[0]
     if (f && (f.name.endsWith('.csv') || f.type === 'text/csv')) {
       setFile(f)
+      setActionError(null)
       return
     }
 
     if (f) {
       setFile(null)
-      toast.error('Only CSV files can be imported')
+      setActionError('Only CSV files can be imported.')
     }
   }
 
   const handleValidate = async () => {
     if (!currentProject || !file) return
+    setActionError(null)
     setLoading(true)
     try {
       const text = await file.text()
@@ -139,7 +145,8 @@ export function ImportWizard() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast.error(await getApiErrorMessage(res, 'Validation failed'))
+        const message = await getApiErrorMessage(res, 'Validation failed')
+        setActionError(message)
         setValidationErrors(data.details ?? data.errors ?? [{ row: 0, field: '', message: data.error }])
         setValidationSummary(null)
         setStep('validate')
@@ -150,7 +157,7 @@ export function ImportWizard() {
           setValidationErrors([{ row: 0, field: 'jobId', message }])
           setValidationSummary(null)
           setStep('validate')
-          toast.error(message)
+          setActionError(message)
           return
         }
 
@@ -162,8 +169,8 @@ export function ImportWizard() {
         })
         setStep('validate')
       }
-    } catch {
-      toast.error('Failed to validate CSV')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to validate CSV')
     } finally {
       setLoading(false)
     }
@@ -171,10 +178,11 @@ export function ImportWizard() {
 
   const handleStartImport = async () => {
     if (!validationSummary?.jobId) {
-      toast.error('Validate the file before starting the import')
+      setActionError('Validate the file before starting the import.')
       return
     }
 
+    setActionError(null)
     setLoading(true)
     try {
       const res = await fetch('/api/import', {
@@ -187,22 +195,22 @@ export function ImportWizard() {
       })
 
       if (!res.ok) {
-        toast.error(await getApiErrorMessage(res, 'Failed to start import'))
+        setActionError(await getApiErrorMessage(res, 'Failed to start import'))
         return
       }
 
       const data = await res.json()
       const startedJobId = data.job?.id ?? data.id
       if (!startedJobId) {
-        toast.error('Import started, but the job ID was missing from the response')
+        setActionError('Import started, but the job ID was missing from the response.')
         return
       }
 
       setImportJob(data.job ?? data)
       setStep('importing')
       void pollJob(startedJobId)
-    } catch {
-      toast.error('Failed to start import')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to start import')
     } finally {
       setLoading(false)
     }
@@ -213,7 +221,7 @@ export function ImportWizard() {
     const maxAttempts = 60
     const poll = async () => {
       if (attempts >= maxAttempts) {
-        toast.error('Import status check timed out. Refresh import history to continue tracking progress.')
+        setActionError('Import status check timed out. Refresh import history to continue tracking progress.')
         void fetchJobs()
         return
       }
@@ -224,7 +232,7 @@ export function ImportWizard() {
 
         if (!res.ok) {
           if (res.status >= 400 && res.status < 500) {
-            toast.error(await getApiErrorMessage(res, 'Import job is no longer available'))
+            setActionError(await getApiErrorMessage(res, 'Import job is no longer available'))
             setStep('done')
             void fetchJobs()
             return
@@ -260,6 +268,7 @@ export function ImportWizard() {
     setValidationErrors([])
     setValidationSummary(null)
     setImportJob(null)
+    setActionError(null)
   }
 
   const handleOpen = (open: boolean) => {
@@ -281,14 +290,14 @@ export function ImportWizard() {
   const statusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'failed':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       case 'processing':
       case 'validating':
-        return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+        return <Loader2 className="h-3.5 w-3.5 animate-spin text-info" />
       default:
-        return <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+        return <AlertTriangle className="h-3.5 w-3.5 text-warning" />
     }
   }
 
@@ -316,7 +325,16 @@ export function ImportWizard() {
                 {step === 'importing' && 'Importing…'}
                 {step === 'done' && 'Import Complete'}
               </DialogTitle>
+              <DialogDescription>
+                Validate the file before importing it. Your selections remain available if a request fails.
+              </DialogDescription>
             </DialogHeader>
+
+            {actionError ? (
+              <InlineAlert tone="danger" title="Import could not continue.">
+                {actionError}
+              </InlineAlert>
+            ) : null}
 
             {step === 'upload' && (
               <div className="space-y-4 py-2">
@@ -367,7 +385,7 @@ export function ImportWizard() {
               <div className="space-y-3 py-2">
                 {validationErrors.length === 0 ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 rounded-md bg-green-500/10 p-3 text-sm text-green-600">
+                    <div className="flex items-center gap-2 rounded-md bg-success/10 p-3 text-sm text-success">
                       <CheckCircle2 className="h-4 w-4" />
                       Validation passed. Ready to import.
                     </div>
@@ -380,7 +398,7 @@ export function ImportWizard() {
                       <ScrollArea className="max-h-32">
                         <div className="space-y-1">
                           {validationSummary.warnings.slice(0, 10).map((warning, index) => (
-                            <div key={`${warning.row}-${warning.field}-${index}`} className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-700">
+                            <div key={`${warning.row}-${warning.field}-${index}`} className="rounded bg-warning/10 px-2 py-1 text-xs text-warning">
                               <span className="font-medium">Row {warning.row}</span>{' '}
                               {warning.field && <span>[{warning.field}]</span>}{' '}
                               {warning.message}
@@ -392,7 +410,7 @@ export function ImportWizard() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2 rounded-md bg-red-500/10 p-3 text-sm text-red-600">
+                    <div className="flex items-center gap-2 rounded-md bg-danger/10 p-3 text-sm text-danger">
                       <AlertTriangle className="h-4 w-4" />
                       {validationErrors.length} validation error(s)
                     </div>
@@ -441,8 +459,8 @@ export function ImportWizard() {
                 <div
                   className={`flex items-center gap-2 rounded-md p-3 text-sm ${
                     importJob.status === 'completed'
-                      ? 'bg-green-500/10 text-green-600'
-                      : 'bg-red-500/10 text-red-600'
+                      ? 'bg-success/10 text-success'
+                      : 'bg-danger/10 text-danger'
                   }`}
                 >
                   {importJob.status === 'completed' ? (
@@ -497,6 +515,15 @@ export function ImportWizard() {
       </div>
 
       {/* Past import jobs */}
+      {jobsError ? (
+        <InlineAlert
+          tone="danger"
+          title="Import history unavailable."
+          action={<Button size="sm" variant="outline" onClick={() => void fetchJobs()}>Retry</Button>}
+        >
+          {jobsError}
+        </InlineAlert>
+      ) : null}
       {jobsLoaded && jobs.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-muted-foreground">Import History</h3>
@@ -509,7 +536,7 @@ export function ImportWizard() {
                   <p className="text-xs text-muted-foreground">
                     {j.processedRows}/{j.totalRows} rows ·{' '}
                     {j.failedRows > 0 && (
-                      <span className="text-red-500">{j.failedRows} failed · </span>
+                      <span className="text-danger">{j.failedRows} failed · </span>
                     )}
                     {new Date(j.createdAt).toLocaleDateString()}
                   </p>
@@ -526,7 +553,7 @@ export function ImportWizard() {
         </div>
       )}
 
-      {jobsLoaded && jobs.length === 0 && (
+      {jobsLoaded && !jobsError && jobs.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <FileSpreadsheet className="mb-3 h-10 w-10 opacity-50" />

@@ -38,7 +38,9 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--foreground)_40%,transparent)]",
+        "data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
         className
       )}
       {...props}
@@ -46,13 +48,31 @@ function DialogOverlay({
   )
 }
 
+/**
+ * Dialog width is a decision about the task, not a style choice, so it is a
+ * named prop rather than a max-w class every caller re-invents:
+ *
+ *   sm   a confirmation, a rename — one question
+ *   md   a short form
+ *   lg   a form with sections
+ *   xl   a workspace — an editor, a wizard step, a picker with a preview
+ */
+const dialogSize = {
+  sm: "sm:max-w-sm",
+  md: "sm:max-w-lg",
+  lg: "sm:max-w-2xl",
+  xl: "sm:max-w-4xl",
+} as const
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "md",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  size?: keyof typeof dialogSize
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -60,7 +80,18 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-1.5rem)] -translate-x-1/2 -translate-y-1/2 flex-col",
+          "max-h-[min(44rem,calc(100dvh-3rem))] overflow-y-auto overscroll-contain",
+          "rounded-xl border border-border bg-popover text-popover-foreground shadow-xl",
+          dialogSize[size],
+          // The body scrolls while the header and footer stay put, so the
+          // title you are working under and the button you are working toward
+          // are both always on screen. Sticky rather than a fixed three-row
+          // grid, so content written against the old `p-6` primitive still
+          // flows — globals.css gives unwrapped children the dialog gutter.
+          "duration-150 ease-out",
+          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className
         )}
         {...props}
@@ -69,7 +100,12 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className={cn(
+              "absolute top-3 right-3 z-20 inline-flex size-7 items-center justify-center rounded-md",
+              "text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+              "outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              "disabled:pointer-events-none [&_svg]:size-4"
+            )}
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -84,7 +120,22 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn(
+        "sticky top-0 z-10 flex shrink-0 flex-col gap-1 border-b border-border",
+        "bg-popover px-5 py-3.5 pr-12 text-left",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/** Explicit scrolling middle. Optional — loose children are padded too. */
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn("min-h-0 flex-1", className)}
       {...props}
     />
   )
@@ -95,7 +146,10 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        // Reversed on mobile so the primary action sits under the thumb.
+        "sticky bottom-0 z-10 mt-auto flex shrink-0 flex-col-reverse gap-2",
+        "border-t border-border bg-surface-sunken px-5 py-3",
+        "sm:flex-row sm:items-center sm:justify-end",
         className
       )}
       {...props}
@@ -110,7 +164,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("type-title", className)}
       {...props}
     />
   )
@@ -123,7 +177,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("type-meta", className)}
       {...props}
     />
   )
@@ -131,6 +185,7 @@ function DialogDescription({
 
 export {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,

@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
-import crypto from 'crypto'
+import { API_TOKEN_SCOPES, generateApiToken } from '@/lib/domain/api-token'
 
 const createTokenSchema = z.object({
   name: z.string().trim().min(1).max(200),
-  scopes: z.array(z.string().trim().min(1)).min(1),
+  // Scopes were previously `z.array(z.string())` — arbitrary strings, validated
+  // against nothing and enforced nowhere. They now map to real capabilities:
+  // `read` permits safe methods, `write` permits mutations.
+  scopes: z.array(z.enum(API_TOKEN_SCOPES)).min(1),
   expiresInDays: z.number().int().min(1).max(365).optional(),
 })
 
@@ -62,13 +65,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Maximum 20 API tokens per user' }, { status: 400 })
     }
 
-    // Generate token: prefix_randomBytes
-    const prefix = `rf_${crypto.randomBytes(4).toString('hex')}`
-    const secret = crypto.randomBytes(32).toString('hex')
-    const fullToken = `${prefix}_${secret}`
-
-    // Hash the secret for storage
-    const hashedToken = crypto.createHash('sha256').update(fullToken).digest('hex')
+    // Generation and hashing live in the domain module so the format stays in
+    // lockstep with the verification path in authenticateApiToken().
+    const { token: fullToken, prefix, tokenHash: hashedToken } = generateApiToken()
 
     const expiresAt = data.expiresInDays
       ? new Date(Date.now() + data.expiresInDays * 24 * 60 * 60 * 1000)

@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuthenticatedUser } from '@/lib/domain/auth'
 import { globalSearch } from '@/lib/domain/search-service'
 import { withCache } from '@/lib/redis'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuthenticatedUser(request)
     if (!auth.ok) return auth.response
+
+    // Search runs several tsvector queries per call; throttle per user so a
+    // single client cannot saturate the database from the command palette.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.search, auth.user.id)
+    if (limited) return limited
 
     const { searchParams } = new URL(request.url)
     const q = searchParams.get('q')?.trim()

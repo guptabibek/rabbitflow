@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAndMarkBreachedTimers } from '@/lib/domain/sla-engine'
-
-const CRON_SECRET = process.env.CRON_SECRET
+import { purgeExpiredAuthChallenges } from '@/lib/auth-otp'
+import { getAuthorizedCronSecret } from '@/lib/cron-auth'
+import { applyRetentionPolicies } from '@/lib/domain/retention'
 
 /**
  * POST /api/cron
@@ -17,8 +18,8 @@ const CRON_SECRET = process.env.CRON_SECRET
  */
 export async function POST(request: NextRequest) {
   try {
-    const secret = request.headers.get('x-cron-secret')
-    if (!CRON_SECRET || secret !== CRON_SECRET) {
+    const cronSecret = getAuthorizedCronSecret(request)
+    if (!cronSecret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -33,12 +34,29 @@ export async function POST(request: NextRequest) {
       results.slaBreaches = { error: String(error) }
     }
 
-    // 2. Recurring task execution – call the existing endpoint
+    // 2. Purge expired auth challenges so the table does not grow without bound
+    try {
+      const purged = await purgeExpiredAuthChallenges()
+      results.authChallenges = { purged }
+    } catch (error) {
+      console.error('Auth challenge purge failed in cron:', error)
+      results.authChallenges = { error: String(error) }
+    }
+
+    // 3. Retention sweep so the append-only tables stay bounded
+    try {
+      results.retention = await applyRetentionPolicies()
+    } catch (error) {
+      console.error('Retention sweep failed in cron:', error)
+      results.retention = { error: String(error) }
+    }
+
+    // 4. Recurring task execution – call the existing endpoint
     try {
       const baseUrl = request.nextUrl.origin
       const response = await fetch(`${baseUrl}/api/recurring-tasks/execute`, {
         method: 'POST',
-        headers: { 'x-cron-secret': CRON_SECRET },
+        headers: { 'x-cron-secret': cronSecret },
       })
       results.recurringTasks = await response.json()
     } catch (error) {

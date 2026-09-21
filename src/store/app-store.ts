@@ -62,6 +62,21 @@ export type State = {
   _count?: { issues: number }
 }
 
+export type TypeStateMapping = {
+  workItemTypeId: string
+  stateId: string
+  order: number
+  isInitial: boolean
+}
+
+export type StateTransition = {
+  workItemTypeId: string
+  fromStateId: string
+  toStateId: string
+  order: number
+  isEnabled: boolean
+}
+
 export type WorkItemType = string
 
 export type WorkItemFieldDefinition = {
@@ -104,6 +119,89 @@ export type WorkItemTypeDefinition = {
   sections: WorkItemSectionDefinition[]
   fields: WorkItemFieldDefinition[]
   _count?: { issues: number }
+}
+
+export type WorkItemTemplate = {
+  id: string
+  name: string
+  workItemType: WorkItemType
+  description: string
+  priority: string
+  severity: string
+  storyPoints: string
+  estimatedHours: string
+  assigneeId: string
+  areaId: string
+  labelIds: string[]
+  customFields: Record<string, unknown>
+}
+
+export type CreateIssueDraft = {
+  id: string
+  title: string
+  description?: string
+  workItemType?: WorkItemType
+  iterationId?: string
+  assigneeId?: string
+  startDate?: string
+  dueDate?: string
+  retrospectiveActionItemId?: string
+}
+
+type WorkItemCreationPreferences = {
+  lastWorkItemTypeByProject: Record<string, WorkItemType>
+  workItemTemplatesByProject: Record<string, WorkItemTemplate[]>
+}
+
+const WORK_ITEM_CREATION_PREFERENCES_KEY = 'rabbitflow-work-item-creation-preferences'
+
+export function readWorkItemCreationPreferences(): WorkItemCreationPreferences {
+  const empty: WorkItemCreationPreferences = {
+    lastWorkItemTypeByProject: {},
+    workItemTemplatesByProject: {},
+  }
+  if (typeof window === 'undefined') return empty
+
+  try {
+    const raw = window.localStorage.getItem(WORK_ITEM_CREATION_PREFERENCES_KEY)
+    if (!raw) return empty
+    const parsed = JSON.parse(raw) as Partial<WorkItemCreationPreferences>
+    return {
+      lastWorkItemTypeByProject:
+        parsed.lastWorkItemTypeByProject && typeof parsed.lastWorkItemTypeByProject === 'object'
+          ? parsed.lastWorkItemTypeByProject
+          : {},
+      workItemTemplatesByProject:
+        parsed.workItemTemplatesByProject && typeof parsed.workItemTemplatesByProject === 'object'
+          ? Object.fromEntries(
+              Object.entries(parsed.workItemTemplatesByProject).map(([projectId, templates]) => [
+                projectId,
+                Array.isArray(templates)
+                  ? templates.filter(
+                      (template): template is WorkItemTemplate =>
+                        Boolean(template) &&
+                        typeof template === 'object' &&
+                        typeof (template as WorkItemTemplate).id === 'string' &&
+                        typeof (template as WorkItemTemplate).name === 'string'
+                    )
+                  : [],
+              ])
+            )
+          : {},
+    }
+  } catch {
+    return empty
+  }
+}
+
+function writeWorkItemCreationPreferences(preferences: WorkItemCreationPreferences) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(WORK_ITEM_CREATION_PREFERENCES_KEY, JSON.stringify(preferences))
+  } catch {
+    // Storage can be unavailable in hardened/private browser contexts. The
+    // in-memory preference still works for the current session.
+  }
 }
 
 export type Team = {
@@ -203,6 +301,12 @@ export type Issue = {
   }>
 }
 
+export type BoardViewPreferences = {
+  collapsedStatuses: Issue['status'][]
+  hideCompleted: boolean
+  wipLimits: Partial<Record<Issue['status'], number>>
+}
+
 export type Comment = {
   id: string
   content: string
@@ -269,7 +373,12 @@ interface AppState {
   setProjectAccess: (payload: { role: string | null; permissions: string[] }) => void
 
   issues: Issue[]
-  setIssues: (issues: Issue[]) => void
+  /** Work items the project actually has, which may exceed what is loaded. */
+  issueTotal: number
+  /** How many the client requested, so views can tell whether more exist. */
+  issuePageSize: number
+  setIssues: (issues: Issue[], meta?: { total?: number; pageSize?: number }) => void
+  appendIssues: (issues: Issue[]) => void
   addIssue: (issue: Issue) => void
   updateIssue: (id: string, data: Partial<Issue>) => void
   removeIssue: (id: string) => void
@@ -289,8 +398,20 @@ interface AppState {
   workItemTypes: WorkItemTypeDefinition[]
   setWorkItemTypes: (workItemTypes: WorkItemTypeDefinition[]) => void
 
+  lastWorkItemTypeByProject: Record<string, WorkItemType>
+  setLastWorkItemType: (projectId: string, workItemType: WorkItemType) => void
+  workItemTemplatesByProject: Record<string, WorkItemTemplate[]>
+  saveWorkItemTemplate: (projectId: string, template: WorkItemTemplate) => void
+  removeWorkItemTemplate: (projectId: string, templateId: string) => void
+
   states: State[]
   setStates: (states: State[]) => void
+
+  typeStateMappings: TypeStateMapping[]
+  setTypeStateMappings: (mappings: TypeStateMapping[]) => void
+
+  stateTransitions: StateTransition[]
+  setStateTransitions: (transitions: StateTransition[]) => void
 
   areas: Area[]
   setAreas: (areas: Area[]) => void
@@ -298,6 +419,12 @@ interface AppState {
   hierarchyExpandedByProject: Record<string, string[]>
   setHierarchyExpandedIds: (projectId: string, ids: string[]) => void
   toggleHierarchyExpanded: (projectId: string, id: string) => void
+
+  boardViewPreferencesByProject: Record<string, BoardViewPreferences>
+  setBoardViewPreferences: (
+    projectId: string,
+    preferences: Partial<BoardViewPreferences>
+  ) => void
 
   viewMode: 'board' | 'list'
   setViewMode: (mode: 'board' | 'list') => void
@@ -322,7 +449,7 @@ interface AppState {
     {
       selectedTeamId: string
       selectedSprintId: string | null
-      activeTab: 'overview' | 'board' | 'backlog' | 'capacity'
+      activeTab: 'overview' | 'daily' | 'review' | 'board' | 'backlog' | 'capacity'
       boardGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
       backlogGroupBy: 'none' | 'status' | 'assignee' | 'priority' | 'story'
     }
@@ -332,7 +459,7 @@ interface AppState {
     selection: {
       selectedTeamId?: string
       selectedSprintId?: string | null
-      activeTab?: 'overview' | 'board' | 'backlog' | 'capacity'
+      activeTab?: 'overview' | 'daily' | 'review' | 'board' | 'backlog' | 'capacity'
       boardGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
       backlogGroupBy?: 'none' | 'status' | 'assignee' | 'priority' | 'story'
     }
@@ -340,6 +467,8 @@ interface AppState {
 
   isCreateIssueOpen: boolean
   setCreateIssueOpen: (open: boolean) => void
+  createIssueDraft: CreateIssueDraft | null
+  setCreateIssueDraft: (draft: CreateIssueDraft | null) => void
   isSprintModalOpen: boolean
   setSprintModalOpen: (open: boolean) => void
 
@@ -390,7 +519,24 @@ export const useAppStore = create<AppState>()(
         set({ currentProjectRole: role, currentProjectPermissions: permissions }),
 
       issues: [],
-      setIssues: (issues) => set({ issues }),
+      issueTotal: 0,
+      issuePageSize: 200,
+      setIssues: (issues, meta) =>
+        set({
+          issues,
+          // Fall back to the loaded length when the caller has no total, so
+          // "showing X of Y" never claims more than it knows.
+          issueTotal: meta?.total ?? issues.length,
+          issuePageSize: meta?.pageSize ?? 200,
+        }),
+      appendIssues: (incoming) =>
+        set((state) => {
+          // De-duplicate: a concurrent create can arrive both from the
+          // mutation response and the next page.
+          const seen = new Set(state.issues.map((issue) => issue.id))
+          const added = incoming.filter((issue) => !seen.has(issue.id))
+          return { issues: [...state.issues, ...added] }
+        }),
       addIssue: (issue) => set((state) => ({ issues: [...state.issues, issue] })),
       updateIssue: (id, data) =>
         set((state) => ({
@@ -418,8 +564,72 @@ export const useAppStore = create<AppState>()(
       workItemTypes: [],
       setWorkItemTypes: (workItemTypes) => set({ workItemTypes }),
 
+      lastWorkItemTypeByProject: {},
+      setLastWorkItemType: (projectId, workItemType) =>
+        set((state) => {
+          const stored = readWorkItemCreationPreferences()
+          const lastWorkItemTypeByProject = {
+            ...stored.lastWorkItemTypeByProject,
+            ...state.lastWorkItemTypeByProject,
+            [projectId]: workItemType,
+          }
+          writeWorkItemCreationPreferences({
+            lastWorkItemTypeByProject,
+            workItemTemplatesByProject: stored.workItemTemplatesByProject,
+          })
+          return { lastWorkItemTypeByProject }
+        }),
+      workItemTemplatesByProject: {},
+      saveWorkItemTemplate: (projectId, template) =>
+        set((state) => {
+          const stored = readWorkItemCreationPreferences()
+          const existing = state.workItemTemplatesByProject[projectId]
+            ?? stored.workItemTemplatesByProject[projectId]
+            ?? []
+          const nextTemplates = existing.some((entry) => entry.id === template.id)
+            ? existing.map((entry) => (entry.id === template.id ? template : entry))
+            : [...existing, template]
+
+          const workItemTemplatesByProject = {
+            ...stored.workItemTemplatesByProject,
+            ...state.workItemTemplatesByProject,
+            [projectId]: nextTemplates,
+          }
+          writeWorkItemCreationPreferences({
+            lastWorkItemTypeByProject: stored.lastWorkItemTypeByProject,
+            workItemTemplatesByProject,
+          })
+
+          return {
+            workItemTemplatesByProject,
+          }
+        }),
+      removeWorkItemTemplate: (projectId, templateId) =>
+        set((state) => {
+          const stored = readWorkItemCreationPreferences()
+          const existing = state.workItemTemplatesByProject[projectId]
+            ?? stored.workItemTemplatesByProject[projectId]
+            ?? []
+          const workItemTemplatesByProject = {
+            ...stored.workItemTemplatesByProject,
+            ...state.workItemTemplatesByProject,
+            [projectId]: existing.filter((template) => template.id !== templateId),
+          }
+          writeWorkItemCreationPreferences({
+            lastWorkItemTypeByProject: stored.lastWorkItemTypeByProject,
+            workItemTemplatesByProject,
+          })
+          return { workItemTemplatesByProject }
+        }),
+
       states: [],
       setStates: (states) => set({ states }),
+
+      typeStateMappings: [],
+      setTypeStateMappings: (typeStateMappings) => set({ typeStateMappings }),
+
+      stateTransitions: [],
+      setStateTransitions: (stateTransitions) => set({ stateTransitions }),
 
       areas: [],
       setAreas: (areas) => set({ areas }),
@@ -445,6 +655,27 @@ export const useAppStore = create<AppState>()(
             hierarchyExpandedByProject: {
               ...state.hierarchyExpandedByProject,
               [projectId]: Array.from(current),
+            },
+          }
+        }),
+
+      boardViewPreferencesByProject: {},
+      setBoardViewPreferences: (projectId, preferences) =>
+        set((state) => {
+          const current = state.boardViewPreferencesByProject[projectId] ?? {
+            collapsedStatuses: [],
+            hideCompleted: false,
+            wipLimits: {},
+          }
+
+          return {
+            boardViewPreferencesByProject: {
+              ...state.boardViewPreferencesByProject,
+              [projectId]: {
+                ...current,
+                ...preferences,
+                wipLimits: preferences.wipLimits ?? current.wipLimits,
+              },
             },
           }
         }),
@@ -510,6 +741,8 @@ export const useAppStore = create<AppState>()(
 
       isCreateIssueOpen: false,
       setCreateIssueOpen: (open) => set({ isCreateIssueOpen: open }),
+      createIssueDraft: null,
+      setCreateIssueDraft: (draft) => set({ createIssueDraft: draft }),
       isSprintModalOpen: false,
       setSprintModalOpen: (open) => set({ isSprintModalOpen: open }),
 
@@ -530,13 +763,17 @@ export const useAppStore = create<AppState>()(
           currentProjectRole: null,
           currentProjectPermissions: [],
           issues: [],
+          issueTotal: 0,
           users: [],
           labels: [],
           iterations: [],
           teams: [],
           workItemTypes: [],
           states: [],
+          typeStateMappings: [],
+          stateTransitions: [],
           areas: [],
+          createIssueDraft: null,
           filters: {
             assigneeId: null,
             priority: null,
@@ -555,6 +792,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
         hierarchyExpandedByProject: state.hierarchyExpandedByProject,
+        boardViewPreferencesByProject: state.boardViewPreferencesByProject,
         sprintViewSelectionByProject: state.sprintViewSelectionByProject,
       }),
     }

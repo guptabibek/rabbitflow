@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -34,6 +35,7 @@ import {
   ThumbsDown,
 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
 
 const MAX_REQUIRED_APPROVALS = 20
 const MAX_APPROVAL_REASON_LENGTH = 2000
@@ -120,6 +122,8 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
   const [requestOpen, setRequestOpen] = useState(false)
   const [decisionOpen, setDecisionOpen] = useState<ApprovalRequest | null>(null)
   const [saving, setSaving] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
 
   const [requiredCount, setRequiredCount] = useState('1')
   const [selectedTransitionId, setSelectedTransitionId] = useState<string>('none')
@@ -186,20 +190,21 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
   useEffect(() => { fetchApprovals() }, [fetchApprovals])
 
   const handleRequest = async () => {
+    setRequestError(null)
     const parsedRequiredCount = Number.parseInt(requiredCount, 10)
 
     if (!Number.isInteger(parsedRequiredCount) || parsedRequiredCount < 1 || parsedRequiredCount > MAX_REQUIRED_APPROVALS) {
-      toast.error(`Required approvals must be between 1 and ${MAX_REQUIRED_APPROVALS}.`)
+      setRequestError(`Required approvals must be between 1 and ${MAX_REQUIRED_APPROVALS}.`)
       return
     }
 
     if (requestReason.trim().length > MAX_APPROVAL_REASON_LENGTH) {
-      toast.error(`Approval reason cannot exceed ${MAX_APPROVAL_REASON_LENGTH} characters.`)
+      setRequestError(`Approval reason cannot exceed ${MAX_APPROVAL_REASON_LENGTH} characters.`)
       return
     }
 
     if (selectedApproverIds.length > MAX_ASSIGNED_APPROVERS) {
-      toast.error(`You can assign up to ${MAX_ASSIGNED_APPROVERS} approvers.`)
+      setRequestError(`You can assign up to ${MAX_ASSIGNED_APPROVERS} approvers.`)
       return
     }
 
@@ -227,7 +232,7 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
       await fetchApprovals()
       toast.success('Approval requested')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to request approval')
+      setRequestError(error instanceof Error ? error.message : 'Failed to request approval')
     } finally {
       setSaving(false)
     }
@@ -235,6 +240,7 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
 
   const handleDecision = async () => {
     if (!decisionOpen) return
+    setDecisionError(null)
     setSaving(true)
     try {
       const res = await fetch(`/api/approvals/${decisionOpen.id}`, {
@@ -254,7 +260,7 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
       await fetchApprovals()
       toast.success(decision === 'approved' ? 'Approval recorded' : 'Rejection recorded')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to submit approval decision')
+      setDecisionError(error instanceof Error ? error.message : 'Failed to submit approval decision')
     } finally {
       setSaving(false)
     }
@@ -263,11 +269,11 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
   const statusIcon = (status: string) => {
     switch (status) {
       case 'approved':
-        return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+        return <CheckCircle2 className="h-3.5 w-3.5 text-success" />
       case 'rejected':
-        return <XCircle className="h-3.5 w-3.5 text-red-500" />
+        return <XCircle className="h-3.5 w-3.5 text-danger" />
       default:
-        return <Clock className="h-3.5 w-3.5 text-yellow-500" />
+        return <Clock className="h-3.5 w-3.5 text-warning" />
     }
   }
 
@@ -282,14 +288,22 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
           variant="ghost"
           size="sm"
           className="h-6 text-xs"
-          onClick={() => setRequestOpen(true)}
+          onClick={() => { setRequestError(null); setRequestOpen(true) }}
           disabled={!canRequestApproval}
         >
           Request
         </Button>
       </div>
 
-      {loadError ? <p className="text-xs text-destructive">{loadError}</p> : null}
+      {loadError ? (
+        <InlineAlert
+          tone="danger"
+          title="Approvals did not load."
+          action={<Button size="sm" variant="outline" onClick={() => void fetchApprovals()}>Retry</Button>}
+        >
+          {loadError}
+        </InlineAlert>
+      ) : null}
 
       {loading ? (
         <Skeleton className="h-8 w-full" />
@@ -340,9 +354,9 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
                   {approval.decisions.map((d) => (
                     <div key={d.id} className="flex items-center gap-1.5 text-xs">
                       {d.decision === 'approved' ? (
-                        <ThumbsUp className="h-3 w-3 text-green-500" />
+                        <ThumbsUp className="h-3 w-3 text-success" />
                       ) : (
-                        <ThumbsDown className="h-3 w-3 text-red-500" />
+                        <ThumbsDown className="h-3 w-3 text-danger" />
                       )}
                       <span className="font-medium">{d.user?.name ?? 'User'}</span>
                       {d.comment && (
@@ -362,6 +376,7 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
                     setDecisionOpen(approval)
                     setDecision('approved')
                     setComment('')
+                    setDecisionError(null)
                   }}
                 >
                   Review
@@ -373,10 +388,13 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
       )}
 
       {/* Request dialog */}
-      <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+      <Dialog open={requestOpen} onOpenChange={(next) => { setRequestOpen(next); if (!next) setRequestError(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Request Approval</DialogTitle>
+            <DialogDescription>
+              Choose the workflow change and the people whose approval is required.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {transitions.length > 0 && (
@@ -484,6 +502,9 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
                 Leave this blank to auto-route to Admin, PM, or DevOps approvers. Up to {MAX_ASSIGNED_APPROVERS} approvers can be assigned.
               </p>
             </div>
+            {requestError ? (
+              <InlineAlert tone="danger" title="Approval not requested.">{requestError}</InlineAlert>
+            ) : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button>
@@ -495,10 +516,13 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
       </Dialog>
 
       {/* Decision dialog */}
-      <Dialog open={!!decisionOpen} onOpenChange={() => setDecisionOpen(null)}>
+      <Dialog open={!!decisionOpen} onOpenChange={(next) => { if (!next) { setDecisionOpen(null); setDecisionError(null) } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Review Approval</DialogTitle>
+            <DialogDescription>
+              Record your decision for this pending approval request.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
@@ -513,6 +537,9 @@ export function ApprovalPanel({ issueId, transitions = [], requestPrefill = null
                 </SelectContent>
               </Select>
             </div>
+            {decisionError ? (
+              <InlineAlert tone="danger" title="Decision not recorded.">{decisionError}</InlineAlert>
+            ) : null}
             <div className="space-y-1.5">
               <Label>Comment (optional)</Label>
               <Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="Reason for your decision…" />
@@ -591,7 +618,7 @@ export function ApprovalDashboard() {
           {approvals.map((a) => (
             <Card key={a.id}>
               <CardContent className="flex items-center gap-3 p-3">
-                <Clock className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                <Clock className="h-4 w-4 text-warning flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">

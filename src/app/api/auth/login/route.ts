@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth-otp'
 import QRCode from 'qrcode'
 import { z } from 'zod'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -24,6 +25,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password } = loginSchema.parse(body)
     const normalizedEmail = email.trim().toLowerCase()
+
+    // Throttle per IP+email. Without this the 3-attempt account lockout below is
+    // also a denial-of-service lever: anyone knowing an address could lock that
+    // user out permanently with three requests an hour.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.login, normalizedEmail)
+    if (limited) return limited
 
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
@@ -128,28 +135,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (user.globalRole === 'admin') {
-      const session = await createAuthSession({
-        request,
-        userId: user.id,
-        mfaVerified: false,
-        mfaBypassed: true,
-      })
-      const token = await signToken(user.id, session.id, user.globalRole)
-
-      const response = NextResponse.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          avatar: user.avatar,
-          globalRole: user.globalRole,
-        },
-      })
-
-      response.cookies.set(AUTH_COOKIE, token, getAuthCookieOptions(request))
-      return response
-    }
+    // NOTE: system administrators deliberately follow the *same* MFA path as every
+    // other account. An earlier implementation short-circuited here on
+    // `globalRole === 'admin'` and issued a session with `mfaBypassed: true`,
+    // which exempted the highest-privilege accounts from the second factor — even
+    // when they had explicitly enrolled. Do not reintroduce a role-based bypass.
 
     const hasConfiguredMfa = Boolean(
       user.mfaEnabled && user.mfaSecret && !user.mfaReenrollRequired

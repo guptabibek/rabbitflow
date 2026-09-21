@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { toast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { getApiErrorMessage } from '@/lib/utils'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
+import { InlineAlert } from '@/components/ui/states'
 
 const GUIDE_ROLE_OPTIONS = ['Admin', 'PM', 'DevOps', 'Dev', 'QA', 'Viewer'] as const
 const GUIDE_MAX_TITLE_LENGTH = 140
@@ -68,6 +68,8 @@ export function OnboardingGuidesView() {
   const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const canManage = normalizeProjectRole(currentProjectRole) === 'Admin'
 
   const fetchGuides = () => {
@@ -105,21 +107,25 @@ export function OnboardingGuidesView() {
 
   const saveGuide = async () => {
     if (!currentProject) return
+    setSaveError(null)
 
     const normalizedTitle = draft.title.trim()
     const normalizedSlug = toSlug(draft.slug || draft.title)
     const normalizedBody = draft.body.trim()
 
     if (!normalizedTitle) {
-      throw new Error('Guide title is required')
+      setSaveError('Guide title is required.')
+      return
     }
 
     if (!normalizedSlug) {
-      throw new Error('Guide slug is required')
+      setSaveError('Guide slug is required.')
+      return
     }
 
     if (!normalizedBody) {
-      throw new Error('Guide body is required')
+      setSaveError('Guide body is required.')
+      return
     }
 
     const payload = {
@@ -133,18 +139,21 @@ export function OnboardingGuidesView() {
       order: guides.length,
     }
 
-    const response = await fetch('/api/onboarding-guides', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      throw new Error(await getApiErrorMessage(response, 'Failed to save guide'))
+    setSaving(true)
+    try {
+      const response = await fetch('/api/onboarding-guides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to save guide'))
+      setDraft(EMPTY_DRAFT)
+      fetchGuides()
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save guide')
+    } finally {
+      setSaving(false)
     }
-
-    setDraft(EMPTY_DRAFT)
-    fetchGuides()
   }
 
   if (!currentProject) return null
@@ -161,17 +170,17 @@ export function OnboardingGuidesView() {
           {canManage ? (
             <div className="rounded-2xl border border-border/70 bg-card/70 p-4">
               <div className="space-y-3">
+                {saveError ? <InlineAlert tone="danger" title="Guide was not created.">{saveError}</InlineAlert> : null}
                 <div className="space-y-2"><Label>Title</Label><Input value={draft.title} maxLength={GUIDE_MAX_TITLE_LENGTH} onChange={(event) => setDraft((state) => ({ ...state, title: event.target.value, slug: toSlug(event.target.value) }))} /></div>
                 <div className="space-y-2"><Label>Slug</Label><Input value={draft.slug} maxLength={GUIDE_MAX_TITLE_LENGTH} onChange={(event) => setDraft((state) => ({ ...state, slug: toSlug(event.target.value) }))} /></div>
                 <div className="space-y-2"><Label>Audience role</Label><Select value={draft.audienceRole || 'all'} onValueChange={(value) => setDraft((state) => ({ ...state, audienceRole: value === 'all' ? '' : value }))}><SelectTrigger><SelectValue placeholder="All project members" /></SelectTrigger><SelectContent><SelectItem value="all">All project members</SelectItem>{GUIDE_ROLE_OPTIONS.map((role) => (<SelectItem key={role} value={role}>{role}</SelectItem>))}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Summary</Label><Input value={draft.summary} maxLength={GUIDE_MAX_SUMMARY_LENGTH} onChange={(event) => setDraft((state) => ({ ...state, summary: event.target.value }))} /></div>
                 <div className="space-y-2"><Label>Body</Label><Textarea rows={8} maxLength={GUIDE_MAX_BODY_LENGTH} value={draft.body} onChange={(event) => setDraft((state) => ({ ...state, body: event.target.value }))} /></div>
                 <Button
-                  onClick={() => {
-                    void saveGuide().catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to save guide'))
-                  }}
+                  onClick={() => void saveGuide()}
+                  disabled={saving}
                 >
-                  Create Guide
+                  {saving ? 'Creating...' : 'Create Guide'}
                 </Button>
               </div>
             </div>

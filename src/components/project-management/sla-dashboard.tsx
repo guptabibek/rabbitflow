@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -39,6 +40,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,6 +107,7 @@ export function SlaDashboard() {
   const [saving, setSaving] = useState(false)
   const [policyError, setPolicyError] = useState<string | null>(null)
   const [timerError, setTimerError] = useState<string | null>(null)
+  const [policyFormError, setPolicyFormError] = useState<string | null>(null)
 
   // Policy form
   const [pName, setPName] = useState('')
@@ -154,18 +161,23 @@ export function SlaDashboard() {
   }, [fetchPolicies, fetchTimers])
 
   const handleCreatePolicy = async () => {
-    if (!currentProject || !pName) return
+    if (!currentProject) return
+    setPolicyFormError(null)
+    if (!pName.trim()) {
+      setPolicyFormError('Policy name is required.')
+      return
+    }
 
     const responseTimeMinutes = Number.parseInt(pResponseMin, 10)
     const resolutionTimeMinutes = Number.parseInt(pResolutionMin, 10)
 
     if (!Number.isInteger(responseTimeMinutes) || responseTimeMinutes < 1) {
-      toast.error('Response time must be a whole number greater than 0')
+      setPolicyFormError('Response time must be a whole number greater than 0.')
       return
     }
 
     if (!Number.isInteger(resolutionTimeMinutes) || resolutionTimeMinutes < 1) {
-      toast.error('Resolution time must be a whole number greater than 0')
+      setPolicyFormError('Resolution time must be a whole number greater than 0.')
       return
     }
 
@@ -176,7 +188,7 @@ export function SlaDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: currentProject.id,
-          name: pName,
+          name: pName.trim(),
           description: pDesc || undefined,
           priorityFilter: pPriority && pPriority !== 'all' ? [pPriority] : null,
           responseTimeMinutes,
@@ -196,11 +208,13 @@ export function SlaDashboard() {
       await fetchPolicies()
       toast.success('SLA policy created')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create SLA policy')
+      setPolicyFormError(error instanceof Error ? error.message : 'Failed to create SLA policy')
     } finally {
       setSaving(false)
     }
   }
+
+  const deleteConfirm = useDestructiveConfirm<{ id: string; name: string }>()
 
   const handleDeletePolicy = async (id: string) => {
     try {
@@ -211,8 +225,9 @@ export function SlaDashboard() {
 
       await fetchPolicies()
       toast.success('SLA policy deleted')
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete SLA policy')
+      return error instanceof Error ? error.message : 'Failed to delete SLA policy'
     }
   }
 
@@ -240,7 +255,7 @@ export function SlaDashboard() {
   if (!currentProject) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        Select a project to view SLA dashboard.
+        Select a project to view SLA performance.
       </div>
     )
   }
@@ -254,7 +269,14 @@ export function SlaDashboard() {
             Monitor service level agreements and response times.
           </p>
           {policyError || timerError ? (
-            <p className="mt-2 text-sm text-destructive">{timerError ?? policyError}</p>
+            <InlineAlert
+              tone="danger"
+              title="Some SLA data did not load."
+              className="mt-2"
+              action={<Button size="sm" variant="outline" onClick={() => void Promise.all([fetchPolicies(), fetchTimers()])}>Retry</Button>}
+            >
+              {timerError ?? policyError}
+            </InlineAlert>
           ) : null}
         </div>
       </div>
@@ -263,8 +285,8 @@ export function SlaDashboard() {
       <div className="grid grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-green-500/10 p-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <div className="rounded-lg bg-success/10 p-2">
+              <CheckCircle2 className="h-5 w-5 text-success" />
             </div>
             <div>
               <p className="text-2xl font-bold">{onTrack}</p>
@@ -274,8 +296,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-yellow-500/10 p-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <div className="rounded-lg bg-warning/10 p-2">
+              <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
             <div>
               <p className="text-2xl font-bold">{atRisk}</p>
@@ -285,8 +307,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-red-500/10 p-2">
-              <XCircle className="h-5 w-5 text-red-500" />
+            <div className="rounded-lg bg-danger/10 p-2">
+              <XCircle className="h-5 w-5 text-danger" />
             </div>
             <div>
               <p className="text-2xl font-bold">{breached}</p>
@@ -296,8 +318,8 @@ export function SlaDashboard() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-500/10 p-2">
-              <TrendingUp className="h-5 w-5 text-blue-500" />
+            <div className="rounded-lg bg-info/10 p-2">
+              <TrendingUp className="h-5 w-5 text-info" />
             </div>
             <div>
               <p className="text-2xl font-bold">{resolved}</p>
@@ -332,13 +354,13 @@ export function SlaDashboard() {
                 <Card key={timer.id}>
                   <CardContent className="flex items-center gap-3 p-3">
                     {timer.isBreached ? (
-                      <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                      <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
                     ) : timer.isAtRisk ? (
-                      <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
                     ) : timer.status === 'paused' ? (
                       <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     ) : (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -355,7 +377,7 @@ export function SlaDashboard() {
                         <span>{timer.policy?.name ?? 'SLA Policy'}</span>
                         <Badge variant="outline" className="text-[10px] capitalize">{timer.timerType}</Badge>
                         <span>Deadline: {new Date(timer.targetAt).toLocaleString()}</span>
-                        {timer.status === 'paused' && <span className="text-yellow-500">Paused</span>}
+                        {timer.status === 'paused' && <span className="text-warning">Paused</span>}
                       </div>
                     </div>
                     <div className="text-right">
@@ -386,7 +408,7 @@ export function SlaDashboard() {
 
         <TabsContent value="policies" className="mt-3">
           <div className="mb-3 flex justify-end">
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Dialog open={createOpen} onOpenChange={(next) => { setCreateOpen(next); if (!next) setPolicyFormError(null) }}>
               <DialogTrigger asChild>
                 <Button size="sm" className="gap-1.5">
                   <Plus className="h-3.5 w-3.5" />
@@ -396,11 +418,14 @@ export function SlaDashboard() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create SLA Policy</DialogTitle>
+                  <DialogDescription>
+                    Set the response and resolution targets for matching work items.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
                   <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="e.g. Critical Bug SLA" />
+                    <Label htmlFor="sla-policy-name">Name</Label>
+                    <Input id="sla-policy-name" aria-invalid={Boolean(policyFormError && !pName.trim())} value={pName} onChange={(e) => { setPName(e.target.value); setPolicyFormError(null) }} placeholder="e.g. Critical Bug SLA" />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Description</Label>
@@ -413,7 +438,7 @@ export function SlaDashboard() {
                         <SelectValue placeholder="All priorities" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="all">All priorities</SelectItem>
                         <SelectItem value="urgent">Urgent</SelectItem>
                         <SelectItem value="high">High</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>
@@ -431,6 +456,9 @@ export function SlaDashboard() {
                       <Input type="number" min={1} step={1} value={pResolutionMin} onChange={(e) => setPResolutionMin(e.target.value)} />
                     </div>
                   </div>
+                  {policyFormError ? (
+                    <InlineAlert tone="danger" title="Policy not created.">{policyFormError}</InlineAlert>
+                  ) : null}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -459,7 +487,7 @@ export function SlaDashboard() {
               {policies.map((policy) => (
                 <Card key={policy.id}>
                   <CardContent className="flex items-center gap-3 p-3">
-                    <Shield className={`h-4 w-4 ${policy.isActive ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                    <Shield className={`h-4 w-4 ${policy.isActive ? 'text-info' : 'text-muted-foreground'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{policy.name}</span>
@@ -481,7 +509,8 @@ export function SlaDashboard() {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-destructive"
-                      onClick={() => handleDeletePolicy(policy.id)}
+                      aria-label="Delete SLA policy"
+                      onClick={() => deleteConfirm.request(policy)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -492,6 +521,18 @@ export function SlaDashboard() {
           )}
         </TabsContent>
       </Tabs>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Delete SLA policy "${deleteConfirm.target?.name ?? ''}"?`}
+        description="Work items currently tracked against this policy stop being measured and their running timers are discarded. This cannot be undone."
+        onConfirm={async () => {
+          if (!deleteConfirm.target) return false
+          const result = await handleDeletePolicy(deleteConfirm.target.id)
+          return result === true ? true : result
+        }}
+      />
     </div>
   )
 }

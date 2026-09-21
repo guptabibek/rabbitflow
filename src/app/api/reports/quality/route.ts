@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/rate-limit'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { withCache } from '@/lib/redis'
 import { computeBugMetrics } from '@/lib/domain/reports'
@@ -16,6 +17,11 @@ export async function GET(request: NextRequest) {
 
     const auth = await requireProjectPermission(request, projectId, 'project:read')
     if (!auth.ok) return auth.response
+
+    // Aggregations over the whole project; throttled per user so a loop
+    // cannot saturate the database.
+    const limited = await enforceRateLimit(request, RATE_LIMITS.reports, auth.actor.userId)
+    if (limited) return limited
 
     const days = parseBoundedInt(searchParams.get('days'), 30, 1, 365)
     const data = await withCache(`reports:quality:${projectId}:${teamId || 'all'}:${days}`, 120, () =>

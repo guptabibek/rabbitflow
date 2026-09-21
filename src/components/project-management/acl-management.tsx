@@ -21,11 +21,17 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Shield, UserCog, Trash2 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 type Rule = {
   id: string
@@ -83,6 +89,7 @@ function parseExtraPermissions(value: unknown): string[] {
 export function AclManagement() {
   const currentProject = useAppStore((state) => state.currentProject)
   const [rules, setRules] = useState<Rule[]>([])
+  const deleteConfirm = useDestructiveConfirm<Rule>()
   const [areas, setAreas] = useState<Area[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
   const [members, setMembers] = useState<Member[]>([])
@@ -94,6 +101,9 @@ export function AclManagement() {
   const [editMember, setEditMember] = useState<Member | null>(null)
   const [editPermissions, setEditPermissions] = useState<Set<string>>(new Set())
   const [savingMember, setSavingMember] = useState(false)
+  const [membersError, setMembersError] = useState<string | null>(null)
+  const [ruleError, setRuleError] = useState<string | null>(null)
+  const [memberError, setMemberError] = useState<string | null>(null)
 
   const fetchRules = useCallback(() => {
     if (!currentProject) return
@@ -132,9 +142,10 @@ export function AclManagement() {
       })
       .then((data) => {
         setMembers(Array.isArray(data) ? data : [])
+        setMembersError(null)
       })
-      .catch(() => {
-        setMembers([])
+      .catch((error) => {
+        setMembersError(error instanceof Error ? error.message : 'Failed to load members')
       })
       .finally(() => setMembersLoading(false))
   }, [currentProject])
@@ -149,25 +160,28 @@ export function AclManagement() {
 
   const createRule = async () => {
     if (!currentProject) return
-    const response = await fetch('/api/rbac/rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: currentProject.id,
-        role: draft.role,
-        permission: draft.permission,
-        effect: draft.effect,
-        areaId: draft.areaId || null,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(await getApiErrorMessage(response, 'Failed to create ACL rule'))
+    setRuleError(null)
+    try {
+      const response = await fetch('/api/rbac/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: currentProject.id,
+          role: draft.role,
+          permission: draft.permission,
+          effect: draft.effect,
+          areaId: draft.areaId || null,
+        }),
+      })
+      if (!response.ok) throw new Error(await getApiErrorMessage(response, 'Failed to create ACL rule'))
+      await fetchRules()
+    } catch (error) {
+      setRuleError(error instanceof Error ? error.message : 'Failed to create ACL rule')
     }
-    fetchRules()
   }
 
   const handleFlipRule = async (rule: Rule) => {
+    setRuleError(null)
     try {
       const response = await fetch(`/api/rbac/rules/${rule.id}`, {
         method: 'PUT',
@@ -177,27 +191,28 @@ export function AclManagement() {
       if (!response.ok) {
         throw new Error(await getApiErrorMessage(response, 'Failed to update ACL rule'))
       }
-      fetchRules()
+      await fetchRules()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update ACL rule')
+      setRuleError(error instanceof Error ? error.message : 'Failed to update ACL rule')
     }
   }
 
-  const handleDeleteRule = async (ruleId: string) => {
+  const handleDeleteRule = async (ruleId: string): Promise<string | void> => {
     try {
       const response = await fetch(`/api/rbac/rules/${ruleId}`, { method: 'DELETE' })
       if (!response.ok) {
         throw new Error(await getApiErrorMessage(response, 'Failed to delete ACL rule'))
       }
-      fetchRules()
+      await fetchRules()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete ACL rule')
+      return error instanceof Error ? error.message : 'Failed to delete ACL rule'
     }
   }
 
   const openMemberDialog = (member: Member) => {
     setEditMember(member)
     setEditPermissions(new Set(parseExtraPermissions(member.extraPermissions)))
+    setMemberError(null)
   }
 
   const handleTogglePermission = (perm: string) => {
@@ -215,6 +230,7 @@ export function AclManagement() {
   const handleSaveMemberPermissions = async () => {
     if (!currentProject || !editMember) return
     setSavingMember(true)
+    setMemberError(null)
     try {
       const response = await fetch(
         `/api/projects/${currentProject.id}/members/${editMember.id}`,
@@ -233,7 +249,7 @@ export function AclManagement() {
       setEditMember(null)
       fetchMembers()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update permissions')
+      setMemberError(error instanceof Error ? error.message : 'Failed to update permissions')
     } finally {
       setSavingMember(false)
     }
@@ -248,7 +264,11 @@ export function AclManagement() {
         <p className="text-sm text-muted-foreground">
           Manage per-user feature access and role-based permission overrides.
         </p>
-        {loadError ? <p className="mt-1 text-sm text-destructive">{loadError}</p> : null}
+        {loadError ? (
+          <InlineAlert className="mt-2" tone="danger" title="Access rules unavailable." action={<Button size="sm" variant="outline" onClick={fetchRules}>Retry</Button>}>
+            {loadError}
+          </InlineAlert>
+        ) : null}
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -265,6 +285,11 @@ export function AclManagement() {
 
         {/* ── Per-User Permissions ────────────────────────────── */}
         <TabsContent value="users" className="mt-3">
+          {membersError ? (
+            <InlineAlert className="mb-3" tone="danger" title="Project members unavailable." action={<Button size="sm" variant="outline" onClick={fetchMembers}>Retry</Button>}>
+              {membersError}
+            </InlineAlert>
+          ) : null}
           {membersLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
@@ -333,6 +358,7 @@ export function AclManagement() {
                 <p className="text-sm text-muted-foreground">Per-role, per-action, and per-area access overrides.</p>
               </CardHeader>
               <CardContent className="space-y-3">
+                {ruleError ? <InlineAlert tone="danger" title="Rule was not saved.">{ruleError}</InlineAlert> : null}
                 <div className="space-y-1.5">
                   <Label>Role</Label>
                   <Select value={draft.role} onValueChange={(v) => setDraft((s) => ({ ...s, role: v }))}>
@@ -379,11 +405,7 @@ export function AclManagement() {
                 </div>
                 <Button
                   className="w-full"
-                  onClick={() => {
-                    void createRule().catch((error) =>
-                      toast.error(error instanceof Error ? error.message : 'Failed to create ACL rule')
-                    )
-                  }}
+                  onClick={() => void createRule()}
                 >
                   Add Rule
                 </Button>
@@ -427,7 +449,8 @@ export function AclManagement() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive"
-                          onClick={() => void handleDeleteRule(rule.id)}
+                          aria-label={`Delete ${rule.effect} rule for ${rule.role} on ${rule.permission}`}
+                          onClick={() => deleteConfirm.request(rule)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -448,7 +471,11 @@ export function AclManagement() {
             <DialogTitle>
               Edit Permissions — {editMember?.user.name || editMember?.user.email}
             </DialogTitle>
+            <DialogDescription>
+              Grant additional project capabilities. Existing role permissions still apply.
+            </DialogDescription>
           </DialogHeader>
+          {memberError ? <InlineAlert tone="danger" title="Permissions were not saved.">{memberError}</InlineAlert> : null}
           <div className="space-y-1 py-2">
             <p className="text-sm text-muted-foreground mb-3">
               Grant additional feature access beyond the <Badge variant="outline" className="text-[10px] mx-0.5">{editMember?.role}</Badge> role defaults.
@@ -477,6 +504,20 @@ export function AclManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title="Delete access rule?"
+        description={
+          deleteConfirm.target
+            ? `This removes the "${deleteConfirm.target.effect}" rule granting ${deleteConfirm.target.permission} to ${deleteConfirm.target.role}. Members with that role will immediately fall back to their default permissions.`
+            : ''
+        }
+        onConfirm={async () => {
+          if (deleteConfirm.target) return handleDeleteRule(deleteConfirm.target.id)
+        }}
+      />
     </div>
   )
 }

@@ -8,18 +8,9 @@ import {
   type WorkItemTypeDefinition,
 } from '@/store/app-store'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -76,6 +67,8 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { InlineAlert } from '@/components/ui/states'
+import { ConfirmDestructiveDialog } from '@/components/project-management/confirm-destructive-dialog'
 
 type WorkItemTypeManagementMode = 'dialog' | 'screen'
 
@@ -332,6 +325,21 @@ function getSectionTypeConfig(value: string) {
   return SECTION_TYPE_OPTIONS.find((o) => o.value === value)
 }
 
+function getReadableTextColor(backgroundColor: string) {
+  const hex = backgroundColor.trim().replace(/^#/, '')
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return '#ffffff'
+
+  const channels = [0, 2, 4].map((offset) => {
+    const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  })
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+  const whiteContrast = 1.05 / (luminance + 0.05)
+  const darkContrast = (luminance + 0.05) / 0.05
+
+  return whiteContrast >= darkContrast ? '#ffffff' : '#000000'
+}
+
 // ─── Sidebar Type Item ──────────────────────────────────────────────────────
 
 function TypeListItem({
@@ -357,8 +365,11 @@ function TypeListItem({
     >
       <div className="flex items-center gap-2.5">
         <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
-          style={{ backgroundColor: definition.color }}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold"
+          style={{
+            backgroundColor: definition.color,
+            color: getReadableTextColor(definition.color),
+          }}
         >
           {definition.icon
             ? definition.icon.slice(0, 2).toUpperCase()
@@ -376,11 +387,11 @@ function TypeListItem({
             )}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <span className="font-mono text-[10px] text-muted-foreground/70">
+            <span className="font-mono text-[10px] text-muted-foreground">
               {definition.key}
             </span>
             <span className="text-[10px] text-muted-foreground/40">·</span>
-            <span className="text-[10px] text-muted-foreground/70">
+            <span className="text-[10px] text-muted-foreground">
               {itemCount} {itemCount === 1 ? 'item' : 'items'}
             </span>
           </div>
@@ -418,9 +429,9 @@ function AddSectionPicker({
       <DialogContent className="max-w-md gap-0 p-0">
         <DialogHeader className="px-5 pt-5 pb-3">
           <DialogTitle className="text-base">Add Section</DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <DialogDescription>
             Choose a section type to add to this work item type.
-          </p>
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 px-5 pb-5">
           {SECTION_TYPE_OPTIONS.map((option) => {
@@ -654,7 +665,7 @@ function FieldRow({
               {field.label || `Field ${fieldIndex + 1}`}
             </span>
             {field.isSystem && (
-              <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+              <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                 System
               </Badge>
             )}
@@ -779,7 +790,7 @@ function SectionCard({
                 {section.title || `Section ${sectionIndex + 1}`}
               </span>
               {section.isSystem && (
-                <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+                <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                   System
                 </Badge>
               )}
@@ -1039,6 +1050,7 @@ export function WorkItemTypeManagement({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
+  const [operationError, setOperationError] = useState<string | null>(null)
   const formSnapshotRef = useRef<string>('')
   const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
@@ -1105,6 +1117,7 @@ export function WorkItemTypeManagement({
       if (!currentProject) return
 
       setIsLoading(true)
+      setOperationError(null)
       try {
         const response = await fetch(
           `/api/work-item-types?projectId=${currentProject.id}&includeDisabled=true`,
@@ -1113,7 +1126,7 @@ export function WorkItemTypeManagement({
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
-          toast.error(error.error || 'Failed to load work item types')
+          setOperationError(error.error || 'Failed to load work item types')
           return
         }
 
@@ -1136,7 +1149,7 @@ export function WorkItemTypeManagement({
         }
 
         console.error('Failed to load work item types:', caughtError)
-        toast.error('Failed to load work item types')
+        setOperationError(caughtError instanceof Error ? caughtError.message : 'Failed to load work item types')
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false)
@@ -1181,8 +1194,9 @@ export function WorkItemTypeManagement({
   }
 
   const resetForCreate = () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1212,8 +1226,9 @@ export function WorkItemTypeManagement({
   }
 
   const handleSave = async () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1221,7 +1236,7 @@ export function WorkItemTypeManagement({
 
     const validationError = validateWorkItemTypeForm(form)
     if (validationError) {
-      toast.error(validationError)
+      setOperationError(validationError)
       return
     }
 
@@ -1268,7 +1283,7 @@ export function WorkItemTypeManagement({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to save work item type')
+        setOperationError(error.error || 'Failed to save work item type')
         return
       }
 
@@ -1286,7 +1301,7 @@ export function WorkItemTypeManagement({
       toast.success(form.id ? 'Work item type updated' : 'Work item type created')
     } catch (caughtError) {
       console.error('Failed to save work item type:', caughtError)
-      toast.error('Failed to save work item type')
+      setOperationError(caughtError instanceof Error ? caughtError.message : 'Failed to save work item type')
     } finally {
       setIsSaving(false)
     }
@@ -1294,11 +1309,10 @@ export function WorkItemTypeManagement({
 
   const handleDelete = async () => {
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
-      return
+      return 'You do not have permission to manage work item types.'
     }
 
-    if (!form.id) return
+    if (!form.id) return false
 
     try {
       const response = await fetch(`/api/work-item-types/${form.id}`, {
@@ -1307,8 +1321,7 @@ export function WorkItemTypeManagement({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete work item type')
-        return
+        return error.error || 'Failed to delete work item type'
       }
 
       const nextDefinitions = typeDefinitions.filter((d) => d.id !== form.id)
@@ -1323,15 +1336,17 @@ export function WorkItemTypeManagement({
       }
       await refreshEnabledTypes()
       toast.success('Work item type deleted')
+      return true
     } catch (caughtError) {
       console.error('Failed to delete work item type:', caughtError)
-      toast.error('Failed to delete work item type')
+      return caughtError instanceof Error ? caughtError.message : 'Failed to delete work item type'
     }
   }
 
   const handleDuplicate = () => {
+    setOperationError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage work item types')
+      setOperationError('You do not have permission to manage work item types.')
       return
     }
 
@@ -1376,9 +1391,9 @@ export function WorkItemTypeManagement({
   )
 
   const editorBody = (
-    <div className={`flex ${isScreenMode ? 'min-h-0 flex-1' : 'h-[calc(92vh-56px)]'}`}>
+    <div className={`flex ${isScreenMode ? 'min-h-0 flex-1 flex-col lg:flex-row' : 'h-[calc(92vh-56px)]'}`}>
       {/* ── Left Sidebar ────────────────────────────────────────── */}
-      <div className="flex w-[280px] shrink-0 flex-col border-r border-border/50 bg-muted/[0.03]">
+      <div className="flex max-h-64 w-full shrink-0 flex-col border-b border-border/50 bg-muted/[0.03] lg:max-h-none lg:w-[280px] lg:border-b-0 lg:border-r">
         {/* Search */}
         <div className="px-3 pt-3 pb-2">
           <div className="relative">
@@ -1457,11 +1472,14 @@ export function WorkItemTypeManagement({
       {/* ── Main Editor ─────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Editor Header */}
-        <div className="flex items-center justify-between border-b border-border/50 bg-background px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-background px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white shadow-sm"
-              style={{ backgroundColor: form.color || '#64748b' }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold shadow-sm"
+              style={{
+                backgroundColor: form.color || '#64748b',
+                color: getReadableTextColor(form.color || '#64748b'),
+              }}
             >
               {form.icon
                 ? form.icon.slice(0, 2).toUpperCase()
@@ -1475,7 +1493,7 @@ export function WorkItemTypeManagement({
                   {form.name || 'New Work Item Type'}
                 </h2>
                 {form.isSystem && (
-                  <Badge variant="outline" className="border-yellow-500/30 bg-yellow-500/5 text-[9px] text-yellow-600 dark:text-yellow-400">
+                  <Badge variant="outline" className="border-warning/30 bg-warning/5 text-[9px] text-warning dark:text-warning">
                     System
                   </Badge>
                 )}
@@ -1485,24 +1503,24 @@ export function WorkItemTypeManagement({
                   </Badge>
                 )}
                 {isDirty && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-500">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning">
+                    <span className="h-1.5 w-1.5 rounded-full bg-warning" />
                     Unsaved
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 {form.key && (
-                  <span className="font-mono text-[10px] text-muted-foreground/60">
+                  <span className="font-mono text-[10px] text-muted-foreground">
                     {form.key}
                   </span>
                 )}
                 <span className="text-[10px] text-muted-foreground/40">·</span>
-                <span className="text-[10px] text-muted-foreground/60">
+                <span className="text-[10px] text-muted-foreground">
                   {form.sections.length} {form.sections.length === 1 ? 'section' : 'sections'}
                 </span>
                 <span className="text-[10px] text-muted-foreground/40">·</span>
-                <span className="text-[10px] text-muted-foreground/60">
+                <span className="text-[10px] text-muted-foreground">
                   {totalFieldCount} {totalFieldCount === 1 ? 'field' : 'fields'}
                 </span>
               </div>
@@ -1513,7 +1531,7 @@ export function WorkItemTypeManagement({
             {form.id && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Work item type actions">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1557,6 +1575,21 @@ export function WorkItemTypeManagement({
             </Button>
           </div>
         </div>
+
+        {operationError ? (
+          <InlineAlert
+            tone="danger"
+            title="Work item type not saved."
+            className="mx-6 mt-3"
+            action={
+              <Button size="sm" variant="outline" onClick={() => void loadTypes()}>
+                Reload types
+              </Button>
+            }
+          >
+            {operationError}
+          </InlineAlert>
+        ) : null}
 
         {/* Tabs + Content */}
         <Tabs
@@ -1608,7 +1641,7 @@ export function WorkItemTypeManagement({
                   <div className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="type-name" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <Label htmlFor="type-name" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Name <span className="text-destructive">*</span>
                         </Label>
                         <Input
@@ -1632,7 +1665,7 @@ export function WorkItemTypeManagement({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="type-key" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <Label htmlFor="type-key" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Key <span className="text-destructive">*</span>
                         </Label>
                         <Input
@@ -1650,7 +1683,7 @@ export function WorkItemTypeManagement({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="type-description" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                      <Label htmlFor="type-description" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                         Description
                       </Label>
                       <Textarea
@@ -1681,7 +1714,7 @@ export function WorkItemTypeManagement({
                   <div className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor="type-icon" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <Label htmlFor="type-icon" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Icon
                         </Label>
                         <Input
@@ -1694,13 +1727,14 @@ export function WorkItemTypeManagement({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="type-color" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <Label htmlFor="type-color" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                           Color
                         </Label>
                         <div className="flex items-center gap-2">
                           <div className="relative">
                             <input
                               type="color"
+                              aria-label="Work item type color picker"
                               value={form.color}
                               onChange={(e) =>
                                 setForm((p) => ({ ...p, color: e.target.value }))
@@ -1727,13 +1761,16 @@ export function WorkItemTypeManagement({
 
                     {/* Preview */}
                     <div className="rounded-lg border border-border/40 bg-muted/20 p-4">
-                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Preview
                       </p>
                       <div className="flex items-center gap-3">
                         <div
-                          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold text-white shadow"
-                          style={{ backgroundColor: form.color || '#64748b' }}
+                          className="flex h-10 w-10 items-center justify-center rounded-lg text-sm font-bold shadow"
+                          style={{
+                            backgroundColor: form.color || '#64748b',
+                            color: getReadableTextColor(form.color || '#64748b'),
+                          }}
                         >
                           {form.icon
                             ? form.icon.slice(0, 2).toUpperCase()
@@ -1763,7 +1800,7 @@ export function WorkItemTypeManagement({
                     <p className="text-xs text-muted-foreground">
                           Position this type within the work item hierarchy for parent/child relationships.
                     </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground/80">
+                        <p className="mt-1 text-[11px] text-muted-foreground">
                           Lower level number means higher in the tree. Parent must be a lower level than child.
                           {userStoryType
                             ? ` User Story is currently Level ${userStoryType.hierarchyLevel}.`
@@ -1772,7 +1809,7 @@ export function WorkItemTypeManagement({
                   </div>
 
                   <div className="max-w-xs space-y-1.5">
-                    <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    <Label id="hierarchy-level-label" className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                       Level
                     </Label>
                     <Select
@@ -1781,7 +1818,7 @@ export function WorkItemTypeManagement({
                         setForm((p) => ({ ...p, hierarchyLevel: v }))
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-labelledby="hierarchy-level-label">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1946,30 +1983,14 @@ export function WorkItemTypeManagement({
       <div className="flex h-full min-h-0 flex-col bg-background">
         {titleHeader}
         {editorBody}
-
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete &ldquo;{form.name}&rdquo;?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete this work item type definition. Existing work items
-                of this type must be migrated before deletion. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  setDeleteDialogOpen(false)
-                  void handleDelete()
-                }}
-              >
-                Delete Permanently
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDestructiveDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title={`Delete “${form.name}”?`}
+          description="This permanently deletes the work item type definition. Existing work items must be migrated before deletion."
+          confirmLabel="Delete permanently"
+          onConfirm={handleDelete}
+        />
       </div>
     )
   }
@@ -1990,34 +2011,23 @@ export function WorkItemTypeManagement({
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[92vh] max-w-[1340px] overflow-hidden p-0 gap-0">
+        <DialogTitle className="sr-only">Work Item Types</DialogTitle>
+        <DialogDescription className="sr-only">
+          Create and configure work item types, sections, and fields.
+        </DialogDescription>
         {titleHeader}
         {editorBody}
       </DialogContent>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete &ldquo;{form.name}&rdquo;?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this work item type definition. Existing work items
-              of this type must be migrated before deletion. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                setDeleteDialogOpen(false)
-                void handleDelete()
-              }}
-            >
-              Delete Permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDestructiveDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title={`Delete “${form.name}”?`}
+        description="This permanently deletes the work item type definition. Existing work items must be migrated before deletion."
+        confirmLabel="Delete permanently"
+        onConfirm={handleDelete}
+      />
     </Dialog>
   )
 }

@@ -1,10 +1,14 @@
 import { Queue, Worker, type ConnectionOptions } from 'bullmq'
 import { sendEmail } from '@/lib/email'
 import { enqueueEmailWithFallback, type EmailJobPayload } from '@/lib/email-queue-fallback'
+import { createThrottledErrorLogger } from '@/lib/log-throttle'
 
 type EmailJobData = EmailJobPayload
 
 const QUEUE_NAME = 'email'
+
+// Shared across reconnects so the suppression window survives them.
+const logWorkerError = createThrottledErrorLogger('Email worker error')
 
 function getConnection(): ConnectionOptions {
   const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL
@@ -63,9 +67,7 @@ export function startEmailWorker(): Worker<EmailJobData> {
     console.error(`Email job ${job?.id} failed (attempt ${job?.attemptsMade}):`, error.message)
   })
 
-  workerInstance.on('error', (error) => {
-    console.error('Email worker error:', error)
-  })
+  workerInstance.on('error', logWorkerError)
 
   return workerInstance
 }

@@ -7,7 +7,10 @@ import { toast } from 'sonner'
 import { DynamicWorkItemFields } from '@/components/project-management/dynamic-work-item-fields'
 import { GitLinksPanel } from '@/components/project-management/git-links-panel'
 import { ApprovalPanel } from '@/components/project-management/approval-workflow'
+import { ConfirmDestructiveDialog, useDestructiveConfirm } from '@/components/project-management/confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +46,7 @@ import { useAppStore } from '@/store/app-store'
 import {
   UNASSIGNED_VALUE,
   buildWorkItemPatchPayload,
+  getAvailableWorkItemStates,
   getWorkItemTypeDefinition,
   type WorkItemDraft,
 } from '@/lib/domain/work-item-view'
@@ -108,6 +112,12 @@ export type WorkItemBootstrapPayload = {
     teams: Team[]
     states: State[]
     workItemTypes: WorkItemTypeDefinition[]
+    typeStateMappings: Array<{
+      workItemTypeId: string
+      stateId: string
+      order: number
+      isInitial: boolean
+    }>
     stateTransitions: Array<{
       id: string
       workItemTypeId: string
@@ -132,6 +142,7 @@ type WorkItemDetailContentProps = {
   isRefreshing: boolean
   onReload: () => void
   onIssueUpdated: (issue: Issue) => void
+  onDeleted?: () => void
 }
 
 type ApprovalRequestPrefill = {
@@ -305,8 +316,16 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     issue.iteration?.teamId ?? UNASSIGNED_VALUE
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<{ message: string; conflict: boolean } | null>(null)
   const [isCopying, setIsCopying] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const secondaryDelete = useDestructiveConfirm<
+    | { kind: 'attachment'; id: string; label: string }
+    | { kind: 'comment'; id: string; label: string }
+    | { kind: 'relation'; id: string; label: string }
+  >()
+  const [operationError, setOperationError] = useState<string | null>(null)
   const [approvalRequestPrefill, setApprovalRequestPrefill] = useState<ApprovalRequestPrefill | null>(null)
 
   const [rightTab, setRightTab] = useState<'general' | 'history' | 'attachments' | 'git' | 'approvals'>('general')
@@ -314,14 +333,17 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const [relations, setRelations] = useState<FlatRelation[] | null>(null)
   const [relationsCursor, setRelationsCursor] = useState<string | null>(null)
   const [loadingRelations, setLoadingRelations] = useState(false)
+  const [relationsError, setRelationsError] = useState<string | null>(null)
 
   const [comments, setComments] = useState<Comment[] | null>(null)
   const [commentsCursor, setCommentsCursor] = useState<string | null>(null)
   const [loadingComments, setLoadingComments] = useState(false)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
 
   const [history, setHistory] = useState<Activity[] | null>(null)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   const [newComment, setNewComment] = useState('')
   const [newCommentSelectionStart, setNewCommentSelectionStart] = useState(0)
@@ -337,6 +359,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const [linkCandidates, setLinkCandidates] = useState<Array<{ id: string; key: string; title: string }>>([])
   const [linkType, setLinkType] = useState<LinkType>('related')
   const [isSearchingLinks, setIsSearchingLinks] = useState(false)
+  const [linkSearchError, setLinkSearchError] = useState<string | null>(null)
 
   type Attachment = {
     id: string
@@ -350,12 +373,14 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const [attachments, setAttachments] = useState<Attachment[] | null>(null)
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const [attachmentsError, setAttachmentsError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setDraft(createDraft(issue))
     setSelectedIterationTeamId(issue.iteration?.teamId ?? UNASSIGNED_VALUE)
     setApprovalRequestPrefill(null)
+    setSaveError(null)
     setRelations(null)
     setRelationsCursor(null)
     setComments(null)
@@ -366,6 +391,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     setLinkSearch('')
     setLinkCandidates([])
     setAttachments(null)
+    setOperationError(null)
+    setRelationsError(null)
+    setCommentsError(null)
+    setHistoryError(null)
+    setLinkSearchError(null)
+    setAttachmentsError(null)
   }, [issue])
 
   const canUpdate = access.permissions.includes('workitem:update')
@@ -536,6 +567,24 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       .sort((left, right) => left.order - right.order)
   }, [activeTypeDefinition?.id, context.stateTransitions, context.states, issue.stateRecord?.id, issue.stateRecord?.name])
 
+  const availableStates = useMemo(
+    () =>
+      getAvailableWorkItemStates({
+        states: context.states,
+        typeStateMappings: context.typeStateMappings ?? [],
+        stateTransitions: context.stateTransitions ?? [],
+        workItemTypeId: activeTypeDefinition?.id,
+        currentStateId: issue.stateRecord?.id,
+      }),
+    [
+      activeTypeDefinition?.id,
+      context.stateTransitions,
+      context.states,
+      context.typeStateMappings,
+      issue.stateRecord?.id,
+    ]
+  )
+
   const nextApprovalRequestToken = useMemo(
     () => (approvalRequestPrefill?.token ?? 0) + 1,
     [approvalRequestPrefill?.token]
@@ -543,6 +592,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const loadRelations = async (cursor?: string | null) => {
     setLoadingRelations(true)
+    setRelationsError(null)
     try {
       const response = await fetch(
         `/api/relations?issueId=${issue.id}&flat=true&paginate=true&take=30${cursor ? `&cursor=${cursor}` : ''
@@ -556,9 +606,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       const data = (await response.json()) as PaginatedResponse<FlatRelation>
       setRelations((previous) => (cursor && previous ? [...previous, ...data.items] : data.items))
       setRelationsCursor(data.nextCursor)
+      setRelationsError(null)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to load linked work items')
+      setRelationsError(error instanceof Error ? error.message : 'Failed to load linked work items')
     } finally {
       setLoadingRelations(false)
     }
@@ -566,6 +617,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const loadComments = async (cursor?: string | null) => {
     setLoadingComments(true)
+    setCommentsError(null)
     try {
       const response = await fetch(
         `/api/comments?issueId=${issue.id}&paginate=true&take=30&includeRevisions=true${cursor ? `&cursor=${cursor}` : ''
@@ -578,9 +630,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       const data = (await response.json()) as PaginatedResponse<Comment>
       setComments((previous) => (cursor && previous ? [...previous, ...data.items] : data.items))
       setCommentsCursor(data.nextCursor)
+      setCommentsError(null)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to load comments')
+      setCommentsError(error instanceof Error ? error.message : 'Failed to load comments')
     } finally {
       setLoadingComments(false)
     }
@@ -588,6 +641,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const loadHistory = async (cursor?: string | null) => {
     setLoadingHistory(true)
+    setHistoryError(null)
     try {
       const response = await fetch(
         `/api/issues/${issue.id}/history?take=30${cursor ? `&cursor=${cursor}` : ''}`
@@ -599,9 +653,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       const data = (await response.json()) as PaginatedResponse<Activity>
       setHistory((previous) => (cursor && previous ? [...previous, ...data.items] : data.items))
       setHistoryCursor(data.nextCursor)
+      setHistoryError(null)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to load history')
+      setHistoryError(error instanceof Error ? error.message : 'Failed to load history')
     } finally {
       setLoadingHistory(false)
     }
@@ -621,11 +676,13 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
     const query = deferredLinkSearch.trim()
     if (!canLink || query.length < 2) {
       setLinkCandidates([])
+      setLinkSearchError(null)
       return
     }
 
     let cancelled = false
     setIsSearchingLinks(true)
+    setLinkSearchError(null)
 
     void fetch(
       `/api/issues?projectId=${issue.project.id}&minimal=true&includeTotal=false&pageSize=20&search=${encodeURIComponent(
@@ -646,7 +703,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       })
       .catch((error) => {
         if (!cancelled) {
-          toast.error(error instanceof Error ? error.message : 'Failed to search work items')
+          setLinkSearchError(error instanceof Error ? error.message : 'Failed to search work items')
         }
       })
       .finally(() => {
@@ -685,8 +742,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const handleSave = async () => {
     if (!patchPayload || !canUpdate || isDeleting) return
 
+    setSaveError(null)
+
     if (draft.startDate && draft.dueDate && new Date(draft.dueDate).getTime() < new Date(draft.startDate).getTime()) {
-      toast.error('Due date cannot be earlier than start date')
+      setSaveError({ message: 'Due date cannot be earlier than start date.', conflict: false })
       return
     }
 
@@ -697,7 +756,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       validatePlanningNumber(draft.completedHours, 'Completed hours', MAX_HOURS)
 
     if (planningValidationError) {
-      toast.error(planningValidationError)
+      setSaveError({ message: planningValidationError, conflict: false })
       return
     }
 
@@ -759,39 +818,46 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             })
           }
         }
-        toast.error(error.error || 'Failed to save work item')
+        setSaveError({
+          message: error.error || 'Failed to save work item. Review your changes and try again.',
+          conflict: response.status === 409,
+        })
         return
       }
 
       const updated = (await response.json()) as Issue
+      setSaveError(null)
       onIssueUpdated(updated)
       toast.success('Work item saved')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save work item')
+      setSaveError({
+        message: 'Failed to save work item. Check your connection and try again.',
+        conflict: false,
+      })
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleDelete = async () => {
-    if (!canDelete || isDeleting || !confirm('Delete this work item?')) return
+  const handleDelete = async (): Promise<string | boolean> => {
+    if (!canDelete || isDeleting) return false
     setIsDeleting(true)
     try {
       const response = await fetch(`/api/issues/${issue.id}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete work item')
-        setIsDeleting(false)
-        return
+        return error.error || 'Failed to delete work item'
       }
 
       closeWorkItem()
       toast.success('Work item deleted')
-      router.replace('/')
+      props.onDeleted?.()
+      return true
     } catch (error) {
       console.error(error)
-      toast.error('Failed to delete work item')
+      return 'Failed to delete work item. Check your connection and try again.'
+    } finally {
       setIsDeleting(false)
     }
   }
@@ -799,12 +865,13 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
   const handleCreateCopy = async () => {
     if (!canCreate || isCopying) return
 
+    setOperationError(null)
     setIsCopying(true)
     try {
       const response = await fetch(`/api/issues/${issue.id}/copy`, { method: 'POST' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to create work item copy')
+        setOperationError(error.error || 'Failed to create work item copy')
         return
       }
 
@@ -814,7 +881,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       }
 
       if (!payload.issue) {
-        toast.error('Copy response returned malformed data')
+        setOperationError('The copy was created, but its response was incomplete. Reload the work item list before trying again.')
         return
       }
 
@@ -828,7 +895,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       router.push(workItemPath(payload.issue.id))
     } catch (error) {
       console.error(error)
-      toast.error('Failed to create work item copy')
+      setOperationError('Failed to create work item copy. Check your connection and try again.')
     } finally {
       setIsCopying(false)
     }
@@ -836,6 +903,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const loadAttachments = async () => {
     setLoadingAttachments(true)
+    setAttachmentsError(null)
     try {
       const response = await fetch(`/api/attachments?issueId=${issue.id}`)
       if (!response.ok) {
@@ -843,9 +911,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       }
       const data = (await response.json()) as Attachment[]
       setAttachments(data)
+      setAttachmentsError(null)
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to load attachments')
+      setAttachmentsError(error instanceof Error ? error.message : 'Failed to load attachments')
     } finally {
       setLoadingAttachments(false)
     }
@@ -853,6 +922,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
   const handleUploadAttachment = async (file: File) => {
     if (!canUpdate) return
+    setAttachmentsError(null)
     setUploadingAttachment(true)
     try {
       const formData = new FormData()
@@ -861,7 +931,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       const response = await fetch('/api/attachments', { method: 'POST', body: formData })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to upload attachment')
+        setAttachmentsError(error.error || 'Failed to upload attachment')
         return
       }
       const attachment = (await response.json()) as Attachment
@@ -869,29 +939,29 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       toast.success('Attachment uploaded')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to upload attachment')
+      setAttachmentsError('Failed to upload attachment. Check your connection and try again.')
     } finally {
       setUploadingAttachment(false)
     }
   }
 
-  const handleDeleteAttachment = async (attachmentId: string) => {
+  const handleDeleteAttachment = async (attachmentId: string): Promise<string | void> => {
     try {
       const response = await fetch(`/api/attachments?id=${attachmentId}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete attachment')
-        return
+        return error.error || 'Failed to delete attachment'
       }
       setAttachments((prev) => prev?.filter((a) => a.id !== attachmentId) ?? [])
       toast.success('Attachment deleted')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to delete attachment')
+      return 'Failed to delete attachment. Check your connection and try again.'
     }
   }
 
   const handleAddLink = async (targetIssueId: string) => {
+    setRelationsError(null)
     try {
       if (linkType === 'parent' || linkType === 'child') {
         const issueIdToUpdate = linkType === 'parent' ? issue.id : targetIssueId
@@ -905,7 +975,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
         if (!response.ok) {
           const error = await response.json().catch(() => ({}))
-          toast.error(error.error || 'Failed to update hierarchy link')
+          setRelationsError(error.error || 'Failed to update hierarchy link')
           return
         }
 
@@ -936,7 +1006,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to add link')
+        setRelationsError(error.error || 'Failed to add link')
         return
       }
       setLinkSearch('')
@@ -944,27 +1014,27 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       toast.success('Linked work item added')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to add link')
+      setRelationsError('Failed to add link. Check your connection and try again.')
     }
   }
 
-  const handleRemoveLink = async (relationId: string) => {
+  const handleRemoveLink = async (relationId: string): Promise<string | void> => {
     try {
       const response = await fetch(`/api/relations?id=${relationId}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to remove link')
-        return
+        return error.error || 'Failed to remove link'
       }
       setRelations((previous) => previous?.filter((relation) => relation.id !== relationId) ?? [])
     } catch (error) {
       console.error(error)
-      toast.error('Failed to remove link')
+      return 'Failed to remove link. Check your connection and try again.'
     }
   }
 
   const handleAddComment = async () => {
     if (!canComment || !newComment.trim()) return
+    setCommentsError(null)
     try {
       const response = await fetch('/api/comments', {
         method: 'POST',
@@ -973,7 +1043,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to add comment')
+        setCommentsError(error.error || 'Failed to add comment')
         return
       }
 
@@ -983,12 +1053,13 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       setNewCommentSelectionStart(0)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to add comment')
+      setCommentsError('Failed to add comment. Your text is still here so you can try again.')
     }
   }
 
   const handleUpdateComment = async (commentId: string) => {
     if (!editingCommentContent.trim()) return
+    setCommentsError(null)
     try {
       const response = await fetch(`/api/comments/${commentId}`, {
         method: 'PUT',
@@ -997,7 +1068,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to update comment')
+        setCommentsError(error.error || 'Failed to update comment')
         return
       }
       const updated = (await response.json()) as Comment
@@ -1009,22 +1080,21 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
       setEditingCommentSelectionStart(0)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to update comment')
+      setCommentsError('Failed to update comment. Your edit is still here so you can try again.')
     }
   }
 
-  const handleDeleteComment = async (commentId: string) => {
+  const handleDeleteComment = async (commentId: string): Promise<string | void> => {
     try {
       const response = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete comment')
-        return
+        return error.error || 'Failed to delete comment'
       }
       setComments((previous) => previous?.filter((comment) => comment.id !== commentId) ?? [])
     } catch (error) {
       console.error(error)
-      toast.error('Failed to delete comment')
+      return 'Failed to delete comment. Check your connection and try again.'
     }
   }
 
@@ -1105,7 +1175,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   <DropdownMenuItem
                     disabled={!canDelete || isDeleting}
                     className="text-destructive focus:text-destructive"
-                    onClick={() => void handleDelete()}
+                    onClick={() => setDeleteConfirmOpen(true)}
                     data-testid="work-item-delete-button"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -1116,12 +1186,48 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             </div>
           </div>
 
-          <div className="w-full overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
-            <div className="grid grid-cols-1 divide-y divide-border/50 sm:grid-cols-2 sm:divide-x xl:grid-cols-5 xl:divide-y-0">
+          {saveError ? (
+            <Alert variant="destructive" data-testid="work-item-save-error">
+              <AlertCircle aria-hidden="true" />
+              <AlertTitle>{saveError.conflict ? 'Newer changes are available' : 'Work item was not saved'}</AlertTitle>
+              <AlertDescription>
+                <p>{saveError.message}</p>
+                {saveError.conflict ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isRefreshing}
+                      onClick={() => onReload()}
+                    >
+                      {isRefreshing ? 'Reloading...' : 'Reload latest'}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setSaveError(null)}>
+                      Review my edits
+                    </Button>
+                  </div>
+                ) : null}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {operationError ? (
+            <InlineAlert
+              tone="danger"
+              title="Action not completed."
+              action={<Button type="button" size="sm" variant="outline" onClick={() => setOperationError(null)}>Dismiss</Button>}
+            >
+              {operationError}
+            </InlineAlert>
+          ) : null}
+
+          <div className="w-full overflow-hidden rounded-lg border border-border bg-card">
+            <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x xl:grid-cols-5 xl:divide-y-0">
 
               {/* State */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   State
                 </Label>
                 <Select value={draft.stateId} onValueChange={(value) => setDraft((previous) => ({ ...previous, stateId: value }))} disabled={!canUpdate || isSaving}>
@@ -1129,17 +1235,22 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                     <SelectValue placeholder="State" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>
-                    {context.states.map((state) => (
+                    {!issue.stateRecord && <SelectItem value={UNASSIGNED_VALUE}>None</SelectItem>}
+                    {availableStates.map((state) => (
                       <SelectItem key={state.id} value={state.id}>{state.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {issue.stateRecord && availableStates.length === 1 ? (
+                  <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
+                    No workflow transition is available from this state.
+                  </p>
+                ) : null}
               </div>
 
               {/* Assigned To */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Assigned To
                 </Label>
                 <Select value={draft.assigneeId} onValueChange={(value) => setDraft((previous) => ({ ...previous, assigneeId: value }))} disabled={!canAssign || isSaving}>
@@ -1156,8 +1267,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Area Path */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Area Path
                 </Label>
                 <Select value={draft.areaId} onValueChange={(value) => setDraft((previous) => ({ ...previous, areaId: value }))} disabled={!canUpdate || isSaving}>
@@ -1174,8 +1285,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Sprint Team */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Sprint Team
                 </Label>
                 <Select value={selectedIterationTeamId} onValueChange={setSelectedIterationTeamId} disabled={!canUpdate || isSaving}>
@@ -1192,8 +1303,8 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
               </div>
 
               {/* Iteration Path */}
-              <div className="group flex flex-col justify-start p-3.5 transition-colors hover:bg-muted/20">
-                <Label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">
+              <div className="group flex flex-col justify-start px-3 py-2.5 transition-colors hover:bg-surface-hover">
+                <Label className="type-label mb-1.5 block">
                   Iteration Path
                 </Label>
                 <Select value={draft.iterationId} onValueChange={(value) => setDraft((previous) => ({ ...previous, iterationId: value }))} disabled={!canUpdate || isSaving}>
@@ -1223,7 +1334,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <main className="min-h-0 space-y-3 overflow-y-auto bg-muted/10 p-3 md:p-4">
           <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
             <div className="space-y-1">
-              <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Description</Label>
+              <Label className="type-label">Description</Label>
             </div>
             <Textarea
               value={draft.description}
@@ -1257,11 +1368,20 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Discussion</Label>
+                <Label className="type-label">Discussion</Label>
                 <p className="mt-1 text-xs text-muted-foreground">Comments, mentions, and delivery clarifications stay attached to this work item.</p>
               </div>
               {loadingComments && comments === null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             </div>
+            {commentsError ? (
+              <InlineAlert
+                tone="danger"
+                title="Discussion could not be updated."
+                action={comments === null ? <Button size="sm" variant="outline" onClick={() => void loadComments(null)}>Retry</Button> : undefined}
+              >
+                {commentsError}
+              </InlineAlert>
+            ) : null}
             {comments && comments.length > 0 ? (
               <div className="space-y-3">
                 {comments.map((comment) => {
@@ -1285,7 +1405,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={() => { setEditingCommentId(comment.id); setEditingCommentContent(comment.content); setEditingCommentSelectionStart(comment.content.length) }}>Edit</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => void handleDeleteComment(comment.id)}>Delete</DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => secondaryDelete.request({ kind: 'comment', id: comment.id, label: `comment by ${comment.author.name}` })}>Delete</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ) : null}
@@ -1340,12 +1460,12 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
         <aside className="min-h-0 overflow-y-auto border-t border-border/70 bg-muted/10 lg:border-l lg:border-t-0">
           <Tabs value={rightTab} onValueChange={(value) => setRightTab(value as typeof rightTab)} className="flex h-full flex-col">
             <div className="border-b border-border/60 px-3 pt-3 md:px-4 md:pt-4">
-              <TabsList className="grid h-auto w-full grid-cols-5 rounded-xl bg-muted/25 p-1">
-                <TabsTrigger value="general" className="h-8 rounded-lg text-xs font-medium">General</TabsTrigger>
-                <TabsTrigger value="attachments" className="h-8 rounded-lg text-xs font-medium">Files</TabsTrigger>
-                <TabsTrigger value="history" className="h-8 rounded-lg text-xs font-medium">History</TabsTrigger>
-                <TabsTrigger value="git" className="h-8 rounded-lg text-xs font-medium">Git</TabsTrigger>
-                <TabsTrigger value="approvals" className="h-8 rounded-lg text-xs font-medium">Approvals</TabsTrigger>
+              <TabsList className="flex h-auto w-full justify-start overflow-x-auto rounded-xl bg-muted/25 p-1 sm:grid sm:grid-cols-5">
+                <TabsTrigger value="general" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">General</TabsTrigger>
+                <TabsTrigger value="attachments" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Files</TabsTrigger>
+                <TabsTrigger value="history" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">History</TabsTrigger>
+                <TabsTrigger value="git" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Git</TabsTrigger>
+                <TabsTrigger value="approvals" className="h-11 min-w-24 rounded-lg text-xs font-medium sm:h-8 sm:min-w-0">Approvals</TabsTrigger>
               </TabsList>
             </div>
 
@@ -1371,7 +1491,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
 
               <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">System</div>
+                  <div className="type-label">System</div>
                   <div className="mt-1 text-xs text-muted-foreground">Track sizing, effort, and execution details tied to this work item.</div>
                 </div>
                 <div className="space-y-1 text-sm">
@@ -1431,9 +1551,102 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                   </div>
                 </div>
               </section>
+
+              <section className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
+                <div>
+                  <div className="type-label">Linked work items</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Track hierarchy, blockers, duplicates, and related delivery work.</div>
+                </div>
+                {relationsError ? (
+                  <InlineAlert
+                    tone="danger"
+                    title="Links could not be updated."
+                    action={relations === null ? <Button size="sm" variant="outline" onClick={() => void loadRelations(null)}>Retry</Button> : undefined}
+                  >
+                    {relationsError}
+                  </InlineAlert>
+                ) : null}
+                {canLink ? (
+                  <div className="space-y-2 rounded-lg border border-border/70 bg-background p-2.5">
+                    <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+                      <Select value={linkType} onValueChange={(value) => setLinkType(value as LinkType)}>
+                        <SelectTrigger className="h-9" aria-label="Link type"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {linkTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        value={linkSearch}
+                        onChange={(event) => setLinkSearch(event.target.value)}
+                        placeholder="Search by key or title"
+                        aria-label="Search work items to link"
+                      />
+                    </div>
+                    {isSearchingLinks ? <p className="text-xs text-muted-foreground">Searching...</p> : null}
+                    {linkSearchError ? <InlineAlert tone="danger">{linkSearchError}</InlineAlert> : null}
+                    {linkCandidates.length > 0 ? (
+                      <div className="max-h-44 space-y-1 overflow-y-auto">
+                        {linkCandidates.map((candidate) => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => void handleAddLink(candidate.id)}
+                          >
+                            <span className="font-mono font-semibold">{candidate.key}</span>
+                            <span className="min-w-0 truncate text-muted-foreground">{candidate.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : deferredLinkSearch.trim().length >= 2 && !isSearchingLinks && !linkSearchError ? (
+                      <p className="text-xs text-muted-foreground">No available work items match that search.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {loadingRelations && relations === null ? (
+                  <p className="text-xs text-muted-foreground">Loading links...</p>
+                ) : relations && relations.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {relations.map((relation) => (
+                      <div key={relation.id} className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-2.5 py-2">
+                        <Badge variant="outline" className="shrink-0 text-[9px]">{relation.relationType.replace(/_/g, ' ')}</Badge>
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openWorkItem(relation.linkedIssue.id)}>
+                          <span className="block truncate text-xs font-medium"><span className="font-mono">{relation.linkedIssue.key}</span> {relation.linkedIssue.title}</span>
+                        </button>
+                        {canLink ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive"
+                            aria-label={`Remove link to ${relation.linkedIssue.key}`}
+                            onClick={() => secondaryDelete.request({ kind: 'relation', id: relation.id, label: `link to ${relation.linkedIssue.key}` })}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : relations ? (
+                  <p className="text-xs text-muted-foreground">No linked work items.</p>
+                ) : null}
+                {relationsCursor ? (
+                  <Button variant="outline" size="sm" className="w-full" disabled={loadingRelations} onClick={() => void loadRelations(relationsCursor)}>Load more links</Button>
+                ) : null}
+              </section>
             </TabsContent>
 
             <TabsContent value="attachments" className="m-0 space-y-3 overflow-y-auto p-3 md:p-4">
+              {attachmentsError ? (
+                <InlineAlert
+                  tone="danger"
+                  title="Files could not be updated."
+                  action={attachments === null ? <Button size="sm" variant="outline" onClick={() => void loadAttachments()}>Retry</Button> : undefined}
+                >
+                  {attachmentsError}
+                </InlineAlert>
+              ) : null}
               {canUpdate && (
                 <div className="space-y-2 rounded-xl border border-border/70 bg-card/80 p-3 shadow-sm">
                   <input
@@ -1473,7 +1686,10 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                           </div>
                         </div>
                         <a
-                          href={att.filePath}
+                          // Routed rather than a direct file path: the endpoint
+                          // authorises against the parent work item before
+                          // returning anything.
+                          href={`/api/attachments/${att.id}`}
                           download={att.fileName}
                           className="inline-flex items-center justify-center rounded-md h-7 w-7 hover:bg-accent transition-colors"
                           title="Download"
@@ -1481,7 +1697,7 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
                           <Download className="h-3.5 w-3.5" />
                         </a>
                         {canUpdate && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete attachment" onClick={() => void handleDeleteAttachment(att.id)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Delete attachment" onClick={() => secondaryDelete.request({ kind: 'attachment', id: att.id, label: att.fileName })}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
@@ -1498,6 +1714,11 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
             </TabsContent>
 
             <TabsContent value="history" className="m-0 space-y-3 overflow-y-auto p-3 md:p-4">
+              {historyError ? (
+                <InlineAlert tone="danger" title="History unavailable." action={<Button size="sm" variant="outline" onClick={() => void loadHistory(null)}>Retry</Button>}>
+                  {historyError}
+                </InlineAlert>
+              ) : null}
               {loadingHistory && history === null ? (
                 <div className="text-sm text-muted-foreground">Loading history...</div>
               ) : history && history.length > 0 ? (
@@ -1543,6 +1764,47 @@ export function WorkItemDetailContent(props: WorkItemDetailContentProps) {
           </Tabs>
         </aside>
       </div>
+      <ConfirmDestructiveDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title={`Delete ${issue.key}?`}
+        description={
+          <>
+            <span className="font-medium text-foreground">{issue.title}</span> and its comments,
+            attachments, links, and history will be permanently removed.
+          </>
+        }
+        confirmLabel="Delete work item"
+        onConfirm={handleDelete}
+      />
+      <ConfirmDestructiveDialog
+        open={secondaryDelete.isOpen}
+        onOpenChange={secondaryDelete.onOpenChange}
+        title={
+          secondaryDelete.target?.kind === 'attachment'
+            ? 'Delete attachment?'
+            : secondaryDelete.target?.kind === 'comment'
+              ? 'Delete comment?'
+              : 'Remove work item link?'
+        }
+        description={
+          secondaryDelete.target
+            ? secondaryDelete.target.kind === 'attachment'
+              ? `The file "${secondaryDelete.target.label}" will be permanently removed from this work item.`
+              : secondaryDelete.target.kind === 'comment'
+                ? `The ${secondaryDelete.target.label} and its revision history will be permanently removed.`
+                : `The ${secondaryDelete.target.label} will be removed. Both work items will remain available.`
+            : ''
+        }
+        confirmLabel={secondaryDelete.target?.kind === 'relation' ? 'Remove link' : 'Delete'}
+        onConfirm={async () => {
+          const target = secondaryDelete.target
+          if (!target) return false
+          if (target.kind === 'attachment') return handleDeleteAttachment(target.id)
+          if (target.kind === 'comment') return handleDeleteComment(target.id)
+          return handleRemoveLink(target.id)
+        }}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from 'react'
 import { useOnboardingSafe } from '@/hooks/use-onboarding'
+import { useAppStore } from '@/store/app-store'
 
 /**
  * Maps user actions to onboarding step view-tracking events.
@@ -33,6 +34,7 @@ const ACTION_TO_EVENT_STEP: Record<string, string> = {
 
 export function useOnboardingEvents() {
   const ctx = useOnboardingSafe()
+  const currentProject = useAppStore((state) => state.currentProject)
   const debounceRef = useRef<Record<string, number>>({})
 
   /**
@@ -41,7 +43,8 @@ export function useOnboardingEvents() {
    */
   const trackAction = useCallback(
     (action: OnboardingAction) => {
-      if (!ctx) return
+      const projectId = currentProject?.id
+      if (!projectId) return
 
       // Debounce: skip if same action tracked within 5 seconds
       const now = Date.now()
@@ -51,15 +54,44 @@ export function useOnboardingEvents() {
       debounceRef.current[action] = now
 
       const eventStep = ACTION_TO_EVENT_STEP[action]
-      if (eventStep) {
-        // Event-based step: record, then refresh
-        void ctx.recordEvent(eventStep).then(() => ctx.refresh())
-      } else {
-        // Data-based step: just refresh (engine evaluates real data)
-        void ctx.refresh()
+
+      if (!eventStep) {
+        // Data-based step: the engine re-evaluates real data on the next fetch.
+        void ctx?.refresh()
+        return
       }
+
+      /*
+        Post the event directly rather than through the context.
+
+        The workspace calls this hook from the same component that renders
+        `OnboardingProvider`, so it sits *above* its own provider and
+        `useOnboardingSafe()` returns null — every call used to bail out at the
+        top. The two event-based steps, "View your Kanban board" and "Check out
+        reports", were therefore never recorded for anyone, and the checklist
+        could not pass 80%.
+
+        Writing the event here does not depend on where the provider sits. The
+        refresh below is still routed through the context when it is available,
+        so a mounted checklist updates immediately; without it the next status
+        fetch picks the event up anyway.
+      */
+      void (async () => {
+        try {
+          await fetch('/api/onboarding/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, stepKey: eventStep }),
+          })
+        } catch {
+          // Onboarding progress is not worth interrupting navigation for.
+          return
+        }
+
+        await ctx?.refresh()
+      })()
     },
-    [ctx]
+    [ctx, currentProject?.id]
   )
 
   return { trackAction }

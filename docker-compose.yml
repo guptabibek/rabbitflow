@@ -53,8 +53,12 @@ services:
     command:
       - -c
       - |
-        apk add --no-cache curl > /dev/null 2>&1
-        echo "*/2 * * * * curl -sf -X POST -H 'x-cron-secret: '\"$$CRON_SECRET\" \"$$APP_INTERNAL_URL/api/cron\" > /proc/1/fd/1 2>&1" | crontab -
+        set -eu
+        cat <<EOF | crontab -
+        SHELL=/bin/sh
+        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        */2 * * * * /usr/bin/wget -qO- -T 60 --post-data='' --header='x-cron-secret: $${CRON_SECRET}' "$${APP_INTERNAL_URL}/api/cron" > /proc/1/fd/1 2>&1
+        EOF
         echo "Cron scheduler started (every 2 min)"
         crond -f -l 6
     restart: unless-stopped

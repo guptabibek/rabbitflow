@@ -33,12 +33,18 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
+import { ErrorState, InlineAlert } from '@/components/ui/states'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from '@/components/project-management/confirm-destructive-dialog'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -74,12 +80,29 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    // `setLoading(true)` ran synchronously in the effect body, which forces a
+    // second render on every mount. Loading starts true and is only cleared
+    // after the fetch settles, so the synchronous set was redundant as well.
+    //
+    // `cancelled` guards against a late response from a previous projectId
+    // overwriting the current one.
+    let cancelled = false
+
     fetch(`/api/onboarding/analytics?projectId=${projectId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+      .then((d) => {
+        if (!cancelled) setData(d)
+      })
+      .catch(() => {
+        if (!cancelled) setData(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [projectId])
 
   if (loading) {
@@ -118,7 +141,7 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-3xl font-bold text-emerald-500">{data.completionRate}%</div>
+            <div className="text-3xl font-bold text-success">{data.completionRate}%</div>
             <div className="text-sm text-muted-foreground">
               Completion rate ({data.completedUsers} users)
             </div>
@@ -146,8 +169,8 @@ function AnalyticsPanel({ projectId }: { projectId: string }) {
                 <div key={stepKey} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-muted-foreground">{stepKey}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-emerald-500">{stats.completed} completed</span>
-                    <span className="text-amber-500">{stats.dismissed} skipped</span>
+                    <span className="text-success">{stats.completed} completed</span>
+                    <span className="text-warning">{stats.dismissed} skipped</span>
                   </div>
                 </div>
               ))}
@@ -169,7 +192,7 @@ function StepEditorDialog({
 }: {
   step: StepConfig | null
   availableRules: Record<string, string>
-  onSave: (step: StepConfig) => void
+  onSave: (step: StepConfig) => Promise<true | string>
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<StepConfig>(
@@ -187,15 +210,22 @@ function StepEditorDialog({
       order: 999,
     }
   )
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const isNew = !step?.key
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
+    setFormError(null)
     if (!draft.key.trim() || !draft.title.trim() || !draft.completionRule.trim()) {
-      toast.error('Key, title, and completion rule are required')
+      setFormError('Key, title, and completion rule are required.')
       return
     }
-    onSave(draft)
+    setSaving(true)
+    const result = await onSave(draft)
+    setSaving(false)
+    if (result === true) onClose()
+    else setFormError(result)
   }
 
   return (
@@ -203,6 +233,7 @@ function StepEditorDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isNew ? 'Add Step' : 'Edit Step'}</DialogTitle>
+          <DialogDescription>Configure who sees this onboarding step and how it is completed.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
@@ -324,13 +355,15 @@ function StepEditorDialog({
           </div>
         </div>
 
+        {formError ? <InlineAlert tone="danger" title="Step not saved.">{formError}</InlineAlert> : null}
+
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={onSubmit}>
+          <Button onClick={() => void onSubmit()} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
-            {isNew ? 'Add Step' : 'Save'}
+            {saving ? 'Saving…' : isNew ? 'Add Step' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -350,10 +383,14 @@ export function OnboardingConfigView() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editingStep, setEditingStep] = useState<StepConfig | null | 'new'>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const deleteConfirm = useDestructiveConfirm<StepConfig>()
 
   const fetchConfig = async () => {
     if (!currentProject) return
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await fetch(`/api/onboarding/config?projectId=${currentProject.id}`)
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Failed to load'))
@@ -361,7 +398,8 @@ export function OnboardingConfigView() {
       setSteps(data.steps ?? [])
       setAvailableRules(data.availableRules ?? {})
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load config')
+      setSteps([])
+      setLoadError(err instanceof Error ? err.message : 'Failed to load config')
     } finally {
       setLoading(false)
     }
@@ -376,9 +414,10 @@ export function OnboardingConfigView() {
     void fetchConfig()
   }, [canManage, currentProject?.id])
 
-  const saveAll = async (updatedSteps: StepConfig[]) => {
-    if (!currentProject) return
+  const saveAll = async (updatedSteps: StepConfig[]): Promise<true | string> => {
+    if (!currentProject) return 'Select a project before saving onboarding configuration.'
     setSaving(true)
+    setActionError(null)
     try {
       const res = await fetch('/api/onboarding/config', {
         method: 'PUT',
@@ -404,8 +443,11 @@ export function OnboardingConfigView() {
       const data = await res.json()
       setSteps(data.steps ?? [])
       toast.success('Onboarding config saved')
+      return true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save')
+      const message = err instanceof Error ? err.message : 'Failed to save'
+      setActionError(message)
+      return message
     } finally {
       setSaving(false)
     }
@@ -419,12 +461,7 @@ export function OnboardingConfigView() {
     void saveAll(newSteps)
   }
 
-  const removeStep = (key: string) => {
-    const updated = steps.filter((s) => s.key !== key)
-    void saveAll(updated)
-  }
-
-  const handleStepSave = (step: StepConfig) => {
+  const handleStepSave = async (step: StepConfig) => {
     const existing = steps.findIndex((s) => s.key === step.key)
     let updated: StepConfig[]
     if (existing >= 0) {
@@ -432,12 +469,12 @@ export function OnboardingConfigView() {
     } else {
       updated = [...steps, { ...step, order: steps.length * 10 }]
     }
-    setEditingStep(null)
-    void saveAll(updated)
+    return saveAll(updated)
   }
 
   const handleResetForUser = async () => {
     if (!currentProject) return
+    setActionError(null)
     try {
       const res = await fetch('/api/onboarding/reset', {
         method: 'POST',
@@ -447,7 +484,7 @@ export function OnboardingConfigView() {
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Failed to reset'))
       toast.success('Onboarding state reset')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to reset')
+      setActionError(err instanceof Error ? err.message : 'Failed to reset')
     }
   }
 
@@ -484,11 +521,21 @@ export function OnboardingConfigView() {
           Onboarding is managed centrally by project admins, while each step can still target specific roles.
         </div>
 
+        {actionError ? (
+          <InlineAlert tone="danger" title="Onboarding change not completed.">{actionError}</InlineAlert>
+        ) : null}
+
         <TabsContent value="config" className="mt-4">
           {loading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               Loading configuration…
             </div>
+          ) : loadError ? (
+            <ErrorState
+              title="Onboarding configuration did not load"
+              detail={loadError}
+              onRetry={() => void fetchConfig()}
+            />
           ) : steps.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
@@ -537,6 +584,7 @@ export function OnboardingConfigView() {
                         size="icon"
                         className="h-7 w-7"
                         disabled={index === 0 || saving}
+                        aria-label="Move step up"
                         onClick={() => moveStep(index, -1)}
                       >
                         <ArrowUp className="h-3.5 w-3.5" />
@@ -546,6 +594,7 @@ export function OnboardingConfigView() {
                         size="icon"
                         className="h-7 w-7"
                         disabled={index === steps.length - 1 || saving}
+                        aria-label="Move step down"
                         onClick={() => moveStep(index, 1)}
                       >
                         <ArrowDown className="h-3.5 w-3.5" />
@@ -554,6 +603,7 @@ export function OnboardingConfigView() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        aria-label="Edit onboarding step"
                         onClick={() => setEditingStep(step)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -562,7 +612,8 @@ export function OnboardingConfigView() {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive"
-                        onClick={() => removeStep(step.key)}
+                        aria-label="Remove onboarding step"
+                        onClick={() => deleteConfirm.request(step)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -588,6 +639,18 @@ export function OnboardingConfigView() {
           onClose={() => setEditingStep(null)}
         />
       )}
+
+      <ConfirmDestructiveDialog
+        open={deleteConfirm.isOpen}
+        onOpenChange={deleteConfirm.onOpenChange}
+        title={`Remove onboarding step “${deleteConfirm.target?.title ?? ''}”?`}
+        description="This removes the step from the project onboarding sequence for every role."
+        confirmLabel="Remove step"
+        onConfirm={async () => {
+          if (!deleteConfirm.target) return false
+          return saveAll(steps.filter((step) => step.key !== deleteConfirm.target?.key))
+        }}
+      />
     </div>
   )
 }

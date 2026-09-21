@@ -21,10 +21,127 @@ test.use({ storageState: AUTH_STATES.admin })
 test.describe('Projects And Onboarding', () => {
   test.describe.configure({ mode: 'parallel' })
 
+  test('project and user forms explain validation and retain input after server failures', async ({ page }) => {
+    const projectName = makeProjectName('feedback-project')
+    const projectKey = makeProjectKey()
+
+    await openDashboard(page)
+    await page.getByTestId('dashboard-new-project-button').click()
+    await page.getByTestId('dashboard-create-project-submit-button').click()
+
+    await expect(page.getByTestId('dashboard-create-project-name-input')).toHaveAttribute(
+      'aria-invalid',
+      'true'
+    )
+    await expect(page.getByText('Enter a project name.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Use 2–10 uppercase letters.', { exact: true })).toBeVisible()
+
+    await page.getByTestId('dashboard-create-project-name-input').fill(projectName)
+    await page.getByTestId('dashboard-create-project-key-input').fill(projectKey)
+    await page.route('**/api/projects', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Injected project creation failure' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.getByTestId('dashboard-create-project-submit-button').click()
+    await expect(page.getByTestId('dashboard-create-project-error')).toContainText(
+      'Injected project creation failure'
+    )
+    await expect(page.getByTestId('dashboard-create-project-name-input')).toHaveValue(projectName)
+    await expect(page.getByTestId('dashboard-create-project-key-input')).toHaveValue(projectKey)
+    await page.keyboard.press('Escape')
+
+    await page.getByTestId('account-menu-trigger').click()
+    await page.getByTestId('dashboard-new-user-button').click()
+    await page.getByTestId('dashboard-create-user-submit-button').click()
+
+    await expect(page.getByTestId('dashboard-create-user-name-input')).toHaveAttribute(
+      'aria-invalid',
+      'true'
+    )
+    await expect(page.getByText('Enter an email address.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Use at least 8 characters.', { exact: true })).toBeVisible()
+
+    const userName = 'Retained QA User'
+    const userEmail = `${makeProjectKey().toLowerCase()}@example.com`
+    const password = 'temporary-password'
+    await page.getByTestId('dashboard-create-user-name-input').fill(userName)
+    await page.getByTestId('dashboard-create-user-email-input').fill(userEmail)
+    await page.getByTestId('dashboard-create-user-password-input').fill(password)
+    await page.route('**/api/users', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Injected user creation failure' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.getByTestId('dashboard-create-user-submit-button').click()
+    await expect(page.getByTestId('dashboard-create-user-error')).toContainText(
+      'Injected user creation failure'
+    )
+    await expect(page.getByTestId('dashboard-create-user-name-input')).toHaveValue(userName)
+    await expect(page.getByTestId('dashboard-create-user-email-input')).toHaveValue(userEmail)
+    await expect(page.getByTestId('dashboard-create-user-password-input')).toHaveValue(password)
+  })
+
+  test('project edits stay open with the draft when saving fails', async ({ page, seed }) => {
+    const project = await seed.createProjectFixture({ name: makeProjectName('edit-feedback') })
+    const editedName = makeProjectName('retained-edit')
+
+    await openDashboard(page)
+    await page.getByTestId('dashboard-project-search-input').fill(project.name)
+    const card = page
+      .locator('[data-testid^="dashboard-project-card-"]')
+      .filter({ hasText: project.name })
+      .first()
+    await card.locator('[data-testid^="dashboard-project-actions-"]').click()
+    await page.locator('[data-testid^="dashboard-project-edit-"]').click()
+    await page.getByTestId('dashboard-edit-project-name-input').fill(editedName)
+
+    await page.route(`**/api/projects/${project.id}`, async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Injected project update failure' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.getByTestId('dashboard-edit-project-submit-button').click()
+    await expect(page.getByTestId('dashboard-edit-project-error')).toContainText(
+      'Injected project update failure'
+    )
+    await expect(page.getByTestId('dashboard-edit-project-name-input')).toHaveValue(editedName)
+    await expect(page.getByTestId('dashboard-edit-project-dialog')).toBeVisible()
+  })
+
   test('admin can create, edit, search, and delete a project from the dashboard', async ({ page, seed }) => {
     const projectName = makeProjectName('dashboard-project')
     const projectKey = makeProjectKey()
-    const updatedName = `${projectName} Updated`
+    /*
+      A wholly different name, not `${projectName} Updated`.
+
+      Search is a substring match, so a new name containing the old one still
+      matches the old one — and the "searching the previous name now finds
+      nothing" assertion below could never pass, whatever the empty-state copy
+      happened to say.
+    */
+    const updatedName = makeProjectName('dashboard-project-renamed')
     const updatedDescription = `${E2E_PREFIX}: updated project description`
 
     const createResponse = await createProject(page, {
@@ -44,7 +161,9 @@ test.describe('Projects And Onboarding', () => {
     expect(updatedProject?.description).toBe(updatedDescription)
 
     await page.getByTestId('dashboard-project-search-input').fill(projectName)
-    await expect(page.getByText('No projects found')).toBeVisible()
+    // The empty state names the term that found nothing, rather than saying
+    // "No projects found" and leaving the user to work out why.
+    await expect(page.getByText(/No projects match/i)).toBeVisible()
 
     await page.getByTestId('dashboard-project-search-input').fill(updatedName)
     await expect(page.locator('[data-testid^="dashboard-project-card-"]').filter({ hasText: updatedName })).toHaveCount(1)
@@ -67,6 +186,21 @@ test.describe('Projects And Onboarding', () => {
     const createdProject = await readJson(createResponse)
     const projectId = createdProject.id as string
 
+    const compactChecklist = page.getByTestId('onboarding-checklist-compact')
+    const sidebarCreate = page.getByTestId('sidebar-new-work-item-button')
+    await expect(compactChecklist).toBeVisible()
+    await expect(sidebarCreate).toBeVisible()
+    const [checklistBox, createBox] = await Promise.all([
+      compactChecklist.boundingBox(),
+      sidebarCreate.boundingBox(),
+    ])
+    expect(checklistBox).not.toBeNull()
+    expect(createBox).not.toBeNull()
+    expect(checklistBox!.y + checklistBox!.height).toBeLessThanOrEqual(createBox!.y)
+    await sidebarCreate.click()
+    await expect(page.getByTestId('create-work-item-surface')).toBeVisible()
+    await page.getByTestId('create-work-item-cancel-button').click()
+
     await Promise.all([
       seed.createLabelFixture(projectId),
       seed.createTeamFixture({ projectId }),
@@ -83,12 +217,15 @@ test.describe('Projects And Onboarding', () => {
     const createdIssue = await seed.findIssueByTitle(projectId, issueTitle)
     expect(createdIssue?.title).toBe(issueTitle)
 
-    const doneState = await seed.getDoneState(projectId)
-    expect(doneState?.name).toBeTruthy()
+    // Assign and advance one legal step through the UI. Done is six hops away
+    // and the workflow rejects the jump, so the save here proves the edit path
+    // rather than the state machine.
+    const nextState = await seed.getAllowedNextState(createdIssue!.id)
+    expect(nextState).not.toBeNull()
 
     await openWorkItemFromList(page, issueTitle)
     await selectRadixOption(page, 'work-item-assignee-trigger', accounts.member.name)
-    await selectRadixOption(page, 'work-item-state-trigger', doneState!.name)
+    await selectRadixOption(page, 'work-item-state-trigger', nextState!.name)
 
     const saveResponsePromise = page.waitForResponse(
       (response) => /\/api\/issues\//.test(response.url()) && response.request().method() === 'PUT'
@@ -101,7 +238,13 @@ test.describe('Projects And Onboarding', () => {
 
     const updatedIssue = await seed.findIssueByTitle(projectId, issueTitle)
     expect(updatedIssue?.assignee?.name).toBe(accounts.member.name)
-    expect(updatedIssue?.stateRecord?.name).toBe(doneState!.name)
+    expect(updatedIssue?.stateRecord?.name).toBe(nextState!.name)
+
+    // The checklist's "Complete your first work item" step needs an issue that
+    // actually reached Done. That is a precondition for the progress assertion
+    // below, not the behaviour under test, so it is set through the fixture.
+    const doneState = await seed.completeIssue(createdIssue!.id)
+    expect(doneState.name).toBeTruthy()
 
     await closeEmbeddedWorkItem(page)
 

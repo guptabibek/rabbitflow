@@ -34,6 +34,7 @@ type DynamicWorkItemFieldsProps = {
   areas: Area[]
   teams: Team[]
   onChange: (key: string, value: unknown) => void
+  errors?: Record<string, string>
 }
 
 export function DynamicWorkItemFields({
@@ -44,6 +45,7 @@ export function DynamicWorkItemFields({
   areas,
   teams,
   onChange,
+  errors = {},
 }: DynamicWorkItemFieldsProps) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
 
@@ -71,7 +73,8 @@ export function DynamicWorkItemFields({
                 }
               >
                 <span className="flex items-center justify-center rounded-md border p-1">
-                  {collapsedSections[section.id] ? (
+                  {collapsedSections[section.id] &&
+                  !section.fields.some((field) => Boolean(errors[field.key])) ? (
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -97,7 +100,9 @@ export function DynamicWorkItemFields({
           {/* Fields */}
           <div
             className={`grid gap-5 grid-cols-1 ${
-              section.isCollapsible && collapsedSections[section.id]
+              section.isCollapsible &&
+              collapsedSections[section.id] &&
+              !section.fields.some((field) => Boolean(errors[field.key]))
                 ? 'hidden'
                 : ''
             }`}
@@ -106,6 +111,13 @@ export function DynamicWorkItemFields({
               if (HIDDEN_SYSTEM_FIELD_KEYS.has(field.key)) return null
 
               const value = values[field.key]
+              const fieldError = errors[field.key]
+              const errorId = `work-item-field-${field.key}-error`
+              const errorMessage = fieldError ? (
+                <p id={errorId} className="text-xs text-destructive">
+                  {fieldError}
+                </p>
+              ) : null
 
               const baseWrapper =
                 'space-y-1.5 transition-all duration-200'
@@ -122,7 +134,10 @@ export function DynamicWorkItemFields({
                       placeholder={field.placeholder || undefined}
                       rows={6}
                       className="w-full rounded-xl border-muted focus-visible:ring-2"
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
                     />
+                    {errorMessage}
                   </div>
                 )
               }
@@ -138,7 +153,10 @@ export function DynamicWorkItemFields({
                       value={typeof value === 'string' ? value : ''}
                       onChange={(e) => onChange(field.key, e.target.value)}
                       placeholder={field.placeholder || undefined}
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
                     />
+                    {errorMessage}
                   </div>
                 )
               }
@@ -160,7 +178,10 @@ export function DynamicWorkItemFields({
                       }
                       placeholder={field.placeholder || undefined}
                       className="rounded-xl"
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
                     />
+                    {errorMessage}
                   </div>
                 )
               }
@@ -176,7 +197,10 @@ export function DynamicWorkItemFields({
                       value={typeof value === 'string' ? value.slice(0, 10) : ''}
                       onChange={(e) => onChange(field.key, e.target.value || null)}
                       className="rounded-xl"
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
                     />
+                    {errorMessage}
                   </div>
                 )
               }
@@ -202,7 +226,10 @@ export function DynamicWorkItemFields({
                       onCheckedChange={(checked) =>
                         onChange(field.key, checked === true)
                       }
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
                     />
+                    {errorMessage}
                   </div>
                 )
               }
@@ -223,7 +250,12 @@ export function DynamicWorkItemFields({
                         onChange(field.key, next === EMPTY_SELECT ? null : next)
                       }
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger
+                        className="w-full"
+                        data-testid={`work-item-field-${field.key}`}
+                        aria-invalid={Boolean(fieldError)}
+                        aria-describedby={fieldError ? errorId : undefined}
+                      >
                         <SelectValue
                           placeholder={field.placeholder || 'Select'}
                         />
@@ -237,6 +269,7 @@ export function DynamicWorkItemFields({
                         ))}
                       </SelectContent>
                     </Select>
+                    {errorMessage}
                   </div>
                 )
               }
@@ -273,6 +306,7 @@ export function DynamicWorkItemFields({
                         )
                       })}
                     </div>
+                    {errorMessage}
                   </div>
                 )
               }
@@ -281,26 +315,33 @@ export function DynamicWorkItemFields({
                 items: { id: string; label: string }[],
                 placeholder: string
               ) => (
-                <Select
-                  value={
-                    typeof value === 'string' && value ? value : EMPTY_SELECT
-                  }
-                  onValueChange={(next) =>
-                    onChange(field.key, next === EMPTY_SELECT ? null : next)
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={placeholder} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_SELECT}>None</SelectItem>
-                    {items.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={
+                      typeof value === 'string' && value ? value : EMPTY_SELECT
+                    }
+                    onValueChange={(next) =>
+                      onChange(field.key, next === EMPTY_SELECT ? null : next)
+                    }
+                  >
+                    <SelectTrigger
+                      className="w-full"
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
+                    >
+                      <SelectValue placeholder={placeholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT}>None</SelectItem>
+                      {items.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errorMessage}
+                </>
               )
 
               if (field.dataType === 'user') {

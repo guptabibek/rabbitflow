@@ -10,14 +10,24 @@ async function getRequestBranding() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getRequestBranding()
+  const registrationEnabled = process.env.ALLOW_SELF_REGISTRATION === 'true'
   return {
-    title: `Register - ${branding.displayName}`,
-    description: `Create your ${branding.displayName} account and continue into the workspace.`,
-    icons: branding.faviconUrl ? { icon: branding.faviconUrl } : undefined,
+    title: registrationEnabled
+      ? `Register - ${branding.displayName}`
+      : `Account Access - ${branding.displayName}`,
+    description: registrationEnabled
+      ? `Create your ${branding.displayName} account and continue into the workspace.`
+      : `Contact your administrator for access to ${branding.displayName}.`,
+    ...(branding.faviconUrl ? { icons: { icon: branding.faviconUrl } } : {}),
   }
 }
 
 export default async function RegisterPage() {
   const branding = await getRequestBranding()
-  return <RegisterExperience branding={branding} />
+  return (
+    <RegisterExperience
+      branding={branding}
+      registrationEnabled={process.env.ALLOW_SELF_REGISTRATION === 'true'}
+    />
+  )
 }

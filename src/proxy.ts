@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
+import { isScheduledJobRoute } from '@/lib/scheduled-job-routes'
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET
@@ -7,14 +8,22 @@ const secret = new TextEncoder().encode(
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const isAdminPageRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+  // Admin *pages* need no gate here — src/app/admin/layout.tsx re-reads the
+  // role from the database and redirects. Only the API prefix is still special,
+  // to keep bearer tokens away from administrative endpoints.
   const isAdminApiRoute = pathname.startsWith('/api/admin')
   const isPublicAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
-  const isPublicHealthRoute = pathname === '/api/health'
+  // Covers /api/health, /api/health/live and /api/health/ready.
+  const isPublicHealthRoute = pathname === '/api/health' || pathname.startsWith('/api/health/')
+  // These machine-to-machine endpoints authenticate with x-cron-secret in
+  // their route handlers. Requiring a browser session here prevents the
+  // scheduler from ever reaching that dedicated authentication check.
+  const usesScheduledJobAuthentication = isScheduledJobRoute(pathname)
 
   // Public auth APIs, no auth required.
   if (
     isPublicHealthRoute ||
+    usesScheduledJobAuthentication ||
     pathname === '/api/auth/login' ||
     pathname === '/api/auth/register' ||
     pathname === '/api/auth/logout' ||
@@ -26,6 +35,20 @@ export default async function proxy(request: NextRequest) {
   }
 
   const token = request.cookies.get('auth-token')?.value
+
+  // Programmatic API access presents a bearer token instead of a session cookie.
+  // This gate runs on the edge runtime and cannot reach the database to validate
+  // it, so the request is forwarded and `domain/auth.ts` authenticates the token
+  // against ApiToken (checking hash, revocation, expiry, owner activity and
+  // scope). Nothing is trusted here beyond "there is a bearer header to check".
+  //
+  // Restricted to /api/ so a bearer header can never stand in for a session on a
+  // page route, and no x-user-id is injected, so an unauthenticated request that
+  // slips past here still resolves to no identity downstream.
+  const hasBearerToken = request.headers.get('authorization')?.toLowerCase().startsWith('bearer ')
+  if (!token && hasBearerToken && pathname.startsWith('/api/') && !isAdminApiRoute) {
+    return NextResponse.next()
+  }
 
   if (!token) {
     if (isPublicAuthRoute) {
@@ -40,19 +63,23 @@ export default async function proxy(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secret)
-    const role = (payload as { role?: unknown }).role
 
     if (isPublicAuthRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    if ((isAdminPageRoute || isAdminApiRoute) && role === 'member') {
-      if (isAdminApiRoute) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
+    // Admin access is decided downstream, against the database, not from the
+    // token's `role` claim.
+    //
+    // The claim is baked in at sign-in and the session lasts 30 days, so it goes
+    // stale in both directions. Denying on a stale claim meant a user promoted
+    // to admin was bounced from /admin until their token happened to refresh,
+    // while a demoted admin was caught anyway by the authoritative checks —
+    // `AdminLayout` re-reads globalRole from the database and redirects, and
+    // every /api/admin route calls requireSystemAdmin, which does the same.
+    //
+    // Letting the request through costs nothing and makes a role change take
+    // effect immediately.
 
     const headers = new Headers(request.headers)
     headers.set('x-user-id', payload.sub as string)
@@ -60,6 +87,13 @@ export default async function proxy(request: NextRequest) {
     if (typeof sessionId === 'string' && sessionId.trim()) {
       headers.set('x-session-id', sessionId)
     }
+
+    // One id per request, so a log line and a user's error report can be tied
+    // together. Generated here rather than per-handler so every route in a
+    // single request shares it. An inbound value is overwritten: a client must
+    // not be able to choose or collide with a server-side correlation id.
+    headers.set('x-request-id', crypto.randomUUID())
+
     return NextResponse.next({ request: { headers } })
   } catch {
     if (isPublicAuthRoute) {
@@ -80,5 +114,14 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt).*)'],
+  // Excludes framework assets and the handful of public branding files that must
+  // load on the unauthenticated login page. Gating these files made the logo
+  // and browser icon requests redirect back to /login.
+  //
+  // Deliberately narrow: only framework files, code-owned brand assets and the
+  // listed root files are exempt. `/uploads/**` stays behind the gate because
+  // those are user-supplied files that must not be readable without a session.
+  matcher: [
+    '/((?!_next/static|_next/image|brand/|favicon\\.ico|robots\\.txt|logo\\.svg|manifest\\.webmanifest|apple-touch-icon\\.png).*)',
+  ],
 }

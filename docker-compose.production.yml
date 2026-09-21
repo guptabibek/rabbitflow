@@ -19,13 +19,16 @@ services:
       NEXT_PUBLIC_APP_URL: ${APP_URL:?APP_URL must be set}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-20}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       RUN_BOOTSTRAP_SEED: ${RUN_BOOTSTRAP_SEED:-false}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       MFA_ISSUER: ${MFA_ISSUER:-RabbitFlow}
+      # Encrypts TOTP seeds at rest. Optional so an existing deployment keeps
+      # working, but strongly recommended — see .env.example.
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
       MFA_CHALLENGE_TTL_SECONDS: ${MFA_CHALLENGE_TTL_SECONDS:-600}
       PASSWORD_RESET_OTP_TTL_SECONDS: ${PASSWORD_RESET_OTP_TTL_SECONDS:-600}
       MFA_REQUIRE_ENROLLMENT: ${MFA_REQUIRE_ENROLLMENT:-true}
@@ -37,12 +40,17 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-RabbitFlow <no-reply@rabbitflow.local>}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set}
+      # Uploads live outside the web root so the static handler cannot serve
+      # them; they are returned by authorising route handlers instead.
+      UPLOAD_DIR: /app/var/uploads
     expose:
       - "3000"
     volumes:
-      - app_uploads:/app/public/uploads
+      - app_uploads:/app/var/uploads
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      # Readiness, not liveness: an instance that has lost Postgres or Redis cannot
+      # serve logins and must leave the rotation rather than keep taking traffic.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -73,11 +81,10 @@ services:
       - -c
       - |
         set -eu
-        apk add --no-cache curl > /dev/null 2>&1
         cat <<EOF | crontab -
         SHELL=/bin/sh
         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        */2 * * * * /usr/bin/curl -sf -X POST -H 'x-cron-secret: $${CRON_SECRET}' "$${APP_INTERNAL_URL}/api/cron" > /proc/1/fd/1 2>&1
+        */2 * * * * /usr/bin/wget -qO- -T 60 --post-data='' --header='x-cron-secret: $${CRON_SECRET}' "$${APP_INTERNAL_URL}/api/cron" > /proc/1/fd/1 2>&1
         EOF
         echo "Cron scheduler started (every 2 min)"
         crond -f -l 6
@@ -107,7 +114,14 @@ services:
     command:
       - -c
       - |
+        case "$${APP_DOMAIN}" in
+          *://*|*/*|*:*)
+            echo "APP_DOMAIN must be a hostname without a URL scheme, path, or port" >&2
+            exit 1
+            ;;
+        esac
         envsubst '$$APP_DOMAIN' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
+        nginx -t -c /tmp/nginx.conf
         exec nginx -c /tmp/nginx.conf -g 'daemon off;'
     read_only: true
     tmpfs:
@@ -133,8 +147,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+    # Deliberately NOT published to the host. Postgres is reachable only over the
+    # `internal` network, which is declared `internal: true`. Publishing it put the
+    # database on the host interface, where only the host firewall stood between it
+    # and the network. For ad-hoc admin access use `docker compose exec postgres psql`
+    # or an SSH tunnel.
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -156,13 +175,28 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    # Redis holds MFA challenges and password-reset OTPs, so an unauthenticated
+    # Redis is an authentication bypass — not merely a cache leak. It is password
+    # protected and, like Postgres, not published to the host.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+      - --loglevel
+      - warning
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
       interval: 10s
       timeout: 3s
       retries: 10

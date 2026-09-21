@@ -22,6 +22,7 @@ import {
   type WorkItemSectionDefinition,
 } from '@/store/app-store'
 import { WorkItemTypeManagement } from '@/components/project-management/work-item-type-management'
+import { AreasManagement } from '@/components/project-management/areas-management'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,7 +38,19 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowDown, ArrowUp, GripVertical, Layers, Loader2, Save, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Blocks,
+  GitBranch,
+  GripVertical,
+  ListTree,
+  Loader2,
+  Map as MapIcon,
+  Save,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   isFinalStateCategory,
@@ -45,6 +58,7 @@ import {
   type WorkItemStateCategory,
 } from '@/lib/domain/state-categories'
 import { getApiErrorMessage } from '@/lib/utils'
+import { InlineAlert } from '@/components/ui/states'
 
 type TypeStateMappingRecord = {
   stateId: string
@@ -227,7 +241,9 @@ export function AdminConfigPanel() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const [selectedTypeId, setSelectedTypeId] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'types' | 'states' | 'fields' | 'planning'>('types')
+  const [activeTab, setActiveTab] = useState<'types' | 'states' | 'fields' | 'areas' | 'planning'>(
+    'types'
+  )
 
   const [stateDrafts, setStateDrafts] = useState<State[]>([])
   const [newStateName, setNewStateName] = useState('')
@@ -246,6 +262,7 @@ export function AdminConfigPanel() {
   const [planningLoading, setPlanningLoading] = useState(false)
   const [planningSaving, setPlanningSaving] = useState(false)
   const [planningFields, setPlanningFields] = useState<PlanningFieldDraft[]>([])
+  const [configError, setConfigError] = useState<string | null>(null)
   const canManageMasterData = currentProjectPermissions.includes('masterdata:manage')
 
   const selectedType = useMemo(
@@ -269,6 +286,7 @@ export function AdminConfigPanel() {
 
       setStateConfigLoading(true)
       setPlanningLoading(true)
+      setConfigError(null)
 
       try {
         const [stateResponse, fieldResponse, planningResponse] = await Promise.all([
@@ -372,7 +390,7 @@ export function AdminConfigPanel() {
         }
 
         console.error(error)
-        toast.error(error instanceof Error ? error.message : 'Failed to load type configuration')
+        setConfigError(error instanceof Error ? error.message : 'Failed to load type configuration')
         setMappedStates([])
         setStateTransitions({})
         setFieldMappings([])
@@ -548,8 +566,9 @@ export function AdminConfigPanel() {
   }
 
   const saveStateOrdering = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -587,19 +606,24 @@ export function AdminConfigPanel() {
       toast.success('State order saved')
     } catch (error) {
       console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to save state order')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save state order')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const createState = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
-    if (!currentProject || !newStateName.trim()) {
+    if (!currentProject) {
+      return
+    }
+    if (!newStateName.trim()) {
+      setConfigError('State name is required.')
       return
     }
 
@@ -620,7 +644,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to create state')
+        setConfigError(errorPayload.error || 'Failed to create state')
         return
       }
 
@@ -637,15 +661,16 @@ export function AdminConfigPanel() {
       toast.success('State created')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to create state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to create state')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const updateStateRow = async (state: State) => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -665,22 +690,23 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to update state')
+        setConfigError(errorPayload.error || 'Failed to update state')
         return
       }
 
       toast.success('State updated')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to update state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to update state')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const deleteState = async (stateId: string) => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -689,7 +715,7 @@ export function AdminConfigPanel() {
       const response = await fetch(`/api/states/${stateId}`, { method: 'DELETE' })
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to delete state')
+        setConfigError(errorPayload.error || 'Failed to delete state')
         return
       }
 
@@ -709,7 +735,7 @@ export function AdminConfigPanel() {
       toast.success('State deleted')
     } catch (error) {
       console.error(error)
-      toast.error('Failed to delete state')
+      setConfigError(error instanceof Error ? error.message : 'Failed to delete state')
     } finally {
       setStateConfigSaving(false)
     }
@@ -794,15 +820,16 @@ export function AdminConfigPanel() {
   }
 
   const saveTypeStateMachine = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
     if (!selectedType) return
 
     if (mappedStates.length === 0) {
-      toast.error('At least one state must be mapped to the selected type')
+      setConfigError('At least one state must be mapped to the selected type.')
       return
     }
 
@@ -835,7 +862,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save state machine')
+        setConfigError(errorPayload.error || 'Failed to save state machine')
         return
       }
 
@@ -843,15 +870,16 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save state machine')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save state machine')
     } finally {
       setStateConfigSaving(false)
     }
   }
 
   const saveFieldMappings = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -876,7 +904,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save field mappings')
+        setConfigError(errorPayload.error || 'Failed to save field mappings')
         return
       }
 
@@ -884,15 +912,16 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save field mappings')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save field mappings')
     } finally {
       setFieldConfigSaving(false)
     }
   }
 
   const savePlanningConfiguration = async () => {
+    setConfigError(null)
     if (!canManageMasterData) {
-      toast.error('You do not have permission to manage project configuration')
+      setConfigError('You do not have permission to manage project configuration.')
       return
     }
 
@@ -924,7 +953,7 @@ export function AdminConfigPanel() {
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        toast.error(errorPayload.error || 'Failed to save planning configuration')
+        setConfigError(errorPayload.error || 'Failed to save planning configuration')
         return
       }
 
@@ -932,7 +961,7 @@ export function AdminConfigPanel() {
   await fetchTypeConfiguration(selectedType.id)
     } catch (error) {
       console.error(error)
-      toast.error('Failed to save planning configuration')
+      setConfigError(error instanceof Error ? error.message : 'Failed to save planning configuration')
     } finally {
       setPlanningSaving(false)
     }
@@ -1062,36 +1091,44 @@ export function AdminConfigPanel() {
   )
 
   return (
-    <div className="space-y-3 p-4 md:p-5 lg:p-6">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/80 p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-            <Layers className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight">Admin Panel</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-            Configure work item types, dynamic states, field mappings, and planning metadata.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-0 flex-1">
+      {configError ? (
+        <InlineAlert
+          tone="danger"
+          title="Configuration not saved."
+          className="mx-4 mt-4 sm:mx-6"
+          action={
+            selectedType ? (
+              <Button size="sm" variant="outline" onClick={() => void fetchTypeConfiguration(selectedType.id)}>
+                Reload configuration
+              </Button>
+            ) : undefined
+          }
+        >
+          {configError}
+        </InlineAlert>
+      ) : null}
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
-        <div className="overflow-x-auto">
-          <TabsList className="mb-3 grid h-auto w-full min-w-[44rem] grid-cols-4 rounded-xl bg-muted/20 p-1 md:w-auto">
-            <TabsTrigger value="types" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Work Item Types</TabsTrigger>
-            <TabsTrigger value="states" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">State Management</TabsTrigger>
-            <TabsTrigger value="fields" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Field Management</TabsTrigger>
-            <TabsTrigger value="planning" className="h-9 rounded-lg px-3 text-xs font-medium md:text-sm">Planning Config</TabsTrigger>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as typeof activeTab)}
+        className="min-h-0 gap-0"
+      >
+        <div className="sticky top-14 z-20 bg-background px-4 sm:px-6 lg:top-0">
+          <TabsList>
+            <TabsTrigger value="types"><Blocks />Types</TabsTrigger>
+            <TabsTrigger value="states"><GitBranch />Workflows</TabsTrigger>
+            <TabsTrigger value="fields"><ListTree />Field mapping</TabsTrigger>
+            <TabsTrigger value="areas"><MapIcon />Areas</TabsTrigger>
+            <TabsTrigger value="planning"><SlidersHorizontal />Planning</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="types" className="mt-0">
+        <TabsContent value="types" className="mt-0 min-h-[680px] border-b border-border">
           <WorkItemTypeManagement mode="screen" />
         </TabsContent>
 
-        <TabsContent value="states" className="mt-0 space-y-4">
+        <TabsContent value="states" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-card/70 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1">
               <div className="text-sm font-medium">Workflow is configured per work item type</div>
@@ -1154,8 +1191,7 @@ export function AdminConfigPanel() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <Button onClick={createState} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
-                          {stateConfigSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        <Button onClick={createState} loading={stateConfigSaving} disabled={stateConfigSaving || !newStateName.trim() || !canManageMasterData}>
                           Add State
                         </Button>
                       </div>
@@ -1213,6 +1249,7 @@ export function AdminConfigPanel() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Move state up"
                                     onClick={() => moveMappedState(index, -1)}
                                     disabled={index === 0 || stateConfigSaving || !canManageMasterData}
                                   >
@@ -1221,6 +1258,7 @@ export function AdminConfigPanel() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label="Move state down"
                                     onClick={() => moveMappedState(index, 1)}
                                     disabled={index === mappedStates.length - 1 || stateConfigSaving || !canManageMasterData}
                                   >
@@ -1481,6 +1519,7 @@ export function AdminConfigPanel() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Move state up"
                                 onClick={() => moveStateDraft(index, -1)}
                                 disabled={index === 0 || stateConfigSaving || !canManageMasterData}
                               >
@@ -1489,6 +1528,7 @@ export function AdminConfigPanel() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Move state down"
                                 onClick={() => moveStateDraft(index, 1)}
                                 disabled={index === stateDrafts.length - 1 || stateConfigSaving || !canManageMasterData}
                               >
@@ -1529,7 +1569,7 @@ export function AdminConfigPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="fields" className="mt-0 space-y-4">
+        <TabsContent value="fields" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Card>
               <CardHeader>
@@ -1668,7 +1708,11 @@ export function AdminConfigPanel() {
           </div>
         </TabsContent>
 
-        <TabsContent value="planning" className="mt-0 space-y-4">
+        <TabsContent value="areas" className="mt-0 px-4 py-4 sm:px-6 sm:py-5">
+          <AreasManagement />
+        </TabsContent>
+
+        <TabsContent value="planning" className="mt-0 space-y-4 px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Card>
               <CardHeader>

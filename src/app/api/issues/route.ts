@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { internalError, readRequestId, validationError } from '@/lib/api-error'
+import { queueAssignmentEmail, queueSlaTimers, queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { createAuditLog } from '@/lib/domain/audit'
-import { requireProjectPermission } from '@/lib/domain/auth'
+import { checkActorPermission, requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateSprintCaches } from '@/lib/domain/cache'
 import { sanitizeRichText } from '@/lib/domain/content'
 import { formatProjectIssueKey } from '@/lib/domain/issue-key-format'
@@ -27,6 +29,7 @@ import {
   validateSprintAssignmentTeamContext,
   validateIssueReferences,
 } from '@/lib/domain/issues'
+import { findIssueIdsMatchingSearch } from '@/lib/domain/search-service'
 
 function toAutomationIssueSnapshot(issue: {
   id: string
@@ -117,7 +120,10 @@ const createIssueSchema = z.object({
       z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
     )
     .optional(),
+  retrospectiveActionItemId: nullableReferenceIdSchema,
 })
+
+class RetrospectiveActionConflictError extends Error {}
 
 export async function GET(request: NextRequest) {
   try {
@@ -176,11 +182,28 @@ export async function GET(request: NextRequest) {
       }
     }
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { key: { contains: search, mode: 'insensitive' } },
-        ...(minimal ? [] : [{ description: { contains: search, mode: 'insensitive' } }]),
-      ]
+      // Use the tsvector index that Issue.searchVector already maintains via a
+      // database trigger. Leading-wildcard ILIKE cannot use an index, so the
+      // previous `contains` filters sequentially scanned the project's issues on
+      // every keystroke-driven request.
+      //
+      // Issue keys are matched separately: they are short identifiers like
+      // "RABBIT-42", not free text, and users expect prefix matching on them.
+      const matchingIds = await findIssueIdsMatchingSearch(projectId, search)
+
+      if (matchingIds.length === 0) {
+        return NextResponse.json([], {
+          headers: {
+            'x-page': String(page),
+            'x-page-size': String(pageSize),
+            ...(includeTotal ? { 'x-total-count': '0' } : {}),
+          },
+        })
+      }
+
+      where.id = where.id
+        ? { ...(where.id as Record<string, unknown>), in: matchingIds }
+        : { in: matchingIds }
     }
 
     where = applyAreaScopeFilter(where, areaScope)
@@ -251,8 +274,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (error) {
-    console.error('Error fetching issues:', error)
-    return NextResponse.json({ error: 'Failed to fetch issues' }, { status: 500 })
+    return internalError('Error fetching issues:', error, readRequestId(request))
   }
 }
 
@@ -271,29 +293,61 @@ export async function POST(request: NextRequest) {
     })
     if (!auth.ok) return auth.response
 
+    // Reuse the actor resolved above rather than re-running the full auth chain
+    // for each additional permission.
     if (data.assigneeId) {
-      const assignPermission = await requireProjectPermission(
-        request,
+      const assignPermission = await checkActorPermission(
+        auth.actor,
         data.projectId,
         'workitem:assign',
-        undefined,
         { areaId: data.areaId ?? null }
       )
       if (!assignPermission.ok) return assignPermission.response
     }
 
     if (data.status && data.status !== 'backlog') {
-      const transitionPermission = await requireProjectPermission(
-        request,
+      const transitionPermission = await checkActorPermission(
+        auth.actor,
         data.projectId,
         'workitem:transition',
-        undefined,
         { areaId: data.areaId ?? null }
       )
       if (!transitionPermission.ok) return transitionPermission.response
     }
 
     await ensureProjectSystemRecords(data.projectId, auth.actor.userId)
+
+    const retrospectiveActionItem = data.retrospectiveActionItemId
+      ? await db.retroItem.findUnique({
+          where: { id: data.retrospectiveActionItemId },
+          select: {
+            id: true,
+            category: true,
+            actionItemIssueId: true,
+            retrospective: { select: { projectId: true } },
+          },
+        })
+      : null
+
+    if (data.retrospectiveActionItemId) {
+      if (
+        !retrospectiveActionItem ||
+        retrospectiveActionItem.retrospective.projectId !== data.projectId ||
+        retrospectiveActionItem.category !== 'action_item'
+      ) {
+        return NextResponse.json(
+          { error: 'Retrospective action item must belong to the selected project' },
+          { status: 400 }
+        )
+      }
+
+      if (retrospectiveActionItem.actionItemIssueId) {
+        return NextResponse.json(
+          { error: 'This retrospective action already has a work item' },
+          { status: 409 }
+        )
+      }
+    }
 
     const sprintContextError = await validateSprintAssignmentTeamContext({
       projectId: data.projectId,
@@ -348,11 +402,12 @@ export async function POST(request: NextRequest) {
         })
       : await getInitialStateForType(data.projectId, preparedFields.typeDefinition.key)
 
-    const effectiveStatus = data.status
-      ? data.status
-      : selectedState
-        ? statusFromStateCategory(selectedState.category)
-        : 'backlog'
+    // A workflow state is the source of truth whenever the type has one. Accepting
+    // an independently supplied board status first could persist contradictions such
+    // as state "Development in Progress" with status "backlog".
+    const effectiveStatus = selectedState
+      ? statusFromStateCategory(selectedState.category)
+      : data.status ?? 'backlog'
 
     const issue = await db.$transaction(async (tx) => {
       await lockProjectIssueSequence(tx, data.projectId)
@@ -366,7 +421,7 @@ export async function POST(request: NextRequest) {
         select: { columnOrder: true },
       })
 
-      return tx.issue.create({
+      const createdIssue = await tx.issue.create({
         data: {
           key: formatProjectIssueKey(project.key, issueNumber),
           title: data.title.trim(),
@@ -410,6 +465,26 @@ export async function POST(request: NextRequest) {
         },
         include: issueMutationInclude,
       })
+
+      if (data.retrospectiveActionItemId) {
+        const linked = await tx.retroItem.updateMany({
+          where: {
+            id: data.retrospectiveActionItemId,
+            category: 'action_item',
+            actionItemIssueId: null,
+            retrospective: { projectId: data.projectId },
+          },
+          data: { actionItemIssueId: createdIssue.id },
+        })
+
+        if (linked.count !== 1) {
+          throw new RetrospectiveActionConflictError(
+            'This retrospective action was converted by another user'
+          )
+        }
+      }
+
+      return createdIssue
     })
 
     await createAuditLog({
@@ -425,7 +500,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Attach SLA timers based on matching policies
-    void attachSlaTimers(
+    void queueSlaTimers(
       issue.id,
       data.projectId,
       issue.priority,
@@ -450,7 +525,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      void sendWorkItemAssignmentEmail({
+      void queueAssignmentEmail({
         issueId: issue.id,
         assigneeUserId: issue.assignee.id,
         actorUserId: auth.actor.userId,
@@ -471,7 +546,7 @@ export async function POST(request: NextRequest) {
         include: issueMutationInclude,
       })) ?? issue
 
-    void dispatchWebhookEvent(data.projectId, 'issue.created', {
+    void queueWebhookEvent(data.projectId, 'issue.created', {
       issue: {
         id: finalIssue.id,
         key: finalIssue.key,
@@ -489,14 +564,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(serializeIssueRecord(finalIssue), { status: 201 })
   } catch (error) {
+    if (error instanceof RetrospectiveActionConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
+    }
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
-        { status: 400 }
-      )
+      return validationError(error, readRequestId(request))
     }
 
-    console.error('Error creating issue:', error)
-    return NextResponse.json({ error: 'Failed to create issue' }, { status: 500 })
+    return internalError('Error creating issue:', error, readRequestId(request))
   }
 }

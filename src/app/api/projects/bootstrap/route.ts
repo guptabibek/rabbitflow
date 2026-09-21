@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db, runWithDbRetry } from '@/lib/db'
+import { applyAreaScopeFilter, getAreaAccessScope } from '@/lib/domain/access-control'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { issueMutationInclude, serializeIssueRecord } from '@/lib/domain/issues'
 import { ensureProjectSystemRecords } from '@/lib/domain/project-bootstrap'
@@ -22,6 +24,14 @@ export async function GET(request: NextRequest) {
 
     await runWithDbRetry(() => ensureProjectSystemRecords(projectId, auth.actor.userId))
 
+    const areaScope = await getAreaAccessScope(
+      projectId,
+      auth.actor.projectRole,
+      'workitem:read',
+      auth.actor.extraPermissions
+    )
+    const issueScope = applyAreaScopeFilter<Prisma.IssueWhereInput>({ projectId }, areaScope)
+
     const data = await withCache(
       `project:${projectId}:bootstrap:user:${auth.actor.userId}:pageSize:${pageSize}`,
       30,
@@ -29,6 +39,7 @@ export async function GET(request: NextRequest) {
         runWithDbRetry(async () => {
         const [
           issues,
+          issueTotal,
           labels,
           iterations,
           states,
@@ -40,7 +51,7 @@ export async function GET(request: NextRequest) {
           stateTransitions,
         ] = await Promise.all([
           db.issue.findMany({
-            where: { projectId },
+            where: issueScope,
             orderBy: [
               { parentIssueId: 'asc' },
               { columnOrder: 'asc' },
@@ -49,17 +60,27 @@ export async function GET(request: NextRequest) {
             take: pageSize,
             include: issueMutationInclude,
           }),
+          // The client caps how many work items it holds. Returning the true
+          // total lets the UI say so instead of silently showing a partial
+          // board as if it were the whole project.
+          db.issue.count({ where: issueScope }),
           db.label.findMany({
             where: { projectId },
             orderBy: { name: 'asc' },
-            include: { _count: { select: { issues: true } } },
+            include: {
+              _count: {
+                select: {
+                  issues: { where: { issue: { is: issueScope } } },
+                },
+              },
+            },
           }),
           db.iteration.findMany({
             where: { projectId },
             orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
             include: {
               team: { select: { id: true, name: true, color: true } },
-              _count: { select: { issues: true } },
+              _count: { select: { issues: { where: issueScope } } },
               children: {
                 orderBy: [{ startDate: 'asc' }, { name: 'asc' }],
                 select: {
@@ -77,7 +98,7 @@ export async function GET(request: NextRequest) {
           db.state.findMany({
             where: { projectId },
             orderBy: { order: 'asc' },
-            include: { _count: { select: { issues: true } } },
+            include: { _count: { select: { issues: { where: issueScope } } } },
           }),
           db.projectMember.findMany({
             where: { projectId },
@@ -132,7 +153,7 @@ export async function GET(request: NextRequest) {
                 orderBy: { order: 'asc' },
               },
               _count: {
-                select: { issues: true },
+                select: { issues: { where: issueScope } },
               },
             },
           }),
@@ -163,6 +184,8 @@ export async function GET(request: NextRequest) {
 
         return {
           issues: issues.map((issue) => serializeIssueRecord(issue)),
+          issueTotal,
+          issuePageSize: pageSize,
           labels,
           iterations,
           states,

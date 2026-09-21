@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { db } from '@/lib/db'
 import { requireProjectPermission } from '@/lib/domain/auth'
 import { invalidateProjectCaches } from '@/lib/domain/cache'
@@ -87,7 +88,7 @@ export async function DELETE(
       where: { id },
     })
 
-    void dispatchWebhookEvent(label.projectId, 'label.deleted', {
+    void queueWebhookEvent(label.projectId, 'label.deleted', {
       label: {
         id: label.id,
         name: label.name,

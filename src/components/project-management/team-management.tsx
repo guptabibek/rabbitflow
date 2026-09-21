@@ -5,6 +5,8 @@ import { useAppStore, type Team, type User } from '@/store/app-store'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +33,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { DEFAULT_TEAM_COLOR } from '@/lib/ui-tokens'
+import {
+  ConfirmDestructiveDialog,
+  useDestructiveConfirm,
+} from './confirm-destructive-dialog'
+import { InlineAlert } from '@/components/ui/states'
 
 const NONE_VALUE = '__none__'
 
@@ -121,6 +128,10 @@ export function TeamManagement({
   const [form, setForm] = useState<TeamForm>(EMPTY_FORM)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+  const teamDeletion = useDestructiveConfirm<{ id: string; name: string }>()
   const canManageTeams = currentProjectPermissions.includes('project:members:manage')
 
   const sortedUsers = useMemo(
@@ -139,11 +150,12 @@ export function TeamManagement({
     }
 
     setIsLoading(true)
+    setLoadError(null)
     try {
       const response = await fetch(`/api/teams?projectId=${currentProject.id}`)
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to load teams')
+        setLoadError(error.error || 'Failed to load teams')
         return
       }
 
@@ -156,7 +168,7 @@ export function TeamManagement({
       }
     } catch (caughtError) {
       console.error('Failed to load teams:', caughtError)
-      toast.error('Failed to load teams')
+      setLoadError('Failed to load teams')
     } finally {
       setIsLoading(false)
     }
@@ -178,17 +190,21 @@ export function TeamManagement({
     const selectedTeam = sortedTeams.find((team) => team.id === selectedTeamId)
     if (selectedTeam) {
       setForm(teamToForm(selectedTeam))
+      setNameError(null)
+      setSaveError(null)
     }
   }, [selectedTeamId, sortedTeams])
 
   const resetForCreate = () => {
     if (!canManageTeams) {
-      toast.error('You do not have permission to manage teams')
-      return
+      setSaveError('You do not have permission to manage teams.')
+      return false
     }
 
     setSelectedTeamId(null)
     setForm(EMPTY_FORM)
+    setNameError(null)
+    setSaveError(null)
   }
 
   const handleMemberToggle = (userId: string, checked: boolean) => {
@@ -212,15 +228,22 @@ export function TeamManagement({
   }
 
   const handleSave = async () => {
-    if (!currentProject || !form.name.trim()) {
+    if (!currentProject) {
       return
     }
 
     if (!canManageTeams) {
-      toast.error('You do not have permission to manage teams')
+      setSaveError('You do not have permission to manage teams.')
       return
     }
 
+    if (!form.name.trim()) {
+      setNameError('Enter a team name.')
+      return
+    }
+
+    setNameError(null)
+    setSaveError(null)
     setIsSaving(true)
     try {
       const payload = {
@@ -244,7 +267,7 @@ export function TeamManagement({
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to save team')
+        setSaveError(error.error || 'Failed to save team')
         return
       }
 
@@ -259,31 +282,25 @@ export function TeamManagement({
       toast.success(form.id ? 'Team updated' : 'Team created')
     } catch (caughtError) {
       console.error('Failed to save team:', caughtError)
-      toast.error('Failed to save team')
+      setSaveError('Failed to save team')
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (teamId: string) => {
     if (!canManageTeams) {
-      toast.error('You do not have permission to manage teams')
-      return
-    }
-
-    if (!form.id || !confirm('Delete this team? Existing sprint ownership must be reassigned first.')) {
-      return
+      return 'You do not have permission to manage teams.'
     }
 
     try {
-      const response = await fetch(`/api/teams/${form.id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/teams/${teamId}`, { method: 'DELETE' })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        toast.error(error.error || 'Failed to delete team')
-        return
+        return error.error || 'Failed to delete team'
       }
 
-      const nextTeams = teams.filter((team) => team.id !== form.id)
+      const nextTeams = teams.filter((team) => team.id !== teamId)
       setTeams(nextTeams)
       if (nextTeams.length > 0) {
         setSelectedTeamId(nextTeams[0].id)
@@ -292,9 +309,10 @@ export function TeamManagement({
         resetForCreate()
       }
       toast.success('Team deleted')
+      return true
     } catch (caughtError) {
       console.error('Failed to delete team:', caughtError)
-      toast.error('Failed to delete team')
+      return 'Failed to delete team'
     }
   }
 
@@ -397,6 +415,24 @@ export function TeamManagement({
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-6 p-4 md:p-5 lg:p-6">
+          {loadError ? (
+            <InlineAlert
+              tone="danger"
+              title="Teams could not be loaded."
+              action={
+                <Button variant="outline" size="sm" onClick={() => void loadTeams()}>
+                  Retry
+                </Button>
+              }
+            >
+              {loadError}
+            </InlineAlert>
+          ) : null}
+          {saveError ? (
+            <div data-testid="team-save-error">
+              <InlineAlert tone="danger">{saveError}</InlineAlert>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h3 className="text-base font-semibold">
@@ -412,7 +448,9 @@ export function TeamManagement({
                   variant="outline"
                   size="sm"
                   className="h-8 gap-1.5 text-xs text-destructive"
-                  onClick={handleDelete}
+                  onClick={() =>
+                    form.id && teamDeletion.request({ id: form.id, name: form.name })
+                  }
                   disabled={!canManageTeams}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -423,7 +461,8 @@ export function TeamManagement({
                 size="sm"
                 className="h-8 gap-1.5 text-xs"
                 onClick={handleSave}
-                disabled={isSaving || !form.name.trim() || !canManageTeams}
+                disabled={isSaving || !canManageTeams}
+                data-testid="team-save-button"
               >
                 <Save className="h-3.5 w-3.5" />
                 {isSaving ? 'Saving...' : form.id ? 'Save Team' : 'Create Team'}
@@ -437,12 +476,22 @@ export function TeamManagement({
               <Input
                 id="team-name"
                 value={form.name}
-                onChange={(event) =>
+                onChange={(event) => {
                   setForm((previous) => ({ ...previous, name: event.target.value }))
-                }
+                  setNameError(null)
+                  setSaveError(null)
+                }}
                 disabled={!canManageTeams}
                 className="h-10 w-full"
+                aria-invalid={Boolean(nameError)}
+                aria-describedby={nameError ? 'team-name-error' : undefined}
+                data-testid="team-name-input"
               />
+              {nameError ? (
+                <p id="team-name-error" className="text-xs text-destructive">
+                  {nameError}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="team-key">Key</Label>
@@ -621,34 +670,55 @@ export function TeamManagement({
     </div>
   )
 
+  const deleteDialog = (
+    <ConfirmDestructiveDialog
+      open={teamDeletion.isOpen}
+      onOpenChange={teamDeletion.onOpenChange}
+      title={`Delete ${teamDeletion.target?.name ?? 'this team'}?`}
+      description="The team will be permanently removed. Delete is blocked while the team owns a sprint, so reassign any sprint ownership first."
+      confirmLabel="Delete team"
+      onConfirm={() => teamDeletion.target ? handleDelete(teamDeletion.target.id) : false}
+    />
+  )
+
   if (isScreenMode) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-background">
-        {header}
-        {content}
-      </div>
+      <>
+        <div className="flex h-full min-h-0 flex-col bg-background" data-testid="team-management">
+          {header}
+          {content}
+        </div>
+        {deleteDialog}
+      </>
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
-            <Shield className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Teams</span>
-            {teams.length > 0 ? (
-              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
-                {teams.length}
-              </Badge>
-            ) : null}
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-h-[88vh] max-w-6xl overflow-hidden p-0 gap-0">
-        {header}
-        {content}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+              <Shield className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Teams</span>
+              {teams.length > 0 ? (
+                <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                  {teams.length}
+                </Badge>
+              ) : null}
+            </Button>
+          )}
+        </DialogTrigger>
+        <DialogContent className="max-h-[88vh] max-w-6xl overflow-hidden p-0 gap-0">
+          <DialogTitle className="sr-only">Team management</DialogTitle>
+          <DialogDescription className="sr-only">
+            Create teams and manage their leads, roles, and project members.
+          </DialogDescription>
+          {header}
+          {content}
+        </DialogContent>
+      </Dialog>
+      {deleteDialog}
+    </>
   )
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { queueWebhookEvent } from '@/lib/job-queue'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/domain/audit'
@@ -161,7 +162,7 @@ export async function PUT(
       })
     }
 
-    void dispatchWebhookEvent(existing.issue.projectId, 'comment.updated', {
+    void queueWebhookEvent(existing.issue.projectId, 'comment.updated', {
       comment: {
         id: comment.id,
         issueId: comment.issueId,
@@ -231,7 +232,7 @@ export async function DELETE(
       action: 'comment_deleted',
     })
 
-    void dispatchWebhookEvent(existing.issue.projectId, 'comment.deleted', {
+    void queueWebhookEvent(existing.issue.projectId, 'comment.deleted', {
       comment: {
         id,
         issueId: existing.issueId,

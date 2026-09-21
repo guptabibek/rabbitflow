@@ -87,6 +87,15 @@ function getRedis(): Redis | null {
   }
 }
 
+/**
+ * Direct client access for callers that need commands beyond the cache helpers
+ * (the rate limiter uses INCR/EXPIRE/TTL). Returns null when Redis is
+ * unavailable so callers can fall back.
+ */
+export function getRedisClient(): Redis | null {
+  return getRedis()
+}
+
 export function isRedisConfigured() {
   return Boolean(getRedisUrl() || getRedisOptions())
 }
