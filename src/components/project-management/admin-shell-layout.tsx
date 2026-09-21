@@ -1,21 +1,39 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 import {
   ArrowUpRight,
   Blocks,
+  ChevronsUpDown,
   FolderKanban,
   LayoutDashboard,
+  LogOut,
+  Moon,
   Settings2,
   ShieldCheck,
+  Sun,
+  UserRound,
 } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { useAppStore } from '@/store/app-store'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { UserProfile } from '@/components/project-management/user-profile'
+import { useAppStore, type User } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 
 type AdminShellLayoutProps = {
   children: ReactNode
+  initialUser: User
 }
 
 const NAV_ITEMS = [
@@ -42,15 +60,39 @@ const NAV_ITEMS = [
   },
 ]
 
-export function AdminShellLayout({ children }: AdminShellLayoutProps) {
+function getInitials(name: string) {
+  return (
+    name
+      .split(' ')
+      .map((segment) => segment[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'U'
+  )
+}
+
+export function AdminShellLayout({ children, initialUser }: AdminShellLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { theme, setTheme } = useTheme()
   const currentProject = useAppStore((state) => state.currentProject)
+  const storedUser = useAppStore((state) => state.currentUser)
+  const currentUser = storedUser ?? initialUser
   const setCurrentProject = useAppStore((state) => state.setCurrentProject)
   const setActiveProjectId = useAppStore((state) => state.setActiveProjectId)
+  const setCurrentUser = useAppStore((state) => state.setCurrentUser)
+  const resetProjectContext = useAppStore((state) => state.resetProjectContext)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   useEffect(() => {
-    if (currentProject) return
+    if (!storedUser || storedUser.id !== initialUser.id) {
+      setCurrentUser(initialUser)
+    }
+  }, [initialUser, setCurrentUser, storedUser])
+
+  useEffect(() => {
+    if (currentProject || isSigningOut) return
 
     const controller = new AbortController()
 
@@ -75,7 +117,64 @@ export function AdminShellLayout({ children }: AdminShellLayoutProps) {
 
     void hydrateWorkspaceContext()
     return () => controller.abort()
-  }, [currentProject, setActiveProjectId, setCurrentProject])
+  }, [currentProject, isSigningOut, setActiveProjectId, setCurrentProject])
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  const handleLogout = async () => {
+    setIsSigningOut(true)
+    try {
+      const response = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!response.ok) throw new Error('Sign out failed')
+
+      resetProjectContext()
+      setCurrentUser(null)
+      router.replace('/login')
+      router.refresh()
+    } catch {
+      toast.error('Could not sign out. Please try again.')
+      setIsSigningOut(false)
+    }
+  }
+
+  const accountMenuContent = (
+    <DropdownMenuContent align="end" className="w-64" portalled={false}>
+      <div className="px-2 pb-1.5 pt-1.5">
+        <p className="truncate text-[13px] font-medium">{currentUser.name}</p>
+        <p className="truncate text-xs text-foreground">{currentUser.email}</p>
+      </div>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={() => setIsProfileOpen(true)}>
+        <UserRound />
+        Profile settings
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={toggleTheme}>
+        {theme === 'dark' ? <Sun /> : <Moon />}
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>Navigation</DropdownMenuLabel>
+      <DropdownMenuItem onSelect={() => router.push('/dashboard')}>
+        <LayoutDashboard />
+        Projects
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={!currentProject} onSelect={() => router.push('/')}>
+        <FolderKanban />
+        Current workspace
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        variant="destructive"
+        disabled={isSigningOut}
+        onSelect={() => void handleLogout()}
+      >
+        <LogOut />
+        {isSigningOut ? 'Signing out…' : 'Sign out'}
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  )
 
   return (
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
@@ -142,6 +241,33 @@ export function AdminShellLayout({ children }: AdminShellLayoutProps) {
               Workspace
             </Button>
           </div>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="h-auto w-full justify-start gap-2 px-2 py-2 text-left"
+                aria-label="Account menu"
+                data-testid="admin-account-menu-trigger-desktop"
+              >
+                <Avatar className="size-7">
+                  <AvatarImage src={currentUser.avatar || undefined} />
+                  <AvatarFallback className="bg-primary text-[10px] font-semibold text-primary-foreground">
+                    {getInitials(currentUser.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-sidebar-foreground">
+                    {currentUser.name}
+                  </span>
+                  <span className="block truncate text-[10px] font-normal text-muted-foreground">
+                    {currentUser.email}
+                  </span>
+                </span>
+                <ChevronsUpDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            {accountMenuContent}
+          </DropdownMenu>
         </div>
       </aside>
 
@@ -170,16 +296,38 @@ export function AdminShellLayout({ children }: AdminShellLayoutProps) {
               )
             })}
           </nav>
-          <Button size="xs" variant="outline" onClick={() => router.push('/dashboard')}>
-            Projects
-            <ArrowUpRight className="size-3.5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="xs" variant="outline" onClick={() => router.push('/dashboard')}>
+              Projects
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Account menu"
+                  data-testid="admin-account-menu-trigger-mobile"
+                >
+                  <Avatar className="size-6">
+                    <AvatarImage src={currentUser.avatar || undefined} />
+                    <AvatarFallback className="bg-primary text-[9px] font-semibold text-primary-foreground">
+                      {getInitials(currentUser.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              {accountMenuContent}
+            </DropdownMenu>
+          </div>
         </header>
 
         <main id="main-content" className="min-h-screen min-w-0">
           {children}
         </main>
       </div>
+
+      <UserProfile open={isProfileOpen} onOpenChange={setIsProfileOpen} />
     </div>
   )
 }
