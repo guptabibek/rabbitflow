@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import Link from 'next/link'
 import { CircleHelp, LifeBuoy, Mail } from 'lucide-react'
+import { RabbitFlowMark } from '@/components/brand/rabbitflow-mark'
 import { type ResolvedProjectBranding } from '@/lib/domain/project-branding'
 
 type AuthShellProps = {
@@ -50,15 +51,18 @@ export function AuthShell({ branding, title, description, children, footer }: Au
   // stays in the product's palette, so a badly chosen accent can never make the
   // sign-in form unreadable.
   const markStyle: CSSProperties = { backgroundColor: branding.accentColor }
+  const usesRabbitFlowMark = !branding.logoUrl && branding.displayName === 'RabbitFlow'
 
   const brandMark = (
     <span
       aria-hidden="true"
       className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md text-[11px] font-bold tracking-wide text-white"
-      style={branding.logoUrl ? undefined : markStyle}
+      style={branding.logoUrl || usesRabbitFlowMark ? undefined : markStyle}
     >
       {branding.logoUrl ? (
         <img src={branding.logoUrl} alt="" className="size-full object-cover" />
+      ) : usesRabbitFlowMark ? (
+        <RabbitFlowMark className="size-full object-contain" />
       ) : (
         brandMonogram(branding.displayName)
       )}

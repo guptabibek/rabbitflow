@@ -9,7 +9,6 @@ import {
   CalendarDays,
   ChevronRight,
   ClipboardCheck,
-  FolderKanban,
   FolderTree,
   GitBranchPlus,
   KanbanSquare,
@@ -39,6 +38,7 @@ import { useAppStore } from '@/store/app-store'
 import { cn, getApiErrorMessage } from '@/lib/utils'
 import { normalizeProjectRole } from '@/lib/domain/rbac'
 import { Button } from '@/components/ui/button'
+import { RabbitFlowMark } from '@/components/brand/rabbitflow-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   LabelsManagement,
@@ -293,6 +293,7 @@ export function AppSidebar({
     projectId: string
     name: string
     accent: string | null
+    logo: string | null
   } | null>(null)
 
   const can = (permission: string) => currentProjectPermissions.includes(permission)
@@ -321,11 +322,12 @@ export function AppSidebar({
           projectId: currentProject.id,
           name: payload.productName || payload.organizationName || 'RabbitFlow',
           accent: payload.accentColor || null,
+          logo: payload.logoUrl || null,
         })
       })
       .catch(() => {
         if (!cancelled) {
-          setBranding({ projectId: currentProject.id, name: 'RabbitFlow', accent: null })
+          setBranding({ projectId: currentProject.id, name: 'RabbitFlow', accent: null, logo: null })
         }
       })
 
@@ -385,8 +387,12 @@ export function AppSidebar({
           collapsed ? 'justify-center px-0' : 'gap-2 px-3'
         )}
       >
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary">
-          <FolderKanban className="size-3.5 text-primary-foreground" aria-hidden="true" />
+        <div className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-md">
+          {activeBranding?.logo ? (
+            <img src={activeBranding.logo} alt="" className="size-full object-contain" />
+          ) : (
+            <RabbitFlowMark className="size-full object-contain" />
+          )}
         </div>
         {!collapsed ? (
           <span className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em] text-sidebar-foreground">

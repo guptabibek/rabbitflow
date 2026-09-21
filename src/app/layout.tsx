@@ -3,7 +3,22 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
 
+function getMetadataBase() {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+
+  if (configuredUrl) {
+    try {
+      return new URL(configuredUrl);
+    } catch {
+      // Keep local and review builds usable when an environment has a malformed URL.
+    }
+  }
+
+  return new URL("http://localhost:3000");
+}
+
 export const metadata: Metadata = {
+  metadataBase: getMetadataBase(),
   title: "RabbitFlow - Agile Project Management",
   description:
     "Production-ready Agile project management with boards, backlog, sprints, capacity planning, labels, and RBAC.",
@@ -17,13 +32,29 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "RabbitFlow Team" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [{ url: "/brand/rabbitflow-mark.png", type: "image/png", sizes: "512x512" }],
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
   },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     title: "RabbitFlow - Agile Project Management",
     description:
       "Boards, backlog, sprint capacity, labels, and role-aware project management.",
     type: "website",
+    images: [
+      {
+        url: "/brand/rabbitflow-social-card.png",
+        width: 1200,
+        height: 630,
+        alt: "RabbitFlow",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RabbitFlow - Agile Project Management",
+    description: "Boards, backlog, sprint capacity, labels, and role-aware project management.",
+    images: ["/brand/rabbitflow-social-card.png"],
   },
 };
 

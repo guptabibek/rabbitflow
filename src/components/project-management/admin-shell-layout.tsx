@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { UserProfile } from '@/components/project-management/user-profile'
+import { RabbitFlowMark } from '@/components/brand/rabbitflow-mark'
 import { useAppStore, type User } from '@/store/app-store'
 import { cn } from '@/lib/utils'
 
@@ -180,9 +181,7 @@ export function AdminShellLayout({ children, initialUser }: AdminShellLayoutProp
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r border-sidebar-border bg-sidebar lg:flex">
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
-          <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-2xs">
-            <Blocks className="size-4" aria-hidden="true" />
-          </div>
+          <RabbitFlowMark className="size-8 shrink-0 object-contain" />
           <div className="min-w-0">
             <div className="text-sm font-semibold tracking-tight text-sidebar-foreground">RabbitFlow</div>
             <div className="text-[11px] text-muted-foreground">Administration</div>

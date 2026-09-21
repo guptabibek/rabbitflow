@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { canonicalWorkspaceRoute } from '@/lib/domain/workspace-route'
 import { useAppStore, type Project } from '@/store/app-store'
 import { Button } from '@/components/ui/button'
+import { RabbitFlowMark } from '@/components/brand/rabbitflow-mark'
 
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -481,9 +482,7 @@ export function WorkspaceDashboardPage() {
       */}
       <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary">
-            <FolderKanban className="size-3.5 text-primary-foreground" aria-hidden="true" />
-          </div>
+          <RabbitFlowMark className="size-6 shrink-0 object-contain" />
           <span className="truncate text-[13px] font-semibold tracking-[-0.01em]">RabbitFlow</span>
         </div>
 

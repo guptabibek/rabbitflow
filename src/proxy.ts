@@ -115,13 +115,13 @@ export default async function proxy(request: NextRequest) {
 
 export const config = {
   // Excludes framework assets and the handful of public branding files that must
-  // load on the unauthenticated login page — `logo.svg` is the favicon, and
-  // gating it made every page request 307 to /login for that asset.
+  // load on the unauthenticated login page. Gating these files made the logo
+  // and browser icon requests redirect back to /login.
   //
-  // Deliberately narrow: only these exact names are exempt. `/uploads/**` stays
-  // behind the gate, because those are user-supplied files that must not be
-  // readable without a session.
+  // Deliberately narrow: only framework files, code-owned brand assets and the
+  // listed root files are exempt. `/uploads/**` stays behind the gate because
+  // those are user-supplied files that must not be readable without a session.
   matcher: [
-    '/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|logo\\.svg|manifest\\.webmanifest|apple-touch-icon\\.png).*)',
+    '/((?!_next/static|_next/image|brand/|favicon\\.ico|robots\\.txt|logo\\.svg|manifest\\.webmanifest|apple-touch-icon\\.png).*)',
   ],
 }
