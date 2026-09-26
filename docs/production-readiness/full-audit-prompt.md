@@ -215,9 +215,11 @@ exits 2. The migrations contain objects the schema does not:
 - A truncated index name on `WorkItemTypeFieldMapping`.
 
 Evaluate the consequences. The root README and `tests/e2e/README.md` both set up
-databases with `npm run db:push` — does full-text search work on a database created that
-way? What would the next `prisma migrate dev` generate? The deleted CI ran this exact
-check with `--exit-code`.
+databases with `npm run db:push`. The pre-pass checked one built that way: it has none of
+the three search triggers and none of the three `searchVector` indexes that a migrated
+database has, so nothing ever populates the search columns. Confirm what search then
+returns. Also establish what the next `prisma migrate dev` would generate. The deleted CI
+ran this exact check with `--exit-code`.
 
 **L4 — Known-vulnerable dependencies.** `npm audit --omit=dev` reports:
 - **Critical: `next@16.2.0`.** The advisory set includes middleware/proxy bypass, SSRF,
