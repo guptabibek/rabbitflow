@@ -1,5 +1,9 @@
 # Master Prompt — Exhaustive Shortcoming Audit
 
+> **Superseded on 2026-09-26 by [`full-audit-prompt.md`](full-audit-prompt.md).** Several
+> facts below are out of date, including the routing model, the native `confirm()`
+> dialogs, the test counts and the CI pipeline. Use the new prompt.
+
 > Paste everything below the line into the analysing agent. It is written to be
 > model-agnostic. Keep it intact: the constraints in **Part 7** are what stop an
 > audit like this from returning confident nonsense.
