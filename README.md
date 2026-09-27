@@ -150,16 +150,22 @@ Required:
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME
 ```
 
+Also required — generate it, never copy an example value:
+
+```env
+# openssl rand -base64 48
+JWT_SECRET=
+```
+
 Optional but recommended:
 
 ```env
 REDIS_URL=redis://USER:PASSWORD@HOST:PORT
-JWT_SECRET=replace-with-a-long-random-secret
 ```
 
 Notes:
 
-- If `JWT_SECRET` is omitted, a default fallback is used. For production, always set a strong `JWT_SECRET`.
+- `JWT_SECRET` must be at least 32 bytes. Without it, or with a placeholder value published in this repository, the app refuses to start in production. See `.env.example` for the full contract.
 - If `REDIS_URL` is omitted or unreachable, the app still works (cache layer gracefully disables itself).
 
 ## Getting Started
@@ -245,7 +251,9 @@ On Windows, run the production server command in PowerShell-compatible form if n
 
 ## Docker Deployment (Postgres + Redis + Persistent Data)
 
-This repository includes a production Docker setup with:
+This section covers `docker-compose.yml`, the local and evaluation stack. For production, use `docker-compose.production.yml` with `npm run docker:prod:up` (see `docs/production-upgrade.md`): it keeps Postgres and Redis on an internal-only network and password-protects Redis. The local stack publishes Postgres and Redis on `127.0.0.1` only.
+
+The stack includes:
 
 - Next.js app container
 - Nginx reverse proxy container (public entrypoint)
@@ -277,31 +285,28 @@ Run from repository root:
 npm run docker:first-deploy
 ```
 
-This command:
+The first run creates `.env.docker` from `.env.docker.example` and stops, because the stack has no default secrets or administrator. Fill in the required values (step 2), then run the same command again. It then:
 
-- creates `.env.docker` from `.env.docker.example` if missing
 - builds the images
 - starts RabbitFlow + Nginx + PostgreSQL + Redis
 - runs bootstrap seed on container start (admin user only)
 
-After first deploy, update secrets in `.env.docker`.
-
 ### 2) Create/Review Docker Environment File
 
-Copy `.env.docker.example` to `.env.docker` and set secure secrets.
+Copy `.env.docker.example` to `.env.docker` if the first-deploy command has not already done so, and fill it in.
 
-Required updates:
+Required — Compose refuses to start without the first two, and the bootstrap seed refuses to create an administrator without the last two:
 
-- `POSTGRES_PASSWORD`
-- `JWT_SECRET`
-- `SEED_ADMIN_PASSWORD`
+- `JWT_SECRET` (generate with `openssl rand -base64 48`)
+- `CRON_SECRET` (generate with `openssl rand -hex 32`)
+- `SEED_ADMIN_EMAIL`
+- `SEED_ADMIN_PASSWORD` (a strong password; the seed never changes the password of an administrator that already exists)
+
+Also review:
+
 - `APP_URL` (for email links, e.g. `http://localhost:4080`)
-
-Bootstrap seed variables:
-
-- `SEED_ADMIN_EMAIL` (default: `rabbittech46@gmail.com`)
 - `SEED_ADMIN_NAME` (default: `RabbitFlow Admin`)
-- `SEED_ADMIN_PASSWORD` (required strong password)
+- `POSTGRES_PASSWORD` (default: `rabbitflow`, reachable from this machine only). To change it, set it before the first start, which is when Postgres applies it, and set `DATABASE_URL` to match.
 
 ### 3) Build and Start the Stack
 

@@ -1,5 +1,6 @@
 import test, { before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { SignJWT } from 'jose'
 import { db, resetDatabase, disconnect } from './support/db.ts'
 import {
   addMember,
@@ -15,6 +16,9 @@ import { GET as issuesGet, POST as issuesPost } from '../../src/app/api/issues/r
 import { GET as rbacGet } from '../../src/app/api/rbac/route.ts'
 import { GET as labelsGet, POST as labelsPost } from '../../src/app/api/labels/route.ts'
 import { GET as activityGet } from '../../src/app/api/activity/route.ts'
+import { GET as meGet } from '../../src/app/api/auth/me/route.ts'
+import { GET as adminUsersGet } from '../../src/app/api/admin/security/users/route.ts'
+import { getAuthenticatedUserFromToken } from '../../src/lib/domain/auth.ts'
 
 /**
  * The authorization matrix.
@@ -334,6 +338,36 @@ test('a deactivated user is rejected even with a live session', async () => {
   )
 
   assert.equal(res.status, 401)
+})
+
+test('a correctly signed token that names no session is rejected', async () => {
+  // Every token the app issues carries the id of its AuthSession row. One
+  // without it can only come from someone holding the signing key, and it used
+  // to skip the session check entirely: it reached admin endpoints, never went
+  // through MFA, and survived revocation. Sign one the way such a person would.
+  const forged = await new SignJWT({ sub: globalAdmin.id, role: 'admin' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('1h')
+    .sign(new TextEncoder().encode(process.env.JWT_SECRET))
+  const impostor = { ...globalAdmin, token: forged }
+
+  const projectRes = await readResponse(
+    await issuesGet(authedRequest(impostor, `/api/issues?projectId=${project.id}`))
+  )
+  assert.equal(projectRes.status, 401)
+
+  const meRes = await readResponse(await meGet(authedRequest(impostor, '/api/auth/me')))
+  assert.equal(meRes.status, 401)
+
+  const adminRes = await readResponse(
+    await adminUsersGet(authedRequest(impostor, '/api/admin/security/users'))
+  )
+  assert.equal(adminRes.status, 401)
+
+  // Server-rendered pages (the admin layout, the login redirect) resolve the
+  // cookie through this helper rather than through a route guard.
+  assert.equal(await getAuthenticatedUserFromToken(forged), null)
 })
 
 // ---------------------------------------------------------------------------

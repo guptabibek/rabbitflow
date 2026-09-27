@@ -34,6 +34,7 @@ yarn-error.log*
 .env*
 # ...but the documented environment contract must be in version control.
 !.env.example
+!.env.docker.example
 
 # vercel
 .vercel

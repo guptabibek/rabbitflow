@@ -233,36 +233,40 @@ ran this exact check with `--exit-code`.
 For each advisory, determine whether it is reachable given how this app actually uses the
 package. Do not report bare presence.
 
-**L5 — Insecure deployment defaults.** The root README documents only one deployment
-path, which it calls "a production Docker setup": `npm run docker:first-deploy` and
-`npm run docker:up`, both using `docker-compose.yml`. It never mentions
-`docker-compose.production.yml` or the `docker:prod:*` scripts; only
-`docs/production-upgrade.md` does.
+**L5 — Insecure deployment defaults and session forgery (fixed after the pre-pass; verify
+the fix).**
 
-`docker-compose.yml`:
-- Sets `NODE_ENV=production`.
-- Supplies working fallbacks for `JWT_SECRET` (a 38-byte placeholder that passes the
-  length-only check in `src/lib/env.ts`), `CRON_SECRET` and `SEED_ADMIN_PASSWORD`.
-- Defaults `RUN_BOOTSTRAP_SEED=true`.
-- Publishes Postgres (password `rabbitflow`) and a password-less Redis on the host.
+At `235ea6a`:
+- **Compose defaults.** `docker-compose.yml` is the file behind `npm run docker:up` and
+  `docker:first-deploy`, the only deployment path the root README documented. It set
+  `NODE_ENV=production` and supplied working fallbacks for `JWT_SECRET` (a 38-byte
+  placeholder that passed the length-only check in `src/lib/env.ts`), `CRON_SECRET` and
+  `SEED_ADMIN_PASSWORD`. It also defaulted `RUN_BOOTSTRAP_SEED=true` and published
+  Postgres and a password-less Redis on the host.
+- **Seed fallback.** `scripts/seed-bootstrap.mjs` fell back to a hard-coded external
+  Gmail address for the bootstrap administrator whenever `SEED_ADMIN_EMAIL` was empty.
+- **Forged sessions.** A correctly signed token with no `sid` claim skipped session
+  validation. The pre-pass reproduced this locally: such a token reached
+  `/api/admin/security/users` with 200. It never passed through MFA and survived session
+  revocation.
+- **Missing template.** `.env.docker.example`, which the first-deploy script requires,
+  did not exist.
 
-Separately, `scripts/seed-bootstrap.mjs:154` falls back to a hard-coded external Gmail
-address for the bootstrap administrator whenever `SEED_ADMIN_EMAIL` is empty. That
-includes deploys from the production compose file, where the variable defaults to empty.
+Pull request [guptabibek/rabbitflow#2](https://github.com/guptabibek/rabbitflow/pull/2)
+changed all of this:
+- `verifyToken`, `validateActiveSession` and `src/proxy.ts` reject tokens without a
+  `sid`, sharing the check in `src/lib/session-claims.ts`.
+- The compose file requires `JWT_SECRET` and `CRON_SECRET`, has no default administrator,
+  and binds Postgres and Redis to `127.0.0.1`.
+- The seed requires `SEED_ADMIN_EMAIL`.
+- `src/lib/env.ts` rejects secrets the repository has published.
+- `.env.docker.example` now exists.
 
-Work out what someone who has read this repository can do to a deployment that kept the
-defaults: the known admin password with first-login MFA enrolment, password reset to the
-fallback mailbox, and forged JWTs.
-
-The pre-pass reproduced the forged-JWT path against a local instance. A token signed with
-the configured secret, carrying a user's id but no `sid` claim, authenticated as that
-user: `/api/auth/me` returned `sessionId: null`, and `/api/admin/security/users` returned
-200. The cause is `validateActiveSession` in `src/lib/domain/auth.ts`, which skips its
-check when `sid` is absent — although every token the app issues has one. Such a token is
-tied to no session, never passes through MFA, and survives session revocation.
-
-Also: `.env.docker.example`, which `scripts/docker-first-deploy.mjs` requires, does not
-exist, so the documented first-deploy command exits immediately on a fresh clone.
+Verify that each change holds on the commit you audit. Then look for what they miss:
+- Other places a token or identity is accepted.
+- Other published or guessable defaults, such as the local stack's Postgres password and
+  the admin-email prompt default in `scripts/reset-production-standard.sh`.
+- Whether a deployment that ran on the old defaults can tell if it was compromised.
 
 **L6 — The unified error contract is mostly unadopted.** `src/lib/api-error.ts` provides a
 machine-readable `code`, a `requestId` and a structured log line, but only 6 of 125 route
@@ -284,7 +288,6 @@ incident events. Check how the UI labels these numbers.
 - **Root README.**
   - Documents `/api/seed`, `/api/sprints` and `/api/sprints/[sprintId]`, none of which
     exist.
-  - Says a default `JWT_SECRET` is used when it is unset; startup validation rejects that.
   - Says Node 18+ is enough; the scripts need 22.6 or later.
   - Says `start` uses Bun; it runs `next start`.
   - Lists tests, CI and Docker as future work.
@@ -582,8 +585,8 @@ and look.
   rebinding.
 - **Injection and XSS.** Markdown rendering and sanitisation (SEC-019), branding inputs,
   HTML emails built from user-controlled names and titles, and raw SQL built from input.
-- **Secrets and defaults.** L5; whether env validation detects placeholder values; logs
-  that contain tokens or personal data.
+- **Secrets and defaults.** L5; weak or placeholder values beyond the published ones that
+  `src/lib/env.ts` now rejects; logs that contain tokens or personal data.
 - **Headers.** The CSP gap (L10); HSTS without TLS.
 - **Account protection.** Password policy (SEC-024), user enumeration (SEC-025), lockout
   as a denial-of-service lever.
