@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import type { NextRequest } from 'next/server'
+import { readSessionClaims } from '@/lib/session-claims'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET
@@ -24,13 +25,11 @@ export const AUTH_SESSION_TTL_SECONDS = parseSessionTtlSeconds()
 
 export async function signToken(
   userId: string,
-  sessionId?: string,
+  sessionId: string,
   globalRole?: string
 ): Promise<string> {
-  const claims: Record<string, string> = { sub: userId }
-  if (sessionId) {
-    claims.sid = sessionId
-  }
+  // A session id is mandatory: verification rejects any token without one.
+  const claims: Record<string, string> = { sub: userId, sid: sessionId }
   if (globalRole) {
     claims.role = globalRole
   }
@@ -42,8 +41,15 @@ export async function signToken(
     .sign(JWT_SECRET)
 }
 
+/**
+ * Verify a session token. A correctly signed token that names no user or no
+ * session is rejected too — see `readSessionClaims` for why.
+ */
 export async function verifyToken(token: string) {
   const { payload } = await jwtVerify(token, JWT_SECRET)
+  if (!readSessionClaims(payload)) {
+    throw new Error('Session token has no subject or session id')
+  }
   return payload
 }
 

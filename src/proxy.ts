@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { isScheduledJobRoute } from '@/lib/scheduled-job-routes'
+import { readSessionClaims } from '@/lib/session-claims'
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET
@@ -64,6 +65,13 @@ export default async function proxy(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, secret)
 
+    // Correctly signed but naming no session: never issued by this app, so it
+    // is handled exactly like a token that fails verification.
+    const claims = readSessionClaims(payload)
+    if (!claims) {
+      throw new Error('Session token has no subject or session id')
+    }
+
     if (isPublicAuthRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
@@ -82,11 +90,8 @@ export default async function proxy(request: NextRequest) {
     // effect immediately.
 
     const headers = new Headers(request.headers)
-    headers.set('x-user-id', payload.sub as string)
-    const sessionId = (payload as { sid?: unknown }).sid
-    if (typeof sessionId === 'string' && sessionId.trim()) {
-      headers.set('x-session-id', sessionId)
-    }
+    headers.set('x-user-id', claims.userId)
+    headers.set('x-session-id', claims.sessionId)
 
     // One id per request, so a log line and a user's error report can be tied
     // together. Generated here rather than per-handler so every route in a

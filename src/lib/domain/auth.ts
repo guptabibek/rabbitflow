@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { AUTH_COOKIE, verifyToken } from '@/lib/auth'
+import { readSessionClaims } from '@/lib/session-claims'
 import {
   hasPermission,
   listPermissions,
@@ -89,23 +90,20 @@ async function getIdentityFromRequest(request: NextRequest): Promise<RequestIden
   if (!token) return null
 
   try {
-    const payload = await verifyToken(token)
-    const userId = typeof payload.sub === 'string' ? payload.sub : null
-    if (!userId) return null
+    const claims = readSessionClaims(await verifyToken(token))
+    if (!claims) return null
 
-    const sessionId =
-      typeof (payload as { sid?: unknown }).sid === 'string'
-        ? ((payload as { sid?: string }).sid ?? null)
-        : null
-
-    return { userId, sessionId }
+    return { userId: claims.userId, sessionId: claims.sessionId }
   } catch {
     return null
   }
 }
 
 async function validateActiveSession(identity: RequestIdentity): Promise<boolean> {
-  if (!identity.sessionId) return true
+  // Only an API token, checked against ApiToken instead, or the development-only
+  // header escape hatch arrives without a session. Anything else that names no
+  // session was not issued by this app and must not skip the check below.
+  if (!identity.sessionId) return Boolean(identity.apiTokenId) || ALLOW_HEADER_AUTH
 
   const session = await db.authSession.findFirst({
     where: {
@@ -172,16 +170,10 @@ export async function getAuthenticatedUserFromToken(
   if (!token) return null
 
   try {
-    const payload = await verifyToken(token)
-    const userId = typeof payload.sub === 'string' ? payload.sub : null
-    if (!userId) return null
+    const claims = readSessionClaims(await verifyToken(token))
+    if (!claims) return null
 
-    const sessionId =
-      typeof (payload as { sid?: unknown }).sid === 'string'
-        ? ((payload as { sid?: string }).sid ?? null)
-        : null
-
-    return getAuthenticatedUserFromIdentity({ userId, sessionId })
+    return getAuthenticatedUserFromIdentity(claims)
   } catch {
     return null
   }

@@ -12,6 +12,22 @@ export type EnvIssue = { variable: string; message: string }
 
 const MIN_JWT_SECRET_BYTES = 32
 
+/**
+ * Secret values this repository has published, as compose defaults or README
+ * examples. Being public, they are no secret at all: with the JWT one anyone
+ * can sign a session token, and with the cron one anyone can trigger the
+ * scheduled jobs. Several are long enough to pass the length check, so they
+ * are rejected by value.
+ */
+const PUBLISHED_PLACEHOLDER_SECRETS: Record<'JWT_SECRET' | 'CRON_SECRET', readonly string[]> = {
+  JWT_SECRET: ['replace-this-with-a-long-random-secret', 'replace-with-a-long-random-secret'],
+  CRON_SECRET: ['default-cron-secret-change-me'],
+}
+
+function isPublishedPlaceholder(variable: keyof typeof PUBLISHED_PLACEHOLDER_SECRETS, value?: string) {
+  return value !== undefined && PUBLISHED_PLACEHOLDER_SECRETS[variable].includes(value.trim())
+}
+
 function isProduction() {
   return process.env.NODE_ENV === 'production'
 }
@@ -40,6 +56,18 @@ export function collectEnvIssues(env: NodeJS.ProcessEnv = process.env): EnvIssue
     issues.push({
       variable: 'JWT_SECRET',
       message: `must be at least ${MIN_JWT_SECRET_BYTES} bytes (generate with: openssl rand -base64 48)`,
+    })
+  } else if (isPublishedPlaceholder('JWT_SECRET', jwtSecret)) {
+    issues.push({
+      variable: 'JWT_SECRET',
+      message: 'is a placeholder published in this repository (generate with: openssl rand -base64 48)',
+    })
+  }
+
+  if (isPublishedPlaceholder('CRON_SECRET', env.CRON_SECRET)) {
+    issues.push({
+      variable: 'CRON_SECRET',
+      message: 'is a placeholder published in this repository (generate with: openssl rand -hex 32)',
     })
   }
 

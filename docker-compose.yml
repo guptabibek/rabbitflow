@@ -1,3 +1,10 @@
+# Local and evaluation stack. For production use docker-compose.production.yml
+# (`npm run docker:prod:up`), which adds an internal-only network and a
+# password-protected Redis.
+#
+# Secrets have no defaults here on purpose: every default in this file is
+# public, and a default signing key lets anyone who has read it sign in as any
+# user. Copy .env.docker.example to .env.docker and fill it in.
 name: rabbitflow
 
 services:
@@ -20,11 +27,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://rabbitflow:rabbitflow@postgres:5432/rabbitflow?schema=public}
       DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-20}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-replace-this-with-a-long-random-secret}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set - generate with openssl rand -base64 48}
       RUN_BOOTSTRAP_SEED: ${RUN_BOOTSTRAP_SEED:-true}
-      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-rabbittech46@gmail.com}
+      # No defaults: the bootstrap seed refuses to create an administrator
+      # without both, rather than creating one anybody could sign in as.
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-RabbitFlow Admin}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-replace-with-a-strong-admin-password}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       MFA_ISSUER: ${MFA_ISSUER:-RabbitFlow}
       MFA_CHALLENGE_TTL_SECONDS: ${MFA_CHALLENGE_TTL_SECONDS:-600}
       PASSWORD_RESET_OTP_TTL_SECONDS: ${PASSWORD_RESET_OTP_TTL_SECONDS:-600}
@@ -36,7 +45,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-RabbitFlow <no-reply@rabbitflow.local>}
-      CRON_SECRET: ${CRON_SECRET:-default-cron-secret-change-me}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set - generate with openssl rand -hex 32}
     restart: unless-stopped
 
   # Cron scheduler – calls /api/cron every 2 minutes to run SLA breach
@@ -47,7 +56,7 @@ services:
     depends_on:
       - app
     environment:
-      CRON_SECRET: ${CRON_SECRET:-default-cron-secret-change-me}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET must be set - generate with openssl rand -hex 32}
       APP_INTERNAL_URL: http://app:3000
     entrypoint: /bin/sh
     command:
@@ -82,7 +91,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-rabbitflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rabbitflow}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Loopback only: reachable from this machine for local tools, not from the network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -98,7 +108,8 @@ services:
     container_name: rabbitflow-redis
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Loopback only, like Postgres. This Redis has no password.
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:

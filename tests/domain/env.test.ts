@@ -39,6 +39,22 @@ test('OPS-005: exactly 32 bytes is accepted', () => {
   assert.ok(issueFor({ ...validEnv, JWT_SECRET: 'a'.repeat(31) }, 'JWT_SECRET'))
 })
 
+test('secrets this repository has published are rejected by value', () => {
+  // Both are long enough to pass the length check, which is why a value check
+  // exists at all: a deployment running on one is running on a public key.
+  for (const published of [
+    'replace-this-with-a-long-random-secret',
+    'replace-with-a-long-random-secret',
+  ]) {
+    const issue = issueFor({ ...validEnv, JWT_SECRET: published }, 'JWT_SECRET')
+    assert.ok(issue, `${published} should be rejected`)
+    assert.match(issue.message, /placeholder/)
+  }
+
+  assert.ok(issueFor({ ...validEnv, CRON_SECRET: 'default-cron-secret-change-me' }, 'CRON_SECRET'))
+  assert.equal(issueFor({ ...validEnv, CRON_SECRET: 'c'.repeat(64) }, 'CRON_SECRET'), undefined)
+})
+
 test('OPS-005: DATABASE_URL must be present and postgres', () => {
   assert.ok(issueFor({ ...validEnv, DATABASE_URL: undefined }, 'DATABASE_URL'))
 

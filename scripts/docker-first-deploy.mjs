@@ -11,8 +11,13 @@ if (!existsSync(envFile)) {
   }
 
   copyFileSync(envExampleFile, envFile)
-  console.log(`Created ${envFile} from ${envExampleFile}.`) 
-  console.log('Update secrets in .env.docker before exposing this stack publicly.')
+  // The compose file has no default secrets or administrator, so starting now
+  // would only fail. Stop and let the required values be filled in first.
+  console.log(`Created ${envFile} from ${envExampleFile}.`)
+  console.log(
+    'Fill in JWT_SECRET, CRON_SECRET, SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env.docker, then run this command again.'
+  )
+  process.exit(1)
 }
 
 const result = spawnSync(

@@ -151,7 +151,10 @@ async function ensureBootstrapProject(adminUserId) {
 }
 
 async function main() {
-  const email = (process.env.SEED_ADMIN_EMAIL || 'rabbittech46@gmail.com').trim().toLowerCase()
+  // Required, with no fallback address: a default would give whoever owns that
+  // mailbox the password-reset path to the administrator of every deployment
+  // that forgot to set it.
+  const email = requiredEnv('SEED_ADMIN_EMAIL').toLowerCase()
   const name = (process.env.SEED_ADMIN_NAME || 'RabbitFlow Admin').trim()
   const password = requiredEnv('SEED_ADMIN_PASSWORD')
 
