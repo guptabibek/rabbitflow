@@ -18,3 +18,9 @@ Before the first release, replace the provisional release scope with verified ch
 - Fixed generated robots directives, protected build outputs from symlink/source overwrites and corrected pre-merge documentation links.
 - Added authentic synthetic-data product imagery and corrected app accessibility failures found by the browser suite.
 - Fixed production Redis healthcheck password expansion and added optional BuildKit CA trust without bypassing verification.
+
+### Remaining-blocker remediation
+
+- Updated vulnerable runtime/transitive dependencies; npm audit now reports zero vulnerabilities. Prisma 6.19.3 uses a tested scoped deepmerge-ts 8.0.0 security override.
+- Upgraded Nodemailer/Sharp and tested verified TLS/STARTTLS delivery, unsafe/untrusted transport rejection, optional Redis-free mail and queued delivery.
+- Published the owner-approved confidential contact and added a full Chromium/Firefox/WebKit desktop/mobile CI gate. GitHub's private-reporting toggle still requires owner/admin permission.

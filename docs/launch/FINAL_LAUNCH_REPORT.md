@@ -1,6 +1,6 @@
 # Final launch report
 
-**Assessment: Not ready.** Reviewed on 2026-10-25 against the original ten-phase launch brief. Native installation/builds, application workflows and isolated production Compose now have substantially stronger evidence. Unresolved dependency advisories and operating/security gates still prevent recommending a public production launch.
+**Assessment: Not ready.** Reviewed on 2026-10-25 against the original ten-phase launch brief. Native installation/builds, application workflows and isolated production Compose now have substantially stronger evidence. Dependency advisories have since been remediated to zero; remaining operating checks and the expanded browser run are tracked below before recommending a public production launch.
 
 Reviewed baseline: `72ba988` (merge of launch PR #3, which was already merged before this audit). Follow-up work stays on `feat/launch-readiness`. No release, public deployment, DNS change, social post or directory submission was performed.
 
@@ -33,11 +33,12 @@ Concrete fixes found by independent execution:
 
 ## 2. Remaining launch blockers
 
-1. **Dependency security:** final npm audit reports **44 findings: 25 high, 19 moderate, zero critical**. This is advisory inventory, not proof that every reported path is exploitable. Nodemailer and other runtime/transitive packages require targeted compatibility review and remediation; Next.js is still listed through its PostCSS dependency. Broad forced upgrades or assertion suppression were not used. Do not release until relevant high-risk paths are remediated or explicitly assessed with evidence.
-2. **Private disclosure:** repository API confirms private vulnerability reporting is disabled. No private conduct/security contact or response ownership has been established. Do not invite sensitive reports into public issues.
-3. **Production operations:** real SMTP delivery/password-reset mail, TLS/edge forwarding, monitoring, encrypted off-host backups, upload-volume restoration and representative capacity testing are not validated. A local HTTP Compose exercise is not a production deployment certification.
-4. **Coverage and release:** the default Chromium suite ran; Firefox/WebKit/full device matrix and manual screen-reader review did not. There is no published release, completed public demo or recorded walkthrough. A newcomer must independently reproduce the approved installation before launch.
-5. **Native fallback:** the email worker still attempts localhost Redis when no binding exists. Production Compose configures Redis and was the tested worker environment; do not advertise fully clean Redis-free background email behavior.
+1. **Dependency security resolved:** updated compatible dependency ranges, Nodemailer 10.2.1 and Sharp 0.35.5; final npm audit reports zero findings. Prisma remains on 6.19.3 with a scoped deepmerge-ts 8.0.0 override (dual CJS/ESM export support retained). Prisma generation, schema validation, migrations and integration tests verify the repository's configuration path. CI now enforces a zero-finding audit.
+2. **Private disclosure route supplied:** the owner approved guptabibek166@gmail.com for publication. SECURITY.md and CODE_OF_CONDUCT.md now provide a confidential route. GitHub private vulnerability reporting still requires owner/admin enablement: the integration's PUT request was rejected with HTTP 403. A backup moderator remains to be named.
+3. **Production operations:** verified local authenticated TLS/STARTTLS mail delivery and failure-closed TLS settings. Live-domain/SMTP deliverability, off-host storage, full encrypted uploads/key restore and capacity checks still require final evidence. No staging deployment or public release is authorized.
+4. **Browser coverage:** the full default Chromium suite passed previously. A new CI job installs Chromium, Firefox and WebKit and runs the full configured desktop/mobile matrix; its result must be observed on this follow-up before claiming it passes.
+5. **Redis-free mail resolved:** the mail worker is not started without Redis configuration, direct delivery is tested, configured queuing is tested, and producer errors are bounded instead of hanging indefinitely.
+
 
 ## 3. Test results
 
@@ -62,7 +63,8 @@ Commands executed in this cloud machine with Node 24.19.0, npm 11.9.0, Prisma 6.
 | App restart and database restore | Restart retained session/work item. PostgreSQL custom-format dump restored into a second new database; source and restored Issue counts both 1. This is not an encrypted off-host plus uploads recovery drill. |
 | Redis outage | Readiness correctly failed 503 while configured Redis was stopped. The initial recovered-service check exposed the terminal-client defect. After correction, the rebuilt container returned to 200 automatically after Redis restarted, with its session/work item preserved. |
 | Documentation, YAML and secret checks | Maintained-document local links, YAML parsing, image paths and git diff whitespace reviewed. High-confidence new credential/private-key patterns are checked without printing values. These checks do not prove all remote links, Markdown renderers or secret formats. |
-| npm audit | Nonzero exit: 44 findings remain. This check does not pass. |
+| npm audit | Zero vulnerabilities after remediation; the earlier 44-finding result is superseded. |
+| SMTP runtime checks | Five pass: authenticated implicit TLS and STARTTLS, direct Redis-free fallback, untrusted-certificate and plaintext/config rejection, queued TLS delivery. |
 
 Browser execution used an external Chromium 138 binary and a temporary config, pointing at the native production server with one/two workers. The initial serverless single-process browser flag caused a setup crash; removing that flag corrected the test harness. Repeated production auth runs also exhausted the five-registration-per-hour client bucket; a fresh synthetic client identity was used without disabling the production rate limiter. Failed intermediate runs were investigated, not counted as passes. The test harness and secret-bearing audit files remain outside the checkout. The full Chromium pass preceded the final Redis-only correction; that change was checked with the failing-then-passing real-Redis test, native build/type/lint/domain checks and a rebuilt-container outage/recovery run.
 
@@ -76,7 +78,7 @@ No authentication, authorization or database policy was weakened. Production MFA
 
 Keep JWT/cron/MFA keys independent and private, SMTP TLS verification enabled, header authentication disabled, database/cache internal, and uploads outside public assets. The deployment edge must overwrite forwarding headers and prevent direct bypass of the HTTP origin. Sensitive audit environment files, cookies, keys and database dumps were kept outside Git. Committed images show synthetic identities only.
 
-Remaining dependency findings, absence of private reporting, Redis-free mail-worker behavior and missing real TLS/mail verification remain material. Do not describe RabbitFlow as production-ready or security-certified.
+Dependency findings and Redis-free mail-worker behavior are resolved; the approved email provides private reporting. Live-deployment TLS/mail deliverability and other remaining operational checks are not inferred from local tests. Do not describe RabbitFlow as production-ready or security-certified.
 
 ## 5. GitHub configuration requiring manual action
 
