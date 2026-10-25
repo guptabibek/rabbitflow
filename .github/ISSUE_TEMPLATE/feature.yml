@@ -1,0 +1,18 @@
+name: Feature request
+description: Describe a team workflow and proposed improvement
+title: "feature: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What workflow is difficult today?
+      description: Describe who needs this and a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome and alternatives
+      description: Include access-control, deployment or migration implications if known.
+    validations:
+      required: true

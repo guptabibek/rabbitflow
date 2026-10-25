@@ -1,0 +1,12 @@
+# RabbitFlow marketing site
+
+An isolated, dependency-free static site. It does not modify Next.js routes, cookies, proxy rules or application authentication. It uses the repository's existing logo/mark and no third-party fonts or tracking.
+
+```bash
+node scripts/build-marketing.mjs /tmp/rabbitflow-site
+python3 -m http.server 4173 --bind 127.0.0.1 --directory /tmp/rabbitflow-site
+```
+
+The default build is noindex and disallows crawling. For an approved real deployment origin, set `SITE_URL=https://your-real-host` when running the builder. It validates an HTTPS origin and generates canonical/Open Graph URLs, sitemap.xml, robots.txt and structured data. Do not use the suggested hostname until DNS, TLS and owner authorization are established. No deployment is performed by the script.
+
+The product-preview panel is explicitly a workflow diagram, not an application screenshot. Real screenshot capture is pending; see [visual assets](../docs/launch/VISUAL_ASSETS.md). Product links go to actual GitHub files on main and become available after this branch is merged. The MIT license was selected with explicit owner approval.

@@ -1,0 +1,42 @@
+# Development and evaluation
+
+## Native development
+
+Use Node.js 24, npm and PostgreSQL 16. Node 24 is the development/CI target; Docker currently runs Node 22. Never use production data for evaluation or tests.
+
+1. Run `npm ci` from the repository root. The npm lockfile is the installation authority for this workflow; do not regenerate either lockfile during setup.
+2. Copy `.env.example` to `.env`. Set `DATABASE_URL` to a new local PostgreSQL database and generate a unique `JWT_SECRET` with `openssl rand -base64 48`. Generate a separate `CRON_SECRET` with `openssl rand -hex 32`. Set `APP_URL` to your development origin. Keep secret files private.
+3. For native development without Redis, remove/comment `REDIS_URL` and leave alternative Redis bindings unset. If configured, Redis must be reachable for readiness. The current MFA/OTP challenge implementation uses PostgreSQL (`src/lib/auth-otp.ts`). SMTP remains necessary to deliver password-reset mail. The current email worker still attempts localhost Redis even without a binding; Redis-free operation is not validated as a clean worker fallback (see the launch audit). Configure a local Redis when evaluating background email delivery.
+4. Run `npm run db:generate`, then `npx prisma migrate deploy` against the empty development database. Migrations include SQL full-text-search triggers and indexes. Do not substitute `db push` for a full feature evaluation. Do not run reset commands on existing data.
+5. Export the seed variables from a private shell configuration: `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, optionally `SEED_ADMIN_NAME`, `SEED_CREATE_PROJECT=true`, `SEED_PROJECT_KEY`, `SEED_PROJECT_NAME`. Run the seed with `.env` loaded: `node --env-file=.env scripts/seed-bootstrap.mjs`. Remove the bootstrap password from your session after success. The seed can promote an existing matching account; use a new database and intentional email.
+6. Run `npm run dev`. Verify `curl --fail http://127.0.0.1:3000/api/health/ready`, open the login page, sign in and create a test project/work item. HTTP health alone does not validate the complete workflow.
+
+`npm run db:push` runs a prepare hook querying Project before schema creation; it is unsuitable for initializing an empty database. `npx prisma db push` skips that hook but omits migration-managed SQL behavior.
+
+## Tests
+
+```bash
+npm run lint
+npx tsc --noEmit --incremental false
+npm test
+npm run build
+```
+
+Create a **separate disposable database with `test` in its name**. Integration helpers truncate tables. Load `.env` in your shell without printing its values, then point **both** `DATABASE_URL` and `TEST_DATABASE_URL` at the test database. Apply `npx prisma migrate deploy` there before `npm run test:integration`. Do not leave the application's development database selected: route handlers use DATABASE_URL while test fixtures use TEST_DATABASE_URL.
+
+For Playwright, read [the E2E guide](../tests/e2e/README.md) and `playwright.config.ts`; install browsers with `npx playwright install --with-deps chromium`. E2E provisioning changes data and must use an isolated database/app. The historical `.env.e2e.example` reference points to a missing file; use `.env.example` and inspect `tests/e2e/support/env.ts` instead.
+
+## Docker evaluation
+
+From a clean checkout: copy `.env.docker.example` to `.env.docker`, generate the two required secrets and set your own bootstrap email/password. Run:
+
+```bash
+docker compose --env-file .env.docker config --quiet
+docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker logs app
+curl --fail http://127.0.0.1:4080/api/health/ready
+```
+
+Sign in and verify the configured administrator exists. The app logs a bootstrap failure and continues, so healthy HTTP does not prove seeding succeeded. Disable RUN_BOOTSTRAP_SEED after success. The local stack uses public development database defaults and persists PostgreSQL/Redis in named volumes; do not expose it to the Internet. `down` preserves volumes; **`down -v` and `docker:reset` destroy data**. Local Compose does not persist uploads in a named app volume; use the production stack for durable attachments.
+
+For external installation allow HTTPS package registries, Docker image registries, and `binaries.prisma.sh`. Preserve artifact checksums and TLS checks.

@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible application or installation problem
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not report vulnerabilities here. Read SECURITY.md. Never attach secrets or real user data."
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use synthetic data and include exact commands.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and sanitized evidence
+      description: Commit, OS, Node/Docker versions, browser, relevant logs and attempted fixes.
+    validations:
+      required: true

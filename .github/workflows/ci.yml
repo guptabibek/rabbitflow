@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: rabbitflow_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U test -d rabbitflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      # Disposable runner-only database, never deployment credentials.
+      DATABASE_URL: postgresql://test:test@localhost:5432/rabbitflow_test
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/rabbitflow_test
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Generate ephemeral runner keys
+        run: |
+          echo "JWT_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "MFA_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx prisma migrate deploy
+      - run: npm run lint
+      - run: npx tsc --noEmit --incremental false
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+      - run: node --test tests/marketing/build.test.mjs
+      - run: python3 scripts/check-launch-docs.py
+      - run: node scripts/build-marketing.mjs /tmp/rabbitflow-site

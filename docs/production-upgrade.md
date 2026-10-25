@@ -1,3 +1,5 @@
+> Historical implementation report. For current installation, private networking, uploads, backup and upgrade instructions, use [deployment.md](deployment.md). The older steps below may refer to removed files or previous storage/network layouts.
+
 # RabbitFlow Production Upgrade
 
 ## 1. Codebase Analysis
