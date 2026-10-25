@@ -1,492 +1,89 @@
-# RabbitFlow
+<p align="center"><img src="public/brand/rabbitflow-social-card.png" alt="RabbitFlow" width="680"></p>
 
-A full-stack Agile project management platform inspired by Jira and Azure DevOps Boards.
+# Agile delivery. On your infrastructure.
 
-RabbitFlow supports project planning, backlog grooming, sprint execution, drag-and-drop board management, issue relationships, comments, attachments, analytics, and role-based collaboration.
+RabbitFlow is an open-source, self-hosted project-management application for engineering teams: plan a backlog, run sprints, and connect work with configurable workflows.
 
-## What This Project Includes
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/guptabibek/rabbitflow/actions/workflows/ci.yml/badge.svg)](https://github.com/guptabibek/rabbitflow/actions/workflows/ci.yml)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169e1)](https://www.postgresql.org/)
 
-- Project and member management
-- Work item lifecycle with workflow rules
-- Azure DevOps-style Sprint View:
-  - Sprint board (Kanban with drag-and-drop)
-  - Sprint backlog
-  - Sprint analytics (burndown and progress)
-- Labels, states, iterations, and area paths
-- Parent/child and dependency links between issues
-- Commenting and activity/audit trail
-- JWT authentication (login/register/logout/me)
-- Authenticator-based MFA per-user (enabled users are challenged on login)
-- Password reset via email OTP
-- Project-scoped RBAC permissions
-- Redis-backed caching (with graceful fallback when Redis is not available)
+**Launch status:** pre-release evaluation. MIT was selected with explicit owner approval. No tagged release exists in the local checkout; a release badge will be added after a verified release exists. See the [launch audit](docs/launch/LAUNCH_READINESS_AUDIT.md) for validation gaps.
 
-## Tech Stack
+[Install](docs/getting-started.md) · [Deploy](docs/deployment.md) · [Contribute](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Support](SUPPORT.md)
 
-### Frontend
+## What you can explore
 
-- Next.js 16 (App Router)
-- React 19 + TypeScript
-- Tailwind CSS + shadcn/ui + Radix UI
-- Zustand for client state
-- dnd-kit for board interactions
-- Recharts for analytics
-- Sonner for toasts
+| Workflow | Implementation |
+| --- | --- |
+| Plan and prioritize | Backlogs, work-item hierarchy, labels, areas, relations |
+| Run a sprint | Kanban views, iterations, capacity and sprint analytics |
+| Shape your process | Work-item types, fields, states and workflow rules |
+| Collaborate with boundaries | Project roles, comments, attachments and activity history |
+| Manage identity | JWT sessions, authenticator MFA, account administration |
+| Operate yourself | PostgreSQL, optional Redis for native development, Docker production stack |
 
-### Backend
+These features exist in the codebase; their presence is not a production certification. SMTP is needed for email delivery. Redis is required when configured by the Compose stack. [Architecture and evidence](docs/architecture.md).
 
-- Next.js Route Handlers (`src/app/api/**/route.ts`)
-- Prisma ORM
-- PostgreSQL
-- Zod validation
+## Quick start: local Docker evaluation
 
-### Auth and Platform
-
-- `jose` for JWT signing/verification
-- `bcryptjs` for password hashing
-- `ioredis` for cache layer
-- Proxy-based auth gate (`src/proxy.ts`)
-
-## High-Level Architecture
-
-- UI layer: reusable project-management views and dialogs under `src/components/project-management`
-- API layer: route handlers under `src/app/api`
-- Domain layer: RBAC, workflow transitions, audit helpers in `src/lib/domain`
-- Data layer: Prisma schema and PostgreSQL via `prisma/schema.prisma`
-- State layer: Zustand store in `src/store/app-store.ts`
-- Auth pipeline:
-  1. User logs in or registers via `/api/auth/*`
-  2. Server sets `auth-token` httpOnly cookie
-  3. `src/proxy.ts` verifies JWT on protected routes
-  4. Proxy injects `x-user-id` header for downstream RBAC checks
-
-## Main Features
-
-### 1. Projects and Team Collaboration
-
-- Create and manage multiple projects
-- Archive and switch projects
-- Add/remove members and update project roles
-
-### 2. Work Item Management
-
-- Work item types: `epic`, `feature`, `story`, `task`, `bug`
-- Status flow: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `cancelled`
-- Priority, severity, story points, assignee/reporter
-- Labels, areas, iterations, due/start/completion dates
-
-### 3. Sprint Management
-
-- Create and update sprint iterations
-- Associate issues to sprints
-- Visualize sprint work via:
-  - Board tab
-  - Backlog tab
-  - Analytics tab
-
-### 4. Workflow and Rules
-
-- Controlled status transitions through domain workflow rules
-- Optimistic locking via issue `version`
-- Relation constraints and hierarchy support
-
-### 5. Security and Authorization
-
-- Authentication routes:
-  - `POST /api/auth/register`
-  - `POST /api/auth/login`
-  - `POST /api/auth/logout`
-  - `GET /api/auth/me`
-- RBAC roles (project level): `Admin`, `PM`, `Dev`, `QA`, `Viewer`
-- Permission checks for create/update/delete/reorder/sprint actions
-- Login flow supports MFA per user:
-  - Users with MFA enabled must submit a valid TOTP code to complete sign-in
-  - Optional org-wide enrollment can be enabled with `MFA_REQUIRE_ENROLLMENT=true`
-- Password reset flow uses email OTP (SMTP configuration required)
-
-### 6. Caching and Performance
-
-- Optional Redis caching through `src/lib/redis.ts`
-- Cache reads/writes are non-fatal when Redis is unavailable
-- Sprint analytics route uses cache and invalidation support
-
-## Folder Structure
-
-```text
-.
-|-- prisma/
-|   `-- schema.prisma
-|-- public/
-|-- src/
-|   |-- app/
-|   |   |-- page.tsx
-|   |   |-- login/page.tsx
-|   |   |-- register/page.tsx
-|   |   `-- api/
-|   |       |-- auth/
-|   |       |-- issues/
-|   |       |-- projects/
-|   |       |-- sprints/
-|   |       `-- ...
-|   |-- components/
-|   |   |-- project-management/
-|   |   `-- ui/
-|   |-- lib/
-|   |   |-- auth.ts
-|   |   |-- redis.ts
-|   |   `-- domain/
-|   |-- store/
-|   `-- hooks/
-`-- src/proxy.ts
-```
-
-## Environment Variables
-
-Create a `.env` file at project root.
-
-Required:
-
-```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB_NAME
-```
-
-Also required — generate it, never copy an example value:
-
-```env
-# openssl rand -base64 48
-JWT_SECRET=
-```
-
-Optional but recommended:
-
-```env
-REDIS_URL=redis://USER:PASSWORD@HOST:PORT
-```
-
-Notes:
-
-- `JWT_SECRET` must be at least 32 bytes. Without it, or with a placeholder value published in this repository, the app refuses to start in production. See `.env.example` for the full contract.
-- If `REDIS_URL` is omitted or unreachable, the app still works (cache layer gracefully disables itself).
-
-## Getting Started
-
-## 1) Prerequisites
-
-- Node.js 18+
-- npm
-- PostgreSQL database
-- Optional: Redis server
-- Optional for current `start` script: Bun runtime
-
-## 2) Install Dependencies
+Requires Git, Docker Engine and Docker Compose v2. Use an isolated machine and synthetic data.
 
 ```bash
-npm install
+git clone https://github.com/guptabibek/rabbitflow.git
+cd rabbitflow
+cp .env.docker.example .env.docker
 ```
 
-## 3) Prisma Setup
+Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`) and `CRON_SECRET` (`openssl rand -hex 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Never commit this file.
 
 ```bash
+docker compose --env-file .env.docker config --quiet
+docker compose --env-file .env.docker up -d --build
+```
+
+The evaluation stack listens on port 4080. Check `docker compose --env-file .env.docker logs app` for migration and seed results; a seed failure does not stop the app. Verify `/api/health/ready` returns HTTP 200, then sign in using your configured administrator. Set `RUN_BOOTSTRAP_SEED=false` after success. [Full instructions and caveats](docs/getting-started.md).
+
+The full Docker app startup has **not** yet been validated in this cloud instance: Prisma engine downloads are blocked by network policy. Do not interpret these instructions as a successful deployment report.
+
+## Develop
+
+Use Node.js 24 (`.nvmrc`), npm, and PostgreSQL 16. The Docker runtime currently uses Node.js 22; the old README's Node 18 guidance was insufficient for the shipped TypeScript scripts.
+
+```bash
+npm ci
+# Configure .env before the following steps; see the development guide.
 npm run db:generate
-npm run db:push
-```
-
-## 4) Start Development Server
-
-```bash
+npx prisma migrate deploy
 npm run dev
 ```
 
-Open: `http://localhost:3000`
+Use migrations on a fresh database: they install full-text-search triggers that `db push` does not create. `npm run db:push` also has a prepare hook that assumes tables already exist. [Development and test databases](docs/getting-started.md).
 
-## 5) Bootstrap Admin Access
+## Product tour
 
-For Docker deployments, bootstrap seeding is controlled through `.env.docker`:
+Authentic product screenshots are pending a working seeded instance. We do not substitute fabricated dashboards. Follow the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) to produce a board, backlog, sprint analytics and permissions tour with synthetic data.
 
-- `RUN_BOOTSTRAP_SEED=true`
-- `SEED_ADMIN_EMAIL`
-- `SEED_ADMIN_NAME`
-- `SEED_ADMIN_PASSWORD`
+The existing logo and social card preserve RabbitFlow's teal identity. An isolated [marketing site](site/README.md) is included without changing application routes.
 
-On first startup, the stack creates the configured admin account if it does not already exist.
+## Architecture and operations
 
-Optional first-project bootstrap variables:
+Next.js 16 + React 19 render the UI and serve route handlers. Domain services enforce project permissions and workflow constraints. Prisma connects to PostgreSQL; Redis provides caching and ephemeral coordination. Production Compose adds nginx and a cron caller, isolates database services, and persists uploads outside the web root.
 
-- `SEED_CREATE_PROJECT=true`
-- `SEED_PROJECT_KEY`
-- `SEED_PROJECT_NAME`
-- `SEED_PROJECT_DESCRIPTION`
-- `SEED_PROJECT_COLOR`
-- `SEED_PROJECT_ICON`
+- [Configuration](docs/configuration.md) and [.env.example](.env.example)
+- [Deployment, backup, restore and upgrades](docs/deployment.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Security disclosure](SECURITY.md) and [release checklist](docs/launch/RELEASE_CHECKLIST.md)
+- [Launch materials](docs/launch/README.md)
 
-When enabled, bootstrap seeding also creates or repairs a starter project, makes the bootstrap admin a project admin, and initializes the default workflow/work-item metadata for that project.
+## Participate
 
-## Available Scripts
+Try an isolated install and report reproducible problems using the issue templates. Documentation, installation feedback and focused tests are useful first contributions. Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request, including contribution rights and the MIT license.
 
-- `npm run dev` - Start dev server on port 3000
-- `npm run build` - Create production build (standalone output)
-- `npm run start` - Start standalone production server (uses Bun)
-- `npm run lint` - Run ESLint
-- `npm run db:push` - Push Prisma schema to DB
-- `npm run db:generate` - Generate Prisma client
-- `npm run db:migrate` - Create/apply migration in dev
-- `npm run db:reset` - Reset DB via Prisma
-
-## Production Notes
-
-- Project uses `output: "standalone"` in Next config.
-- Current `start` script uses Bun:
-
-```bash
-npm run start
-```
-
-If Bun is not available, run Node directly:
-
-```bash
-NODE_ENV=production node .next/standalone/server.js
-```
-
-On Windows, run the production server command in PowerShell-compatible form if needed.
-
-## Docker Deployment (Postgres + Redis + Persistent Data)
-
-This section covers `docker-compose.yml`, the local and evaluation stack. For production, use `docker-compose.production.yml` with `npm run docker:prod:up` (see `docs/production-upgrade.md`): it keeps Postgres and Redis on an internal-only network and password-protects Redis. The local stack publishes Postgres and Redis on `127.0.0.1` only.
-
-The stack includes:
-
-- Next.js app container
-- Nginx reverse proxy container (public entrypoint)
-- PostgreSQL container with persisted volume
-- Redis container with AOF persistence and persisted volume
-- External SMTP credentials via environment variables for OTP email delivery
-
-MFA and OTP variables:
-
-- `MFA_ISSUER` (default: `RabbitFlow`)
-- `MFA_CHALLENGE_TTL_SECONDS` (default: `600`)
-- `PASSWORD_RESET_OTP_TTL_SECONDS` (default: `600`)
-
-SMTP variables:
-
-- `SMTP_HOST` (required)
-- `SMTP_PORT` (default: `587`)
-- `SMTP_SECURE` (default: `false`)
-- `SMTP_USER`, `SMTP_PASS` (optional for authenticated SMTP)
-- `SMTP_FROM` (default: `RabbitFlow <no-reply@rabbitflow.local>`)
-
-Before running Docker commands, ensure Docker Desktop is installed and the Docker engine is running.
-
-### 1) First-Time Deploy (Single Command)
-
-Run from repository root:
-
-```bash
-npm run docker:first-deploy
-```
-
-The first run creates `.env.docker` from `.env.docker.example` and stops, because the stack has no default secrets or administrator. Fill in the required values (step 2), then run the same command again. It then:
-
-- builds the images
-- starts RabbitFlow + Nginx + PostgreSQL + Redis
-- runs bootstrap seed on container start (admin user only)
-
-### 2) Create/Review Docker Environment File
-
-Copy `.env.docker.example` to `.env.docker` if the first-deploy command has not already done so, and fill it in.
-
-Required — Compose refuses to start without the first two, and the bootstrap seed refuses to create an administrator without the last two:
-
-- `JWT_SECRET` (generate with `openssl rand -base64 48`)
-- `CRON_SECRET` (generate with `openssl rand -hex 32`)
-- `SEED_ADMIN_EMAIL`
-- `SEED_ADMIN_PASSWORD` (a strong password; the seed never changes the password of an administrator that already exists)
-
-Also review:
-
-- `APP_URL` (for email links, e.g. `http://localhost:4080`)
-- `SEED_ADMIN_NAME` (default: `RabbitFlow Admin`)
-- `POSTGRES_PASSWORD` (default: `rabbitflow`, reachable from this machine only). To change it, set it before the first start, which is when Postgres applies it, and set `DATABASE_URL` to match.
-
-### 3) Build and Start the Stack
-
-Run from repository root:
-
-```bash
-npm run docker:up
-```
-
-What happens on startup:
-
-- Postgres and Redis start first and report healthy status.
-- App container waits for dependencies.
-- App runs `prisma migrate deploy` automatically.
-- Nginx exposes the app on `NGINX_PORT` (default `4080`).
-
-### 4) Open the Application
-
-- `http://localhost:4080`
-
-### 5) Redeploy Without Data Loss
-
-You can rebuild/redeploy safely and keep data:
-
-```bash
-npm run docker:up
-```
-
-Data remains because Docker named volumes are used:
-
-- `rabbitflow_postgres_data`
-- `rabbitflow_redis_data`
-
-### 6) Stop or Restart
-
-Stop containers (preserves volumes):
-
-```bash
-npm run docker:down
-```
-
-Restart containers:
-
-```bash
-npm run docker:up
-```
-
-### 7) Danger Zone: Full Cleanup (Removes Data)
-
-Only run this if you intentionally want to wipe PostgreSQL and Redis data:
-
-```bash
-npm run docker:reset
-```
-
-### 8) Production Reset + Seed (Admin-Only)
-
-To fully reset database/cache and redeploy with only bootstrap admin seeded:
-
-```bash
-npm run docker:reset
-npm run docker:up
-```
-
-After reset, the first app startup runs `db:seed:bootstrap` automatically and creates only the configured admin user.
-
-## API Surface (Grouped)
-
-### Auth
-
-- `/api/auth/login`
-- `/api/auth/register`
-- `/api/auth/logout`
-- `/api/auth/me`
-
-### Core Domain
-
-- `/api/projects`
-- `/api/projects/[projectId]`
-- `/api/projects/[projectId]/members`
-- `/api/projects/[projectId]/members/[memberId]`
-- `/api/users`
-- `/api/users/[userId]`
-- `/api/issues`
-- `/api/issues/[issueId]`
-- `/api/comments`
-- `/api/comments/[commentId]`
-- `/api/labels`
-- `/api/labels/[labelId]`
-- `/api/states`
-- `/api/iterations`
-- `/api/iterations/[iterationId]`
-- `/api/attachments`
-- `/api/relations`
-
-### Agile Views and Operations
-
-- `/api/backlog`
-- `/api/board`
-- `/api/sprints`
-- `/api/sprints/[sprintId]`
-- `/api/sprints/[sprintId]/analytics`
-- `/api/dashboard`
-- `/api/rbac`
-
-### Utility
-
-- `/api/seed`
-- `/api`
-
-## Data Model Highlights
-
-Key models in Prisma schema:
-
-- `User`
-- `Project`
-- `ProjectMember`
-- `Issue`
-- `Iteration`
-- `State`
-- `Area`
-- `Label` / `IssueLabel`
-- `Comment`
-- `Attachment`
-- `IssueRelation`
-- `Activity`
-
-Includes:
-
-- project-scoped uniqueness (`projectId + key`, `projectId + name`)
-- useful indexes for board/backlog/sprint queries
-- issue hierarchy and relation graph
-- optimistic locking field (`Issue.version`)
-
-## Quality and Reliability Notes
-
-- Validation is done with Zod on API inputs.
-- Validation errors are normalized to user-safe string messages.
-- Redis/cache failures do not break request flows.
-- Authentication guard is centralized in `src/proxy.ts`.
-
-## Troubleshooting
-
-### Login does not work
-
-- Ensure users have `passwordHash` values (seed route sets these)
-- Re-run seed:
-
-```bash
-curl -X POST http://localhost:3000/api/seed
-```
-
-### Database errors
-
-- Verify `DATABASE_URL`
-- Run:
-
-```bash
-npm run db:generate
-npm run db:push
-```
-
-### Redis not connecting
-
-- Verify `REDIS_URL`
-- If Redis is down, app still runs without cache
-
-### Build warnings about workspace root
-
-If Next.js warns about multiple lockfiles, remove unrelated lockfiles outside this project or explicitly set Turbopack root in config.
-
-## Future Improvements
-
-- Add unit/integration/end-to-end tests
-- Add CI pipeline for lint/build/test
-- Add Docker and docker-compose setup
-- Add rate limiting and audit dashboards
-- Add multi-tenant/org-level boundaries
+[Report a bug](https://github.com/guptabibek/rabbitflow/issues/new/choose) · [Suggest a feature](https://github.com/guptabibek/rabbitflow/issues/new/choose) · [Browse code](https://github.com/guptabibek/rabbitflow)
 
 ## License
 
-No explicit license file is currently included.
-Add a LICENSE file (for example MIT) if you plan to distribute this project publicly.
+Licensed under [MIT](LICENSE), selected with explicit owner approval. See the [license decision record](docs/launch/LICENSE_DECISION.md).

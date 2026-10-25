@@ -1,35 +1,9 @@
-# Playwright E2E Suite
+# Playwright E2E suite
 
-Folder structure:
+Use Node.js 24 and a disposable PostgreSQL database/app. Start with [development setup](../../docs/getting-started.md), `.env.example`, `tests/e2e/support/env.ts` and `playwright.config.ts`. There is no `.env.e2e.example` in this checkout.
 
-```text
-tests/e2e/
-|-- fixtures/
-|   `-- app.fixture.ts
-|-- setup/
-|   `-- auth.setup.ts
-|-- support/
-|   |-- db.ts
-|   |-- env.ts
-|   `-- ui.ts
-|-- auth.spec.ts
-|-- issues.spec.ts
-|-- notifications-permissions.spec.ts
-`-- project-onboarding.spec.ts
-```
+Install with `npm ci`, generate Prisma, apply SQL migrations and install browsers with `npx playwright install --with-deps chromium`. Configure the actual E2E variables from support/env.ts; the default app origin is http://127.0.0.1:3000. The runner's webServer configuration starts the app if needed. Test setup provisions synthetic identities; never aim it at production or shared data.
 
-Run locally:
+Run `npm run test:e2e` for the default Chromium project. Set `E2E_FULL_MATRIX=true` after installing Firefox/WebKit to include the configured desktop/mobile matrix. Existing Chrome can be selected with E2E_BROWSER_CHANNEL=chrome when intentionally testing that channel. Full browser coverage is a separate release gate, not implied by domain/integration tests.
 
-```bash
-copy .env.e2e.example .env
-npm install
-npm run db:generate
-npm run db:push
-npm run test:e2e
-```
-
-The suite assumes:
-
-- the app is available at `E2E_BASE_URL` or `http://127.0.0.1:3000`
-- Playwright can reach the same PostgreSQL database the app uses
-- base test users are created automatically during `tests/e2e/setup/auth.setup.ts`
+The suite covers authentication, projects, issues, permissions, planning, ceremonies, feedback, resilience and accessibility. Inspect current runner results; screenshots/videos/traces may contain session or synthetic-user information and must be reviewed before sharing. Reusable auth states are ignored by Git.
