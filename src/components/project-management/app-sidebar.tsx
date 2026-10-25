@@ -270,7 +270,7 @@ function SectionLabel({ children, collapsed }: { children: string; collapsed?: b
   }
 
   return (
-    <div className="type-label px-2 pb-1 pt-3.5 text-muted-foreground/70">{children}</div>
+    <div className="type-label px-2 pb-1 pt-3.5 text-muted-foreground">{children}</div>
   )
 }
 

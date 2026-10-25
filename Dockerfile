@@ -15,12 +15,17 @@ RUN apt-get update \
 FROM base AS deps
 
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+# Optional corporate/network CA is a BuildKit secret, never retained in an image layer.
+RUN --mount=type=secret,id=network_ca \
+    if [ -f /run/secrets/network_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/network_ca; fi; \
+    npm ci --include=dev
 
 FROM deps AS builder
 
 COPY . .
-RUN npm run db:generate
+RUN --mount=type=secret,id=network_ca \
+    if [ -f /run/secrets/network_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/network_ca; fi; \
+    npm run db:generate
 RUN npm run build
 
 FROM base AS runner
@@ -54,7 +59,9 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # where a stray copy of @prisma/client could shadow the generated one. The
 # version is read from package-lock.json so it matches what the build used,
 # rather than drifting to whatever the range resolves to today.
-RUN PRISMA_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/prisma'].version")" \
+RUN --mount=type=secret,id=network_ca \
+    if [ -f /run/secrets/network_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/network_ca; fi; \
+    PRISMA_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/prisma'].version")" \
   && echo "Installing Prisma CLI ${PRISMA_VERSION}" \
   && npm install --no-save --no-audit --no-fund \
        --prefix /opt/prisma-cli "prisma@${PRISMA_VERSION}" \
@@ -77,7 +84,10 @@ RUN install -d -o nextjs -g nextjs \
     /app/var/uploads/attachments \
     /app/var/uploads/avatars \
   && sed -i 's/\r$//' /entrypoint.sh \
-  && chmod +x /entrypoint.sh
+  && chmod 0755 /entrypoint.sh \
+  && chmod 0644 /app/package.json /app/package-lock.json /app/next.config.ts \
+  && find /app/public /app/prisma /app/scripts /app/src/lib/domain -type d -exec chmod 0755 {} + \
+  && find /app/public /app/prisma /app/scripts /app/src/lib/domain -type f -exec chmod 0644 {} +
 
 EXPOSE 3000
 

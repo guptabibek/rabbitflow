@@ -69,6 +69,7 @@ export const IssueCard = memo(function IssueCard({
       style={style}
       {...attributes}
       {...listeners}
+      role="group"
       aria-roledescription="Draggable card"
       aria-label={`${issue.key}: ${issue.title}${blockingItems.length > 0 ? `. Blocked by ${blockingSummary}` : ''}`}
       tabIndex={0}
@@ -114,9 +115,15 @@ export const IssueCard = memo(function IssueCard({
         ) : null}
       </div>
 
-      <p className="mb-2 line-clamp-3 text-[13px] font-medium leading-snug text-foreground">
+      <button
+        type="button"
+        aria-label={`${issue.key}: ${issue.title}${blockingItems.length > 0 ? `. Blocked by ${blockingSummary}` : ''}`}
+        className="mb-2 block w-full line-clamp-3 text-left text-[13px] font-medium leading-snug text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={(event) => { event.stopPropagation(); openWorkItem(issue.id) }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
         {issue.title}
-      </p>
+      </button>
 
       {issue.labels && issue.labels.length > 0 ? (
         <div className="mb-2 flex flex-wrap items-center gap-1">

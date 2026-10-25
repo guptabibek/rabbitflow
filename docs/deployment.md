@@ -35,3 +35,7 @@ Provision an isolated PostgreSQL 16 server and empty database. Restore with `pg_
 Record the deployed commit/image digest, database schema version, environment configuration and volume names. Take and verify a backup. Build the target commit and rehearse migrations on a restored copy before rollout. Schedule downtime if the migration requires it; `restart: unless-stopped` is not a zero-downtime release strategy.
 
 After rollout verify readiness, sign-in/MFA, project permissions, work-item edit, attachments, search and cron. Keep the previous immutable image. Roll back the application only if its schema remains compatible; Prisma has no automatic down migrations. Otherwise restore database **and uploads** from a mutually consistent backup during a maintenance window. Never use `db reset`, `docker:reset` or `down -v` to repair an upgrade.
+
+## Build networks with a private CA
+
+The Dockerfile accepts an optional BuildKit secret named `network_ca`. If an approved corporate proxy signs HTTPS responses, build using `docker build --secret id=network_ca,src=/path/to/approved-ca.pem -t rabbitflow:reviewed .` and the proxy's documented network/build-argument configuration. The CA is mounted only for package/engine downloads; it is not copied into the image. Do not disable TLS or checksum verification. Normal public-network builds do not need the secret. Docker VFS uses substantial disk space for repeated stages; ensure adequate free space and prune only your disposable build caches, never application volumes.

@@ -8,6 +8,6 @@ Work on a focused feature branch. Follow the existing TypeScript/React patterns,
 
 Before a PR, run lint, TypeScript, domain tests, build and relevant database/E2E checks from the development guide. Identify skipped or blocked checks in the PR. A database test must target a disposable database. Add meaningful regression coverage when behavior changes; avoid unrelated formatting/dependency churn.
 
-Useful first tasks: reproduce the clean-install guide, replace stale E2E setup instructions, add coverage for missing configuration, or capture an accessible synthetic-data product tour after startup works. Confirm an issue's scope with a maintainer before a large implementation.
+Useful first tasks: reproduce the clean-install guide, verify E2E setup on another supported environment, add coverage for missing configuration, or capture an accessible synthetic-data product tour after startup works. Confirm an issue's scope with a maintainer before a large implementation.
 
 PRs should explain the user problem, resulting behavior, validation evidence and deployment impact. Maintainers review scope and security before merging; no response-time SLA is promised. Credit contributors in release notes with consent. Participation follows the [code of conduct](CODE_OF_CONDUCT.md).

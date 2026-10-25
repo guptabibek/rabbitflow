@@ -1,7 +1,6 @@
 name: CI
 on:
   push:
-    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -23,7 +22,14 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U test -d rabbitflow_test"
           --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     env:
+      REDIS_TEST_URL: redis://localhost:6379
       # Disposable runner-only database, never deployment credentials.
       DATABASE_URL: postgresql://test:test@localhost:5432/rabbitflow_test
       TEST_DATABASE_URL: postgresql://test:test@localhost:5432/rabbitflow_test
@@ -46,7 +52,16 @@ jobs:
       - run: npx tsc --noEmit --incremental false
       - run: npm test
       - run: npm run test:integration
+      - run: node --test --experimental-strip-types tests/runtime/redis-recovery.test.ts
       - run: npm run build
+  presentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
       - run: node --test tests/marketing/build.test.mjs
       - run: python3 scripts/check-launch-docs.py
       - run: node scripts/build-marketing.mjs /tmp/rabbitflow-site

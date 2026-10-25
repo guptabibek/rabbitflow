@@ -10,7 +10,7 @@ RabbitFlow is an open-source, self-hosted project-management application for eng
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169e1)](https://www.postgresql.org/)
 
-**Launch status:** pre-release evaluation. MIT was selected with explicit owner approval. No tagged release exists in the local checkout; a release badge will be added after a verified release exists. See the [launch audit](docs/launch/LAUNCH_READINESS_AUDIT.md) for validation gaps.
+**Launch status:** pre-release evaluation. MIT was selected with explicit owner approval. No tagged release exists in the local checkout; a release badge will be added after a verified release exists. See the [final launch report](docs/launch/FINAL_LAUNCH_REPORT.md) for the current evidence and remaining release gates.
 
 [Install](docs/getting-started.md) · [Deploy](docs/deployment.md) · [Contribute](CONTRIBUTING.md) · [Roadmap](ROADMAP.md) · [Support](SUPPORT.md)
 
@@ -46,7 +46,7 @@ docker compose --env-file .env.docker up -d --build
 
 The evaluation stack listens on port 4080. Check `docker compose --env-file .env.docker logs app` for migration and seed results; a seed failure does not stop the app. Verify `/api/health/ready` returns HTTP 200, then sign in using your configured administrator. Set `RUN_BOOTSTRAP_SEED=false` after success. [Full instructions and caveats](docs/getting-started.md).
 
-The full Docker app startup has **not** yet been validated in this cloud instance: Prisma engine downloads are blocked by network policy. Do not interpret these instructions as a successful deployment report.
+Native builds and core browser journeys have been exercised with synthetic data. Dependency-security and operational release gates remain; consult the final report before using RabbitFlow for important data.
 
 ## Develop
 
@@ -64,7 +64,9 @@ Use migrations on a fresh database: they install full-text-search triggers that 
 
 ## Product tour
 
-Authentic product screenshots are pending a working seeded instance. We do not substitute fabricated dashboards. Follow the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) to produce a board, backlog, sprint analytics and permissions tour with synthetic data.
+![RabbitFlow backlog with five synthetic release-planning work items](docs/images/product-backlog.png)
+
+Actual RabbitFlow UI, captured from the production build using an isolated synthetic project. No customer data or fabricated dashboard is shown. See the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) for the wider sprint/analytics/video tour still to be produced.
 
 The existing logo and social card preserve RabbitFlow's teal identity. An isolated [marketing site](site/README.md) is included without changing application routes.
 

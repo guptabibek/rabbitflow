@@ -2,7 +2,11 @@
 
 Existing assets retained: public/brand/rabbitflow-logo.png, rabbitflow-mark.png and rabbitflow-social-card.png (1200×630). The teal/ink identity remains recognizable. New type banners: rabbitflow-banner-light.svg and rabbitflow-banner-dark.svg, each 1280×640. They are brand compositions, not product screenshots. Static-site build copies the original raster logo/mark without re-encoding. CSS presents the mark on a light plate for both color schemes.
 
-## Required authentic captures — pending
+## Authentic product capture
+
+[Product backlog](../images/product-backlog.png) is a genuine Chromium capture of the Next.js 16.4.3 production build at 1440×1000. The Orbit project, Alex Example account and five work items were created solely for this audit in a new database. The image was reviewed for sensitive data and is now used in the README and marketing site. It contains synthetic data, not an adoption claim.
+
+## Further authentic captures — pending
 
 Do not generate fictional dashboards. On a disposable seeded instance, create a project “Orbit / Sample delivery” with synthetic people such as Alex Example and Casey Example, issues for a sample release, an iteration, labels and relationships. Never use existing customer accounts or data.
 
@@ -16,7 +20,7 @@ Capture 1440×1000 desktop and 390×844 mobile at browser scale 1×; use consist
 | Feature 3 | Project role administration | Actual role options, no real user identities |
 | Mobile | Project/work-item view | Responsive behavior and keyboard/touch controls |
 
-Place approved captures in docs/images/ and add them to README/site only when files exist. Until then the workflow diagram is explicitly labeled and the README marks screenshots pending. No missing-image placeholders are shipped.
+Place approved captures in docs/images/ and add them to README/site only when files exist. The workflow diagram remains explicitly labeled; the README now includes the genuine backlog capture. No missing-image placeholders are shipped.
 
 ## 90-second storyboard
 

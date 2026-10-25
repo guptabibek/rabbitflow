@@ -24,7 +24,7 @@ Clone the repository, copy `.env.docker.example` into a private `.env.docker`, g
 
 The entrypoint runs migrations and optionally bootstrap seeding. Read logs: a bootstrap failure is reported while the app still starts, so readiness alone is insufficient. Sign in and create a project/work item, then disable bootstrap. Use the production Compose file for private database networking and durable upload storage; the local stack is for evaluation.
 
-This tutorial must include clean-build evidence before publication. At the current audit, Prisma downloads are network-blocked, so full startup is not claimed. Use docs/deployment.md for TLS, backup and recovery responsibilities.
+This tutorial must include clean-build evidence before publication. Prisma generation and native startup now work; see FINAL_LAUNCH_REPORT.md for Docker evidence and remaining release gates. Use docs/deployment.md for TLS, backup and recovery responsibilities.
 
 ## 4. Evaluating RabbitFlow alongside managed Agile tools
 

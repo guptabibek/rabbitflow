@@ -2,6 +2,10 @@
 
 Audit date: 2026-10-25. Checkout: guptabibek/rabbitflow, base 52b9206b21b58cf8bd4203c51d030ee49c6a9c56. Scope: repository inventory; manifests/locks; Docker/entrypoint/nginx; Prisma schema/migrations; auth/proxy/domain boundaries; UI/API feature inventory; tests, historical audits, branding and public pages. This is a code/setup review, not an independent penetration test or exhaustive verification of every feature.
 
+## Current assessment
+
+This document preserves the initial code-review findings and severity classification. The [final launch report](FINAL_LAUNCH_REPORT.md) supersedes its runtime status: Prisma access now works, native tests/builds run, genuine UI captures exist, and this audit also found dependency advisories and deployment/accessibility defects. The final assessment remains **Not ready** until the outstanding gates in that report are resolved.
+
 ## Critical
 
 - **Required runtime validation blocked.** npm dependencies install and PostgreSQL starts, but Prisma schema/query engine checksum requests to binaries.prisma.sh return proxy HTTP 403. Client generation, migrations, database tests and full app behavior cannot be validated. Added the exact domain to the environment configuration draft; runtime access still requires settings propagation. Do not bypass checksums or call the app production-ready.
