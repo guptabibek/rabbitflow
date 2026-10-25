@@ -1,6 +1,6 @@
 # Owner GitHub setup
 
-Git read via the platform proxy succeeds. A read-only API request to api.github.com is Forbidden; metadata updates and a PR were therefore not attempted. Do not request a PAT merely because CLI authentication reports a problem. Reuse platform access after the specific API path is available.
+Git and GitHub API access now work. The final audit verified MIT on main, Issues enabled, Discussions disabled, empty topics and private vulnerability reporting disabled. Existing launch PR #3 was already merged before the audit; the feature branch now carries a follow-up. See [final report](FINAL_LAUNCH_REPORT.md) for current evidence and manual gates.
 
 After merging the MIT license and launch files:
 
@@ -13,4 +13,4 @@ After merging the MIT license and launch files:
 7. Run CI, configure branch protection to require the observed CI verify job, and require review. Do not make an unexecuted workflow a claimed passing gate.
 8. Publish only after release checklist completion and separate owner approval.
 
-PR preparation: branch feat/launch-readiness. Suggested title: “Prepare RabbitFlow launch documentation, MIT licensing, community infrastructure and isolated marketing site”. Use [PR summary](PR_SUMMARY.md) and include actual validation limitations. No push, PR, metadata change or release is claimed as completed.
+PR preparation: branch feat/launch-readiness. Suggested title: “Prepare RabbitFlow launch documentation, MIT licensing, community infrastructure and isolated marketing site”. Use [final launch report](FINAL_LAUNCH_REPORT.md) and include actual validation limitations. The original branch was pushed and PR #3 was merged before this audit. Follow-up changes require a new PR; no automatic merge or release is authorized.

@@ -38,6 +38,10 @@ function getRedisOptions() {
 }
 
 function getRedis(): Redis | null {
+  // With retryStrategy disabled, a clean socket close can end the client without
+  // an error event. Never keep returning that terminal client after Redis recovers.
+  if (redis?.status === 'end') redis = null
+
   if (connectionFailed && Date.now() - lastFailureAt < FAILURE_RETRY_MS) {
     return null
   }

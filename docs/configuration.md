@@ -24,3 +24,5 @@
 Production Compose also requires APP_DOMAIN (hostname only), POSTGRES_DB, POSTGRES_USER and POSTGRES_PASSWORD. Keep DATABASE_URL consistent with those settings using service host `postgres`. See [deployment](deployment.md).
 
 Older comments in the environment template and health handlers attribute MFA challenges to Redis; current `auth-otp.ts` persists them in AuthChallenge rows. Readiness still treats an explicitly configured Redis as required. Do not infer a supported outage guarantee from fallback behavior alone.
+
+The final audit confirmed MFA_REQUIRE_ENROLLMENT=true in production Compose challenges even the bootstrap administrator. Complete the authenticator enrollment shown by the login page; a password response alone is not a session. Keep the policy enabled.

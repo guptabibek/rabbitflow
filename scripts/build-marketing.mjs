@@ -4,12 +4,32 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const output = path.resolve(process.argv[2] || path.join(root, 'site/dist'))
-// Never allow an output that overwrites source or an existing non-build tree.
-if (fs.existsSync(output) && fs.readdirSync(output).some(name => !['index.html', 'styles.css', 'assets', 'robots.txt', 'sitemap.xml'].includes(name))) {
-  throw new Error('Output contains unrelated files; select an empty build directory')
+// Resolve parents and reject symlinks before writing: an output alias must not overwrite source.
+const source = fs.realpathSync(root)
+const marker = '.rabbitflow-marketing-build'
+let ancestor = output
+while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor)
+const resolved = path.resolve(fs.realpathSync(ancestor), path.relative(ancestor, output))
+const defaultOutput = path.join(source, 'site/dist')
+if (resolved === source || source.startsWith(resolved + path.sep) ||
+    (resolved.startsWith(source + path.sep) && resolved !== defaultOutput)) {
+  throw new Error('Output must not overwrite source; use site/dist or an external build directory')
 }
-if (output === root || output === path.join(root, 'site') || root.startsWith(output + path.sep)) {
-  throw new Error('Output must not overwrite source')
+function rejectSymlinks(directory) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name)
+    if (entry.isSymbolicLink()) throw new Error('Build output must not contain symlinks')
+    if (entry.isDirectory()) rejectSymlinks(target)
+  }
+}
+if (fs.existsSync(output)) {
+  if (fs.lstatSync(output).isSymbolicLink()) throw new Error('Build output must not be a symlink')
+  rejectSymlinks(output)
+  const names = fs.readdirSync(output)
+  if (names.length && (!fs.existsSync(path.join(output, marker)) || names.some(name =>
+    ![marker, 'index.html', 'styles.css', 'assets', 'robots.txt', 'sitemap.xml'].includes(name)))) {
+    throw new Error('Output contains unrelated files; select an empty build directory')
+  }
 }
 let origin = null
 if (process.env.SITE_URL) {
@@ -20,12 +40,17 @@ if (process.env.SITE_URL) {
   origin = parsed.origin
 }
 fs.mkdirSync(path.join(output, 'assets'), { recursive: true })
+fs.writeFileSync(path.join(output, marker), 'RabbitFlow generated static site\n')
 for (const name of ['rabbitflow-mark.png', 'rabbitflow-social-card.png', 'rabbitflow-logo.png']) {
   fs.copyFileSync(path.join(root, 'public/brand', name), path.join(output, 'assets', name))
 }
+fs.copyFileSync(path.join(root, 'docs/images/product-backlog.png'), path.join(output, 'assets/product-backlog.png'))
 // URLs are escaped for their HTML/XML contexts; JSON-LD is protected from closing script tags.
 const escape = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+const docsRef = process.env.DOCS_REF || 'feat/launch-readiness'
+if (!/^[A-Za-z0-9._/-]+$/.test(docsRef) || docsRef.includes('..')) throw new Error('Invalid DOCS_REF')
 let html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8')
+html = html.replaceAll('/blob/feat/launch-readiness/', `/blob/${docsRef}/`).replaceAll('/tree/feat/launch-readiness/', `/tree/${docsRef}/`)
 if (origin) {
   const url = escape(origin + '/')
   const structured = JSON.stringify({ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'RabbitFlow', applicationCategory: 'BusinessApplication', operatingSystem: 'Self-hosted server', url: origin + '/', sameAs: 'https://github.com/guptabibek/rabbitflow', description: 'Self-hosted Agile project management for engineering teams.' }).replaceAll('<', '\u003c')

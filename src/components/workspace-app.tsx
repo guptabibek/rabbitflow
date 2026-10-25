@@ -882,8 +882,8 @@ export function WorkspaceApp({
         >
           <span
             aria-hidden="true"
-            className="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
-            style={{ backgroundColor: currentProject.color }}
+            className="flex size-4 shrink-0 items-center justify-center rounded-[3px] border-2 bg-background text-[8px] font-bold text-foreground"
+            style={{ borderColor: currentProject.color }}
           >
             {currentProject.key.slice(0, 2)}
           </span>
@@ -903,8 +903,8 @@ export function WorkspaceApp({
             >
               <span
                 aria-hidden="true"
-                className="flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
-                style={{ backgroundColor: project.color }}
+                className="flex size-4 shrink-0 items-center justify-center rounded-[3px] border-2 bg-background text-[8px] font-bold text-foreground"
+                style={{ borderColor: project.color }}
               >
                 {project.key.slice(0, 2)}
               </span>

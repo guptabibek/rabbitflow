@@ -4,7 +4,7 @@
 
 Use Node.js 24, npm and PostgreSQL 16. Node 24 is the development/CI target; Docker currently runs Node 22. Never use production data for evaluation or tests.
 
-1. Run `npm ci` from the repository root. The npm lockfile is the installation authority for this workflow; do not regenerate either lockfile during setup.
+1. Run `npm ci` from the repository root. The npm lockfile is the installation authority for this workflow; use npm ci for reproducible installs. The stale Bun lockfile described a different dependency set and was removed; Bun installation is not a supported workflow.
 2. Copy `.env.example` to `.env`. Set `DATABASE_URL` to a new local PostgreSQL database and generate a unique `JWT_SECRET` with `openssl rand -base64 48`. Generate a separate `CRON_SECRET` with `openssl rand -hex 32`. Set `APP_URL` to your development origin. Keep secret files private.
 3. For native development without Redis, remove/comment `REDIS_URL` and leave alternative Redis bindings unset. If configured, Redis must be reachable for readiness. The current MFA/OTP challenge implementation uses PostgreSQL (`src/lib/auth-otp.ts`). SMTP remains necessary to deliver password-reset mail. The current email worker still attempts localhost Redis even without a binding; Redis-free operation is not validated as a clean worker fallback (see the launch audit). Configure a local Redis when evaluating background email delivery.
 4. Run `npm run db:generate`, then `npx prisma migrate deploy` against the empty development database. Migrations include SQL full-text-search triggers and indexes. Do not substitute `db push` for a full feature evaluation. Do not run reset commands on existing data.
@@ -40,3 +40,5 @@ curl --fail http://127.0.0.1:4080/api/health/ready
 Sign in and verify the configured administrator exists. The app logs a bootstrap failure and continues, so healthy HTTP does not prove seeding succeeded. Disable RUN_BOOTSTRAP_SEED after success. The local stack uses public development database defaults and persists PostgreSQL/Redis in named volumes; do not expose it to the Internet. `down` preserves volumes; **`down -v` and `docker:reset` destroy data**. Local Compose does not persist uploads in a named app volume; use the production stack for durable attachments.
 
 For external installation allow HTTPS package registries, Docker image registries, and `binaries.prisma.sh`. Preserve artifact checksums and TLS checks.
+
+The native `npm run start` command currently invokes `next start`, which serves the built app but warns when output is standalone. For production, use the Docker image's tested standalone entrypoint rather than assuming the native start command packages static assets. The complete Docker image includes those assets and applies migrations at boot.

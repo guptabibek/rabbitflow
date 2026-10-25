@@ -26,7 +26,7 @@ test('unconfigured evaluation builds cannot advertise an indexing origin', t => 
   assert.match(html, /noindex,nofollow/)
   assert.doesNotMatch(html, /rel="canonical"/)
   assert.equal(fs.existsSync(path.join(output, 'sitemap.xml')), false)
-  assert.match(fs.readFileSync(path.join(output, 'robots.txt'), 'utf8'), /Disallow: \//)
+  assert.equal(fs.readFileSync(path.join(output, 'robots.txt'), 'utf8'), 'User-agent: *\nDisallow: /\n')
   assert.ok(fs.statSync(path.join(output, 'assets/rabbitflow-mark.png')).size > 0)
 })
 
@@ -57,4 +57,29 @@ test('refuses to overwrite a directory containing unrelated user files', t => {
   fs.writeFileSync(path.join(output, 'user.txt'), 'keep me')
   assert.notEqual(build(output).status, 0)
   assert.equal(fs.readFileSync(path.join(output, 'user.txt'), 'utf8'), 'keep me')
+})
+
+test('robots directives use real lines and sitemap XML contains no literal newline escapes', t => {
+  const output = fixture(t)
+  assert.equal(build(output, 'https://rabbitflow.example').status, 0)
+  assert.equal(fs.readFileSync(path.join(output, 'robots.txt'), 'utf8'),
+    'User-agent: *\nAllow: /\nSitemap: https://rabbitflow.example/sitemap.xml\n')
+  assert.doesNotMatch(fs.readFileSync(path.join(output, 'sitemap.xml'), 'utf8'), /\\n/)
+})
+
+test('rejects checkout and symlink destinations without overwriting user data', t => {
+  const directory = fixture(t)
+  const target = path.join(directory, 'target')
+  fs.mkdirSync(target)
+  fs.writeFileSync(path.join(target, 'index.html'), 'private content')
+  const alias = path.join(directory, 'alias')
+  fs.symlinkSync(target, alias)
+  assert.notEqual(build(alias).status, 0)
+  assert.equal(fs.readFileSync(path.join(target, 'index.html'), 'utf8'), 'private content')
+  assert.notEqual(build(path.join(root, 'public')).status, 0)
+  const output = path.join(directory, 'build')
+  assert.equal(build(output).status, 0)
+  fs.symlinkSync(target, path.join(output, 'assets/linked'))
+  assert.notEqual(build(output).status, 0)
+  assert.equal(fs.readFileSync(path.join(target, 'index.html'), 'utf8'), 'private content')
 })

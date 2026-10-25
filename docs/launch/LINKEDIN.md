@@ -14,14 +14,14 @@ Owner review required. Do not publish until the referenced release/install path 
 
 “A useful planning tour should follow one real work item: backlog → iteration → board → review. RabbitFlow has code for that connected workflow. The next step is verifying it end to end with synthetic data, then publishing an honest walkthrough.” Attach a real capture only after verification.
 
-## Demo-video announcement — held until video exists
+## Video announcement: not prepared for publication
 
-“The RabbitFlow walkthrough now follows one synthetic project from backlog to sprint delivery. It also shows what you must configure when self-hosting: secrets, database, mail and backups.” Add an actual approved video URL; do not post a placeholder or imply a public live demo.
+There is no recorded walkthrough yet. Use YOUTUBE.md to capture the actual UI, then review the final video, transcript and working URL before writing an announcement. A screenshot is not a live demo.
 
 ## Contribution invitation
 
 “Want to help make a self-hosted planning tool easier to evaluate? RabbitFlow needs reproducible install feedback, focused documentation fixes and meaningful workflow tests. Start with CONTRIBUTING.md and choose a scoped task with a maintainer.”
 
-## Release announcement — held until published by owner
+## Release announcement: blocked
 
-“RabbitFlow [verified version] is available under MIT. This release includes [verified changes], with [known limitations]. Installation, migration and recovery notes: [actual release URL].” Bracketed fields are editorial requirements, not publish-ready assertions. Never post this draft unchanged.
+No release/tag has been verified or authorized. After release gates pass, write an announcement using the actual version, published URL, verified changes and migration notes. There is no publishable release announcement in this package; no placeholder version or invented release is supplied.

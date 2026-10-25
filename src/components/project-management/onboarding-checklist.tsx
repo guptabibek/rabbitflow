@@ -287,6 +287,7 @@ export function OnboardingChecklist({ onNavigate }: { onNavigate?: (viewOrAction
                   spends 40px on onboarding instead of 570. */}
               <span className="mx-1 hidden min-w-0 max-w-[16rem] flex-1 sm:block">
                 <Progress
+                  aria-label="Project setup progress"
                   value={status.progressPercent}
                   className="h-1"
                   data-testid="onboarding-progress-bar"
@@ -351,7 +352,7 @@ export function OnboardingChecklistCompact() {
             {status.progressPercent}%
           </span>
         </div>
-        <Progress value={status.progressPercent} className="mt-1 h-1 bg-muted" />
+        <Progress aria-label="Project setup progress" value={status.progressPercent} className="mt-1 h-1 bg-muted" />
       </div>
     </div>
   )
