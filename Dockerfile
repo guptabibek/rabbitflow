@@ -14,6 +14,7 @@ RUN --mount=type=secret,id=network_ca \
       export SSL_CERT_FILE=/tmp/network-ca.pem; \
     fi; \
     apk add --no-cache openssl ca-certificates \
+  && if [ "$(getent group 999 | cut -d: -f1)" = ping ]; then delgroup ping; fi \
   && addgroup -S -g 999 nextjs \
   && adduser -S -D -u 999 -G nextjs -h /home/nextjs nextjs \
   && rm -f /tmp/network-ca.pem
