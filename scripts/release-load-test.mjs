@@ -8,7 +8,7 @@ if (!baseUrl || !cookie || !projectId) throw new Error('LOAD_TEST_BASE_URL, LOAD
 const durationSeconds = Math.max(10, Number(process.env.LOAD_TEST_DURATION_SECONDS ?? 60))
 const concurrency = Math.max(1, Number(process.env.LOAD_TEST_CONCURRENCY ?? 10))
 const endpoints = [
-  `/api/issues?projectId=${encodeURIComponent(projectId)}&take=100`,
+  `/api/issues?projectId=${encodeURIComponent(projectId)}&pageSize=100`,
   `/api/roadmap?projectId=${encodeURIComponent(projectId)}`,
   `/api/portfolio`,
   `/api/dependency-graph?projectId=${encodeURIComponent(projectId)}`,
@@ -17,7 +17,15 @@ const endpoints = [
 const latencies = []
 let requests = 0
 let failures = 0
-const deadline = performance.now() + durationSeconds * 1000
+const statuses = {}
+// Reject a bad session/target before measuring thousands of authentication failures.
+for (const path of endpoints) {
+  const response = await fetch(`${baseUrl}${path}`, { headers: { cookie }, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
+  await response.arrayBuffer()
+  if (!response.ok) throw new Error(`Load-test preflight ${path.split('?')[0]} returned HTTP ${response.status}`)
+}
+const startedAt = performance.now()
+const deadline = startedAt + durationSeconds * 1000
 
 async function worker(workerId) {
   let cursor = workerId
@@ -26,10 +34,12 @@ async function worker(workerId) {
     cursor += 1
     const started = performance.now()
     try {
-      const response = await fetch(`${baseUrl}${path}`, { headers: { cookie }, redirect: 'manual' })
+      const response = await fetch(`${baseUrl}${path}`, { headers: { cookie }, redirect: 'manual', signal: AbortSignal.timeout(30_000) })
       await response.arrayBuffer()
+      statuses[response.status] = (statuses[response.status] || 0) + 1
       if (!response.ok) failures += 1
     } catch {
+      statuses.network_error = (statuses.network_error || 0) + 1
       failures += 1
     } finally {
       latencies.push(performance.now() - started)
@@ -42,11 +52,14 @@ await Promise.all(Array.from({ length: concurrency }, (_, index) => worker(index
 latencies.sort((a, b) => a - b)
 const percentile = (value) => latencies[Math.min(latencies.length - 1, Math.ceil(latencies.length * value) - 1)] ?? 0
 const errorRate = requests ? failures / requests : 1
+const elapsedSeconds = (performance.now() - startedAt) / 1000
 const result = {
   durationSeconds,
   concurrency,
+  elapsedSeconds: Number(elapsedSeconds.toFixed(2)),
+  statuses,
   requests,
-  requestsPerSecond: Number((requests / durationSeconds).toFixed(2)),
+  requestsPerSecond: Number((requests / elapsedSeconds).toFixed(2)),
   failures,
   errorRate: Number(errorRate.toFixed(4)),
   p75Ms: Number(percentile(0.75).toFixed(1)),

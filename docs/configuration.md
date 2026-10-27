@@ -7,6 +7,7 @@
 | DATABASE_URL | PostgreSQL URL; URL-encode special password characters |
 | JWT_SECRET | Independently generated signing key, at least 32 bytes; rotation ends sessions |
 | CRON_SECRET | Independent scheduled-job key; required in production |
+| APP_TRUSTED_PROXY_CIDR | Exact IPv4 proxy source/CIDR trusted by production nginx; defaults to loopback only. Never trust all clients. |
 | APP_URL | Actual public origin used in email links; no assumed launch hostname |
 | NEXT_PUBLIC_APP_URL | Browser-visible origin; never place secrets in NEXT_PUBLIC variables |
 | REDIS_URL | Optional natively; if configured, readiness requires successful Redis ping |

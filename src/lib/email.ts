@@ -108,6 +108,10 @@ function readSmtpConfig() {
 
   const tlsRejectUnauthorized = readBooleanEnv('SMTP_TLS_REJECT_UNAUTHORIZED', true)
 
+  if (process.env.NODE_ENV === 'production' && (ignoreTls || !tlsRejectUnauthorized || (!secure && !requireTls))) {
+    throw new Error('Production SMTP requires verified TLS; do not disable STARTTLS or certificate verification.')
+  }
+
   // A configuration that cannot work: a TLS handshake against a STARTTLS port
   // fails with "wrong version number". `sendEmail` retries such a config with
   // STARTTLS so mail still goes out, but the setting is wrong and saying so

@@ -1,0 +1,21 @@
+name: Read-only deployment observation
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/launch-readiness]
+    paths:
+      - .github/workflows/deployment-observation.yml
+      - scripts/check-deployment.mjs
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Observe public HTTPS, login and health endpoints
+        run: node scripts/check-deployment.mjs

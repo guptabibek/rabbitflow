@@ -37,26 +37,22 @@ http {
     '' close;
   }
 
-  # Derive the forwarded protocol from the connection nginx actually accepted,
-  # never from the client's own X-Forwarded-Proto header. The application decides
-  # whether to mark the session cookie `Secure` from this value, so echoing an
-  # attacker-supplied header would let a client control that flag.
-  #
-  # If you place another trusted proxy in front of nginx, replace $scheme with a
-  # realip-derived value rather than trusting the raw header.
-  map "" $forwarded_proto {
-    default $scheme;
+  # Trust forwarding headers only from an explicitly configured IPv4 proxy CIDR.
+  # The default loopback CIDR does not trust arbitrary Docker/network clients.
+  set_real_ip_from ${APP_TRUSTED_PROXY_CIDR};
+  real_ip_header X-Forwarded-For;
+  real_ip_recursive on;
+
+  geo $realip_remote_addr $from_trusted_proxy {
+    default 0;
+    ${APP_TRUSTED_PROXY_CIDR} 1;
   }
 
-  # X-Forwarded-For is set to $remote_addr, not $proxy_add_x_forwarded_for.
-  #
-  # The latter *appends* to whatever the client sent, and the application reads
-  # the first entry — so a client could put any address it liked at the front
-  # and have it recorded as the source IP on sessions, audit events and rate
-  # limits. Overwriting with the address nginx actually accepted removes that.
-  #
-  # If you add another trusted proxy in front, switch to the realip module
-  # rather than reinstating $proxy_add_x_forwarded_for.
+  map "$from_trusted_proxy:$http_x_forwarded_proto" $forwarded_proto {
+    default $scheme;
+    "1:https" https;
+    "1:http" http;
+  }
 
   server {
     listen 80;

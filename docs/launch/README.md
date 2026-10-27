@@ -2,6 +2,7 @@
 
 Start with [final launch report](FINAL_LAUNCH_REPORT.md), [audit](LAUNCH_READINESS_AUDIT.md), [validation](VALIDATION.md) and [release gates](RELEASE_CHECKLIST.md). MIT is owner-approved; a production-readiness claim is not.
 
+- [Operational verification](OPERATIONS_VERIFICATION.md)
 - [License decision](LICENSE_DECISION.md)
 - [GitHub metadata and owner steps](GITHUB_SETUP.md)
 - [Visual assets and screenshot storyboard](VISUAL_ASSETS.md)

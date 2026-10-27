@@ -9,12 +9,19 @@ const QUEUE_NAME = 'email'
 
 // Shared across reconnects so the suppression window survives them.
 const logWorkerError = createThrottledErrorLogger('Email worker error')
+const logQueueError = createThrottledErrorLogger('Email queue error')
 
-function getConnection(): ConnectionOptions {
+export function isEmailQueueConfigured(): boolean {
+  return Boolean(process.env.REDIS_URL || process.env.REDIS_TLS_URL || (process.env.REDIS_HOST && process.env.REDIS_PORT))
+}
+
+function getConnection(blocking = false): ConnectionOptions {
+  const shared = { connectTimeout: 3000, maxRetriesPerRequest: blocking ? null : 1, enableOfflineQueue: blocking }
   const url = process.env.REDIS_URL || process.env.REDIS_TLS_URL
-  if (url) return { url }
+  if (url) return { url, ...shared }
 
   return {
+    ...shared,
     host: process.env.REDIS_HOST || 'localhost',
     port: process.env.REDIS_PORT ? Number.parseInt(process.env.REDIS_PORT, 10) : 6379,
     password: process.env.REDIS_PASSWORD || undefined,
@@ -35,11 +42,16 @@ function getQueue(): Queue<EmailJobData> {
         removeOnFail: { count: 200 },
       },
     })
+    queue.on('error', logQueueError)
   }
   return queue
 }
 
 export async function enqueueEmail(payload: EmailJobData): Promise<void> {
+  if (!isEmailQueueConfigured()) {
+    await sendEmail(payload)
+    return
+  }
   await enqueueEmailWithFallback(payload, {
     addToQueue: (nextPayload) => getQueue().add('send', nextPayload),
     sendDirect: sendEmail,
@@ -48,7 +60,8 @@ export async function enqueueEmail(payload: EmailJobData): Promise<void> {
 
 let workerInstance: Worker<EmailJobData> | null = null
 
-export function startEmailWorker(): Worker<EmailJobData> {
+export function startEmailWorker(): Worker<EmailJobData> | null {
+  if (!isEmailQueueConfigured()) return null
   if (workerInstance) return workerInstance
 
   workerInstance = new Worker<EmailJobData>(
@@ -57,7 +70,7 @@ export function startEmailWorker(): Worker<EmailJobData> {
       await sendEmail(job.data)
     },
     {
-      connection: getConnection(),
+      connection: getConnection(true),
       concurrency: 5,
       limiter: { max: 10, duration: 1000 },
     }
@@ -70,4 +83,13 @@ export function startEmailWorker(): Worker<EmailJobData> {
   workerInstance.on('error', logWorkerError)
 
   return workerInstance
+}
+
+/** Drain local connections on shutdown or after isolated runtime tests. */
+export async function closeEmailQueue(): Promise<void> {
+  const worker = workerInstance
+  const currentQueue = queue
+  workerInstance = null
+  queue = null
+  await Promise.all([worker?.close(), currentQueue?.close()])
 }
