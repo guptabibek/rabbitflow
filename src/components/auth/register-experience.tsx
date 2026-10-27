@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -35,7 +35,10 @@ type RegisterExperienceProps = {
   registrationEnabled: boolean
 }
 
+const subscribeToHydration = () => () => {}
+
 export function RegisterExperience({ branding, registrationEnabled }: RegisterExperienceProps) {
+  const isReady = useSyncExternalStore(subscribeToHydration, () => true, () => false)
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -61,7 +64,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
         return
       }
 
-      router.push('/dashboard')
+      router.push(payload.signInRequired ? '/login' : '/dashboard')
       router.refresh()
     } catch {
       setFormError('Network error. Please try again.')
@@ -80,7 +83,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
       }
       description={
         registrationEnabled
-          ? 'Set up your identity once and continue into the workspace immediately after registration.'
+          ? 'Create your account, then complete your team’s sign-in and authenticator requirements.'
           : `Ask your ${branding.displayName} administrator to create an account for you.`
       }
       footer={
@@ -107,6 +110,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
               autoFocus
               autoComplete="name"
               data-testid="register-name-input"
+              disabled={!isReady}
             />
           </div>
           <div className="space-y-1.5">
@@ -120,6 +124,7 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
               required
               autoComplete="email"
               data-testid="register-email-input"
+              disabled={!isReady}
             />
           </div>
         </div>
@@ -135,9 +140,10 @@ export function RegisterExperience({ branding, registrationEnabled }: RegisterEx
             minLength={8}
             autoComplete="new-password"
             data-testid="register-password-input"
+            disabled={!isReady}
           />
         </div>
-        <Button type="submit" className="w-full" loading={isLoading} data-testid="register-submit-button">
+        <Button type="submit" className="w-full" disabled={!isReady} loading={isLoading} data-testid="register-submit-button">
           Create Account
         </Button>
       </form>

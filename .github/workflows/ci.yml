@@ -55,6 +55,7 @@ jobs:
       - run: npm run test:integration
       - run: node --test --experimental-strip-types tests/runtime/redis-recovery.test.ts
       - run: node --test --experimental-strip-types tests/runtime/smtp-tls.test.ts
+      - run: node --test --experimental-strip-types tests/runtime/registration-mfa.test.ts
       - run: npm run build
   presentation:
     runs-on: ubuntu-latest
@@ -70,7 +71,9 @@ jobs:
   browser-e2e:
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Cold browser/OS dependency installation took 11 minutes on a real runner;
+    # leave time for the complete 158-case matrix and the focused auth gate.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine
@@ -110,4 +113,6 @@ jobs:
       - run: npm run db:generate
       - run: npx prisma migrate deploy
       - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify signup, MFA and login before the full matrix
+        run: npm run test:e2e -- --grep Authentication --project=chromium --project=firefox --project=webkit --reporter=list,github --max-failures=1
       - run: npm run test:e2e -- --reporter=list,github

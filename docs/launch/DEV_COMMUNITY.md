@@ -20,7 +20,7 @@ A useful architectural review follows a single work-item edit through the API, a
 
 ## 3. Deploying RabbitFlow with Docker: configuration before convenience
 
-Clone the repository, copy `.env.docker.example` into a private `.env.docker`, generate independent JWT and cron secrets, and choose your own administrator email/password. Validate with `docker compose --env-file .env.docker config --quiet`, then run `docker compose --env-file .env.docker up -d --build`.
+Clone the repository, copy `.env.docker.example` into a private `.env.docker`, generate independent JWT, cron and MFA encryption keys, and choose your own administrator email/password. Preserve the MFA key in encrypted backups. Validate with `docker compose --env-file .env.docker config --quiet`, then run `docker compose --env-file .env.docker up -d --build`.
 
 The entrypoint runs migrations and optionally bootstrap seeding. Read logs: a bootstrap failure is reported while the app still starts, so readiness alone is insufficient. Sign in and create a project/work item, then disable bootstrap. Use the production Compose file for private database networking and durable upload storage; the local stack is for evaluation.
 

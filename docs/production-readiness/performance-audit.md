@@ -1,5 +1,7 @@
 # Performance Audit
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 > Measurements taken from a production build (`npm run build`) and a running instance.
 > No load testing was performed — the findings below are structural, not benchmark-derived.
 

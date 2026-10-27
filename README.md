@@ -37,7 +37,7 @@ cd rabbitflow
 cp .env.docker.example .env.docker
 ```
 
-Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`) and `CRON_SECRET` (`openssl rand -hex 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Never commit this file.
+Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`), `CRON_SECRET` (`openssl rand -hex 32`) and `MFA_ENCRYPTION_KEY` (`openssl rand -base64 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Preserve the MFA key in encrypted backups. Never commit this file.
 
 ```bash
 docker compose --env-file .env.docker config --quiet
@@ -46,7 +46,7 @@ docker compose --env-file .env.docker up -d --build
 
 The evaluation stack listens on port 4080. Check `docker compose --env-file .env.docker logs app` for migration and seed results; a seed failure does not stop the app. Verify `/api/health/ready` returns HTTP 200, then sign in using your configured administrator. Set `RUN_BOOTSTRAP_SEED=false` after success. [Full instructions and caveats](docs/getting-started.md).
 
-Native builds and core browser journeys have been exercised with synthetic data. Dependency-security and operational release gates remain; consult the final report before using RabbitFlow for important data.
+Native builds and core browser journeys have been exercised with synthetic data, and the remediated dependency audit reports zero findings. Broader browser and operational release gates remain; consult the final report before using RabbitFlow for important data.
 
 ## Develop
 
@@ -66,7 +66,7 @@ Use migrations on a fresh database: they install full-text-search triggers that 
 
 ![RabbitFlow backlog with five synthetic release-planning work items](docs/images/product-backlog.png)
 
-Actual RabbitFlow UI, captured from the production build using an isolated synthetic project. No customer data or fabricated dashboard is shown. See the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) for the wider sprint/analytics/video tour still to be produced.
+Actual RabbitFlow UI, captured from the production build using an isolated synthetic project. Explore the [desktop board](docs/images/product-board.png) and [mobile board](docs/images/product-board-mobile.png), captured after placing those sample items across valid workflow states. No customer data or fabricated dashboard is shown. See the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) for the wider sprint/analytics/video tour still to be produced.
 
 The existing logo and social card preserve RabbitFlow's teal identity. An isolated [marketing site](site/README.md) is included without changing application routes.
 

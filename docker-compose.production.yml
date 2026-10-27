@@ -28,7 +28,7 @@ services:
       MFA_ISSUER: ${MFA_ISSUER:-RabbitFlow}
       # Encrypts TOTP seeds at rest. Optional so an existing deployment keeps
       # working, but strongly recommended — see .env.example.
-      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY must be set - generate with openssl rand -base64 32}
       MFA_CHALLENGE_TTL_SECONDS: ${MFA_CHALLENGE_TTL_SECONDS:-600}
       PASSWORD_RESET_OTP_TTL_SECONDS: ${PASSWORD_RESET_OTP_TTL_SECONDS:-600}
       MFA_REQUIRE_ENROLLMENT: ${MFA_REQUIRE_ENROLLMENT:-true}
@@ -122,6 +122,10 @@ services:
             ;;
         esac
         case "$${APP_TRUSTED_PROXY_CIDR}" in
+          */0)
+            echo "APP_TRUSTED_PROXY_CIDR must not trust all IPv4 clients" >&2
+            exit 1
+            ;;
           ''|*[!0-9./]*)
             echo "APP_TRUSTED_PROXY_CIDR must be an IPv4 address or CIDR" >&2
             exit 1

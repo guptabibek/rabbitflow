@@ -90,6 +90,12 @@ export async function POST(request: NextRequest) {
         },
       })
 
+      // Enrollment policy also applies to the first authenticated session.
+      // Do not let opt-in signup issue a password-only session around MFA.
+      if (process.env.MFA_REQUIRE_ENROLLMENT !== 'false') {
+        return { user: createdUser, session: null }
+      }
+
       const createdSession = await createAuthSessionRecordTx(tx, {
         request,
         userId: createdUser.id,
@@ -102,6 +108,8 @@ export async function POST(request: NextRequest) {
         session: createdSession,
       }
     })
+
+    if (!session) return NextResponse.json({ user, signInRequired: true }, { status: 201 })
 
     const token = await signToken(user.id, session.id, user.globalRole)
 

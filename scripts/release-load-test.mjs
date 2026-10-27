@@ -7,6 +7,10 @@ if (!baseUrl || !cookie || !projectId) throw new Error('LOAD_TEST_BASE_URL, LOAD
 
 const durationSeconds = Math.max(10, Number(process.env.LOAD_TEST_DURATION_SECONDS ?? 60))
 const concurrency = Math.max(1, Number(process.env.LOAD_TEST_CONCURRENCY ?? 10))
+const thinkTimeMs = Math.max(0, Number(process.env.LOAD_TEST_THINK_TIME_MS ?? 0))
+if (![durationSeconds, concurrency, thinkTimeMs].every(Number.isFinite) || !Number.isInteger(concurrency)) {
+  throw new Error('Load duration, concurrency and think time must be finite; concurrency must be an integer.')
+}
 const endpoints = [
   `/api/issues?projectId=${encodeURIComponent(projectId)}&pageSize=100`,
   `/api/roadmap?projectId=${encodeURIComponent(projectId)}`,
@@ -45,6 +49,8 @@ async function worker(workerId) {
       latencies.push(performance.now() - started)
       requests += 1
     }
+    const remainingMs = deadline - performance.now()
+    if (thinkTimeMs && remainingMs > 0) await new Promise(resolve => setTimeout(resolve, Math.min(thinkTimeMs, remainingMs)))
   }
 }
 
@@ -56,6 +62,7 @@ const elapsedSeconds = (performance.now() - startedAt) / 1000
 const result = {
   durationSeconds,
   concurrency,
+  thinkTimeMs,
   elapsedSeconds: Number(elapsedSeconds.toFixed(2)),
   statuses,
   requests,

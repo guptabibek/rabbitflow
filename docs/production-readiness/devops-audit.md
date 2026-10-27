@@ -1,5 +1,7 @@
 # DevOps & Deployment Audit
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 ## OPS-001 · No CI/CD · **P1**
 
 `.github/` does not exist. No GitHub Actions, no GitLab CI, no Jenkinsfile, no pipeline of

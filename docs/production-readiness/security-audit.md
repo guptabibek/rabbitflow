@@ -1,5 +1,7 @@
 # Security Audit
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 > Audit date: 2026-09-05 · Findings marked **[VERIFIED]** were reproduced against a
 > running instance of this code, not inferred from reading it.
 

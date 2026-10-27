@@ -1,5 +1,7 @@
 # Risk Register
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 > Audit date 2026-09-05 · commit `adfd7b1`
 > **[V]** = reproduced against a running instance. **[C]** = established by code analysis.
 

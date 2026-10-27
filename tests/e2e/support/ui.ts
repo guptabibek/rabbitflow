@@ -5,6 +5,10 @@ import {
   type Page,
   type Response as PlaywrightResponse,
 } from '@playwright/test'
+import { authenticator } from 'otplib'
+
+// Synthetic account seeds stay only in the test worker's memory.
+const mfaSecrets = new Map<string, string>()
 
 type ProjectInput = {
   name: string
@@ -57,9 +61,21 @@ export async function login(page: Page, email: string, password: string) {
   )
 
   await page.getByTestId('login-submit-button').click()
-  const response = await responsePromise
+  let response = await responsePromise
 
   expect(response.ok()).toBeTruthy()
+  const payload = await response.json()
+  if (payload.mfaRequired) {
+    if (payload.setupRequired) mfaSecrets.set(email, payload.manualEntryKey)
+    const secret = mfaSecrets.get(email)
+    if (!secret) throw new Error('An enrolled test account needs its synthetic authenticator seed')
+    await expect(page.getByTestId('login-mfa-form')).toBeVisible()
+    await page.getByTestId('login-mfa-code-input').fill(authenticator.generate(secret))
+    const verified = page.waitForResponse(result => result.url().includes('/api/auth/mfa/verify') && result.request().method() === 'POST')
+    await page.getByTestId('login-mfa-submit-button').click()
+    response = await verified
+    expect(response.ok()).toBeTruthy()
+  }
   await expect(page).toHaveURL(/\/dashboard$/)
 
   return response

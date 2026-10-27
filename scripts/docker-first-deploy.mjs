@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
 const envFile = '.env.docker'
@@ -11,11 +11,12 @@ if (!existsSync(envFile)) {
   }
 
   copyFileSync(envExampleFile, envFile)
+  chmodSync(envFile, 0o600)
   // The compose file has no default secrets or administrator, so starting now
   // would only fail. Stop and let the required values be filled in first.
   console.log(`Created ${envFile} from ${envExampleFile}.`)
   console.log(
-    'Fill in JWT_SECRET, CRON_SECRET, SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env.docker, then run this command again.'
+    'Fill in JWT_SECRET, CRON_SECRET, MFA_ENCRYPTION_KEY, SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env.docker, then run this command again.'
   )
   process.exit(1)
 }
