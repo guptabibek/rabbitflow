@@ -51,7 +51,6 @@ test.describe('Management form feedback', () => {
     const project = await seed.createProjectFixture({ name: makeProjectName('team-feedback') })
     const draftName = makeProjectName('retained-team')
 
-    await page.goto(`/projects/${project.id}/overview`)
     let releaseTeams: () => void = () => {}
     const gate = new Promise<void>(resolve => { releaseTeams = resolve })
     await page.route(`**/api/teams?projectId=${project.id}`, async route => {
@@ -59,8 +58,7 @@ test.describe('Management form feedback', () => {
       await route.continue()
     })
     try {
-      await page.getByTestId('sidebar-settings-toggle').click()
-      await page.getByTestId('sidebar-teams-button').click()
+      await page.goto(`/projects/${project.id}/teams`)
       await expect(page.getByTestId('team-management')).toHaveAttribute('aria-busy', 'true')
       await page.getByRole('button', { name: 'New', exact: true }).click()
       releaseTeams()

@@ -376,6 +376,7 @@ export function FilterBar({
                 size="xs"
                 onClick={() => handleViewModeChange('board')}
                 aria-pressed={viewMode === 'board'}
+                aria-label="Board view"
                 className={cn('rounded-[5px]', viewMode === 'board' && 'bg-card shadow-2xs')}
                 data-testid="work-items-view-board-button"
               >
@@ -387,6 +388,7 @@ export function FilterBar({
                 size="xs"
                 onClick={() => handleViewModeChange('list')}
                 aria-pressed={viewMode === 'list'}
+                aria-label="List view"
                 className={cn('rounded-[5px]', viewMode === 'list' && 'bg-card shadow-2xs')}
                 data-testid="work-items-view-list-button"
               >
@@ -399,7 +401,7 @@ export function FilterBar({
           {canManageSprints ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => setSprintModalOpen(true)}>
+                <Button variant="outline" size="sm" aria-label="Manage sprints" onClick={() => setSprintModalOpen(true)}>
                   <Flag />
                   <span className="hidden md:inline">Sprints</span>
                 </Button>

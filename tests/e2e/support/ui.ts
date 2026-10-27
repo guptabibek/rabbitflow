@@ -169,6 +169,8 @@ export async function selectProjectFromDashboard(page: Page, name: string) {
   await expect(card).toBeVisible()
   await card.click()
   await expect(page).toHaveURL(/\/projects\/[^/]+\/overview$/)
+  // URL navigation can precede session/project restoration and its active cookie.
+  await expect(page.getByTestId('workspace-project-switcher')).toContainText(name)
 }
 
 export async function openSidebarView(page: Page, view: string) {

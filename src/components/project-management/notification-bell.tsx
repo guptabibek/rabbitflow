@@ -116,9 +116,14 @@ export function NotificationBell() {
         nextErrors.push('Failed to load unread count')
       }
 
-      setLoadError(nextErrors.length > 0 ? nextErrors.join(' ') : null)
+      // An in-flight response must not overwrite the offline event's message.
+      setLoadError(!navigator.onLine
+        ? 'You are offline. Showing the last known notifications.'
+        : nextErrors.length > 0 ? nextErrors.join(' ') : null)
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Failed to refresh notifications')
+      setLoadError(!navigator.onLine
+        ? 'You are offline. Showing the last known notifications.'
+        : error instanceof Error ? error.message : 'Failed to refresh notifications')
     }
   }, [])
 

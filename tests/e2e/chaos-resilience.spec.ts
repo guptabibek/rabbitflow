@@ -155,6 +155,7 @@ test.describe('Chaos Resilience', () => {
       await expect(page.getByTestId('notification-load-error')).toContainText('Injected unread count failure')
 
       await context.setOffline(true)
+      await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false)
       await page.getByTestId('notification-retry-button').click()
       await expect(page.getByTestId('notification-load-error')).toContainText('offline')
 
