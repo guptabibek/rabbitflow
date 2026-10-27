@@ -1,5 +1,7 @@
 # UX & UI Audit
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 > Conducted in a real browser (Chromium 1440×900, 768×1024, 390×844) against a seeded
 > instance. Findings marked **[SEEN]** were observed in screenshots, not inferred.
 

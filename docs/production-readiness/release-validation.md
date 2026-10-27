@@ -39,6 +39,8 @@ npm run test:load
 
 Record the release image digest, dataset counts, environment shape, command output, database pool saturation, CPU/memory peaks, and logs. Repeat while restarting the app, then while stopping Redis. Readiness must fail when a required dependency is unavailable, in-flight work must recover, and the application must return ready without manual data repair.
 
+The workload checks authentication and all endpoints before timing; an expired session fails immediately. It reports HTTP status counts and measures response bodies, not just response headers. A single session repeatedly requesting executive reports hits the production report limit (60 requests/minute per client/user). HTTP 429 counts as a failed request; do not disable the limiter or relabel it as success to pass the gate. For a paced baseline set `LOAD_TEST_THINK_TIME_MS` (milliseconds between each worker's requests), and report the value with the result. This single-session baseline cannot establish capacity for 25 distinct users; a representative staging workload and host telemetry are still required.
+
 ## Human acceptance gates
 
 The product success targets require at least five Product Managers, Scrum Managers, Developers, QA users, and Viewers who did not build the feature. Record task outcome, duration, abandonment, browser/device, SUS response, and any workaround for each session. The two-team pilot must cover planning through retrospective for one full sprint.

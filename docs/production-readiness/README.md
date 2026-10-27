@@ -1,5 +1,7 @@
 # RabbitFlow — Production Readiness Audit
 
+> Historical audit of the September 2026 baseline, retained as evidence. Findings below are not a current defect list. See the remediation logs and the [final launch report](../launch/FINAL_LAUNCH_REPORT.md) for verified fixes, current checks and remaining gates.
+
 **Audit date:** 2026-09-05 · **Commit:** `adfd7b1` · **Scope:** full system
 
 Findings marked **[VERIFIED]** were reproduced against a running instance (Postgres 16 +

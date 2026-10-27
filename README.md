@@ -46,7 +46,7 @@ docker compose --env-file .env.docker up -d --build
 
 The evaluation stack listens on port 4080. Check `docker compose --env-file .env.docker logs app` for migration and seed results; a seed failure does not stop the app. Verify `/api/health/ready` returns HTTP 200, then sign in using your configured administrator. Set `RUN_BOOTSTRAP_SEED=false` after success. [Full instructions and caveats](docs/getting-started.md).
 
-Native builds and core browser journeys have been exercised with synthetic data. Dependency-security and operational release gates remain; consult the final report before using RabbitFlow for important data.
+Native builds and core browser journeys have been exercised with synthetic data, and the remediated dependency audit reports zero findings. Broader browser and operational release gates remain; consult the final report before using RabbitFlow for important data.
 
 ## Develop
 

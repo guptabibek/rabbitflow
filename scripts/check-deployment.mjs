@@ -4,7 +4,7 @@ const results = []
 for (const path of ['/', '/login', '/api/health/live', '/api/health/ready']) {
   try {
     const response = await fetch(origin + path, { redirect: 'manual', signal: AbortSignal.timeout(20_000) })
-    const result = { path, status: response.status, tls: 'verified', hsts: response.headers.has('strict-transport-security'), noSniff: response.headers.get('x-content-type-options') === 'nosniff' }
+    const result = { path, status: response.status, tls: 'verified', hsts: response.headers.has('strict-transport-security'), noSniff: response.headers.get('x-content-type-options')?.split(',').some(value => value.trim().toLowerCase() === 'nosniff') ?? false }
     const location = response.headers.get('location')
     if (location) result.redirectPath = new URL(location, origin).pathname
     if (path.endsWith('/ready') && response.ok) {
