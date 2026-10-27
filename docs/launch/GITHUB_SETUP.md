@@ -13,4 +13,4 @@ Remaining owner setup (MIT and the initial launch files are already on main):
 7. Run CI, configure branch protection to require the observed CI verify job, and require review. Do not make an unexecuted workflow a claimed passing gate.
 8. Publish only after release checklist completion and separate owner approval.
 
-Audit branch: feat/launch-readiness. PRs #3 and #12 were merged outside this work session. [PR #13](https://github.com/guptabibek/rabbitflow/pull/13) carries the remaining dependency, mail and operational fixes. Its description must reflect the [final launch report](FINAL_LAUNCH_REPORT.md) and actual validation limitations. No automatic merge or release is authorized.
+Audit branch: feat/launch-readiness. PRs #3, #12 and #13 were merged outside this work session. Further MFA/installation fixes and updated evidence remain on the branch for a new follow-up PR. Its description must reflect the [final launch report](FINAL_LAUNCH_REPORT.md) and actual validation limitations. No automatic merge or release is authorized.

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/app.fixture'
-import { E2E_TEST_PASSWORD, TEST_ACCOUNTS, makeSignupEmail } from './support/env'
+import { E2E_TEST_PASSWORD, makeSignupEmail } from './support/env'
 import { login, logout } from './support/ui'
 
 test.describe('Authentication', () => {
@@ -77,7 +77,9 @@ test.describe('Authentication', () => {
       await expect(page.getByRole('alert').filter({ hasText: /already exists/i })).toBeVisible()
 
       await page.goto('/login')
-      await page.getByTestId('login-email-input').fill(TEST_ACCOUNTS.member.email)
+      // Each browser/retry owns this account; deliberate failures must not lock
+      // the shared member used by unrelated journeys after three attempts.
+      await page.getByTestId('login-email-input').fill(duplicateEmail)
       await page.getByTestId('login-password-input').fill('wrong-password')
 
       const loginResponsePromise = page.waitForResponse(

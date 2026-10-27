@@ -17,6 +17,7 @@ node --test --experimental-strip-types tests/runtime/redis-recovery.test.ts
 # With TEST_DATABASE_URL (also used as DATABASE_URL) naming an isolated migrated
 # test database, REDIS_TEST_URL, and openssl available:
 node --test --experimental-strip-types tests/runtime/smtp-tls.test.ts
+node --test --experimental-strip-types tests/runtime/registration-mfa.test.ts
 python3 scripts/check-launch-docs.py
 npm run build
 npm audit

@@ -66,7 +66,7 @@ Use migrations on a fresh database: they install full-text-search triggers that 
 
 ![RabbitFlow backlog with five synthetic release-planning work items](docs/images/product-backlog.png)
 
-Actual RabbitFlow UI, captured from the production build using an isolated synthetic project. No customer data or fabricated dashboard is shown. See the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) for the wider sprint/analytics/video tour still to be produced.
+Actual RabbitFlow UI, captured from the production build using an isolated synthetic project. Explore the [desktop board](docs/images/product-board.png) and [mobile board](docs/images/product-board-mobile.png), captured after placing those sample items across valid workflow states. No customer data or fabricated dashboard is shown. See the [capture guide and storyboard](docs/launch/VISUAL_ASSETS.md) for the wider sprint/analytics/video tour still to be produced.
 
 The existing logo and social card preserve RabbitFlow's teal identity. An isolated [marketing site](site/README.md) is included without changing application routes.
 

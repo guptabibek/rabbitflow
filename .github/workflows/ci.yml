@@ -71,7 +71,9 @@ jobs:
   browser-e2e:
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Cold browser/OS dependency installation took 11 minutes on a real runner;
+    # leave time for the complete 158-case matrix and the focused auth gate.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine

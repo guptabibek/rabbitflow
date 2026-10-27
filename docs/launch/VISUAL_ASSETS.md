@@ -6,6 +6,8 @@ Existing assets retained: public/brand/rabbitflow-logo.png, rabbitflow-mark.png 
 
 [Product backlog](../images/product-backlog.png) is a genuine Chromium capture of the Next.js 16.4.3 production build at 1440×1000. The Orbit project, Alex Example account and five work items were created solely for this audit in a new database. The image was reviewed for sensitive data and is now used in the README and marketing site. It contains synthetic data, not an adoption claim.
 
+The [desktop board](../images/product-board.png) (1680×1000) and [mobile board](../images/product-board-mobile.png) (390×844) were captured on 2026-10-27 from the same synthetic project. Its five items were seeded across valid mapped states: two backlog, two in progress and one done. These are actual rendered UI, not composited dashboards or performance/adoption evidence. Visible identity is Alex Example; images were reviewed for secrets and customer data. They show board layout, status selection and responsive controls; no recording is claimed.
+
 ## Further authentic captures — pending
 
 Do not generate fictional dashboards. On a disposable seeded instance, create a project “Orbit / Sample delivery” with synthetic people such as Alex Example and Casey Example, issues for a sample release, an iteration, labels and relationships. Never use existing customer accounts or data.
@@ -14,11 +16,8 @@ Capture 1440×1000 desktop and 390×844 mobile at browser scale 1×; use consist
 
 | Capture | Actual UI target | What it demonstrates |
 | --- | --- | --- |
-| Main README image | Seeded project sprint board | Real work-item states and hierarchy |
-| Feature 1 | Backlog | Prioritization and grouping |
-| Feature 2 | Sprint analytics | Data-backed charts; do not invent metrics |
-| Feature 3 | Project role administration | Actual role options, no real user identities |
-| Mobile | Project/work-item view | Responsive behavior and keyboard/touch controls |
+| Analytics | Sprint analytics | Data-backed charts; do not invent metrics |
+| Roles | Project role administration | Actual role options, no real user identities |
 
 Place approved captures in docs/images/ and add them to README/site only when files exist. The workflow diagram remains explicitly labeled; the README now includes the genuine backlog capture. No missing-image placeholders are shipped.
 
