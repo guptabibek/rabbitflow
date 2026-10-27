@@ -1,7 +1,7 @@
 # Node 22, not 20: `scripts/seed-bootstrap.mjs` imports TypeScript directly and
 # runs under `--experimental-strip-types`, which does not exist before 22.6. The
 # repo's own `npm test` needs it too, so 20 could not run the code it shipped.
-FROM node:22-bookworm-slim AS base
+FROM node:26-bookworm-slim AS base
 
 ENV NODE_ENV=production
 WORKDIR /app
