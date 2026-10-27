@@ -1,6 +1,7 @@
 import { test as base, expect } from '@playwright/test'
 import * as seedUtils from '../support/db'
 import { TEST_ACCOUNTS } from '../support/env'
+import { createHash } from 'node:crypto'
 
 type AppFixtures = {
   accounts: typeof TEST_ACCOUNTS
@@ -29,7 +30,13 @@ export const test = base.extend<AppFixtures>({
     Logging the console error puts the actual exception in the test output. It
     does not fail the test on its own.
   */
-  page: async ({ page }, use) => {
+  page: async ({ page }, use, testInfo) => {
+    // Distinct synthetic clients keep production rate limits enabled without
+    // combining every browser/retry into one loopback registration bucket.
+    // Production nginx overwrites client-supplied forwarding headers; this
+    // fixture talks directly to the isolated test server.
+    const identity = createHash('sha256').update(`${testInfo.testId}:${testInfo.retry}`).digest()
+    await page.setExtraHTTPHeaders({ 'x-forwarded-for': `10.${identity[0]}.${identity[1]}.${identity[2]}` })
     page.on('console', (message) => {
       const text = message.text()
       if (message.type() === 'error' && text.includes('Unhandled view error')) {

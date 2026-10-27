@@ -1,7 +1,7 @@
 // Read-only observation of the owner-provided deployment. Never sends credentials or mutates data.
 const origin = 'https://devops.rabbittech.com.np'
 const results = []
-for (const path of ['/', '/login', '/api/health/live', '/api/health/ready']) {
+for (const path of ['/', '/login', '/api/health/live', '/api/health/ready', '/api/projects', '/api/users', '/brand/rabbitflow-mark.png']) {
   try {
     const response = await fetch(origin + path, { redirect: 'manual', signal: AbortSignal.timeout(20_000) })
     const result = { path, status: response.status, tls: 'verified', hsts: response.headers.has('strict-transport-security'), noSniff: response.headers.get('x-content-type-options')?.split(',').some(value => value.trim().toLowerCase() === 'nosniff') ?? false }
@@ -11,7 +11,11 @@ for (const path of ['/', '/login', '/api/health/live', '/api/health/ready']) {
       const body = await response.json()
       result.ready = body.status === 'ready' && body.checks?.database === 'ok' && ['ok', 'not-configured'].includes(body.checks?.redis)
     }
-    result.pass = path === '/' ? [200, 301, 302, 303, 307, 308].includes(response.status) : response.ok && (!path.endsWith('/ready') || result.ready === true)
+    if (path.startsWith('/brand/') && response.ok) result.assetReadable = response.headers.get('content-type')?.startsWith('image/') && (await response.arrayBuffer()).byteLength > 0
+    result.pass = ['/api/projects', '/api/users'].includes(path) ? response.status === 401
+      : path.startsWith('/brand/') ? response.ok && result.assetReadable === true
+      : path === '/' ? [200, 301, 302, 303, 307, 308].includes(response.status)
+      : response.ok && (!path.endsWith('/ready') || result.ready === true)
     results.push(result)
   } catch (error) {
     results.push({ path, pass: false, error: error.cause?.code || error.name })

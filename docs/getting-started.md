@@ -39,6 +39,6 @@ curl --fail http://127.0.0.1:4080/api/health/ready
 
 Sign in and verify the configured administrator exists. The app logs a bootstrap failure and continues, so healthy HTTP does not prove seeding succeeded. Disable RUN_BOOTSTRAP_SEED after success. The local stack uses public development database defaults and persists PostgreSQL/Redis in named volumes; do not expose it to the Internet. `down` preserves volumes; **`down -v` and `docker:reset` destroy data**. Local Compose does not persist uploads in a named app volume; use the production stack for durable attachments.
 
-For external installation allow HTTPS package registries, Docker image registries, and `binaries.prisma.sh`. Preserve artifact checksums and TLS checks.
+For external installation allow HTTPS package registries, Docker image registries, `binaries.prisma.sh`, Alpine's `dl-cdn.alpinelinux.org`, and Go's `proxy.golang.org`/`sum.golang.org` plus documented artifact redirects. Compose builds the app, nginx and PostgreSQL images; see [deployment](deployment.md) for the security fixes in those images. Preserve artifact checksums and TLS checks.
 
 The native `npm run start` command currently invokes `next start`, which serves the built app but warns when output is standalone. For production, use the Docker image's tested standalone entrypoint rather than assuming the native start command packages static assets. The complete Docker image includes those assets and applies migrations at boot.

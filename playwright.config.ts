@@ -3,6 +3,7 @@ import { E2E_BASE_URL } from './tests/e2e/support/env'
 
 const browserChannel = process.env.E2E_BROWSER_CHANNEL
 const fullMatrix = process.env.E2E_FULL_MATRIX === 'true'
+const productionBuild = process.env.E2E_PRODUCTION_BUILD === 'true'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -84,17 +85,17 @@ export default defineConfig({
     process.env.E2E_SKIP_WEBSERVER === 'true'
       ? undefined
       : {
-          command: 'npm run dev',
+          command: productionBuild ? 'npm run build && npm run start' : 'npm run dev',
           url: E2E_BASE_URL,
           reuseExistingServer: !process.env.CI,
-          timeout: 180_000,
+          timeout: productionBuild ? 240_000 : 180_000,
           stdout: 'pipe',
           stderr: 'pipe',
           // Registration is disabled by default in production, while the auth
           // E2E project deliberately covers the opt-in registration journey.
           env: {
             ALLOW_SELF_REGISTRATION: process.env.ALLOW_SELF_REGISTRATION ?? 'true',
-            E2E_DISABLE_RATE_LIMITS: 'true',
+            E2E_DISABLE_RATE_LIMITS: productionBuild ? 'false' : 'true',
           },
         },
 })

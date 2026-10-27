@@ -169,11 +169,10 @@ test.describe('Chaos Resilience', () => {
         which of the two paths got there first.
       */
       const retryButton = page.getByTestId('notification-retry-button')
-      if (await retryButton.isVisible().catch(() => false)) {
-        await retryButton.click()
-      }
-
-      await expect(page.getByTestId('notification-load-error')).toHaveCount(0)
+      await expect(async () => {
+        if (await retryButton.isVisible()) await retryButton.click({ timeout: 1000 })
+        await expect(page.getByTestId('notification-load-error')).toHaveCount(0)
+      }).toPass({ timeout: 10_000 })
       await expect(page.getByText(title)).toBeVisible()
     } finally {
       await page.unroute('**/api/notifications?countOnly=true')

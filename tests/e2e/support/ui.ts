@@ -238,6 +238,18 @@ export async function createWorkItem(page: Page, title: string, description: str
 
   await fillRequiredScope(page)
 
+  // Report native validation failures before waiting for a request the browser
+  // cannot send (for example, a required control on another tab).
+  const invalidFields = await page.getByTestId('create-work-item-submit-button').evaluate(button => {
+    const form = (button as HTMLButtonElement).form
+    return form ? Array.from(form.querySelectorAll(':invalid')).map(element => ({
+      id: element.id,
+      message: (element as HTMLInputElement).validationMessage,
+    })) : [{ id: 'missing-form', message: 'Submit control has no form' }]
+  })
+  expect(invalidFields).toEqual([])
+  await expect(page.getByTestId('create-work-item-title-input')).toHaveValue(title)
+
   const responsePromise = page.waitForResponse(
     (response) => response.url().includes('/api/issues') && response.request().method() === 'POST'
   )

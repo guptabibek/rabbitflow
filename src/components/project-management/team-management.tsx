@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore, type Team, type User } from '@/store/app-store'
 import {
   Dialog,
@@ -124,7 +124,14 @@ export function TeamManagement({
   const [open, setOpen] = useState(false)
   const isScreenMode = mode === 'screen'
   const isVisible = isScreenMode || open
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const [selectedTeamId, setSelectedTeamIdValue] = useState<string | null>(null)
+  // undefined: initial selection; null: the user explicitly started a new draft.
+  // Async loads must use current intent rather than a captured null selection.
+  const selectionIntent = useRef<string | null | undefined>(undefined)
+  const setSelectedTeamId = (id: string | null) => {
+    selectionIntent.current = id
+    setSelectedTeamIdValue(id)
+  }
   const [form, setForm] = useState<TeamForm>(EMPTY_FORM)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -162,7 +169,7 @@ export function TeamManagement({
       const payload = await response.json()
       setTeams(payload)
 
-      if (!selectedTeamId && payload.length > 0) {
+      if (selectionIntent.current === undefined && payload.length > 0) {
         setSelectedTeamId(payload[0].id)
         setForm(teamToForm(payload[0]))
       }
@@ -173,6 +180,12 @@ export function TeamManagement({
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    selectionIntent.current = undefined
+    setSelectedTeamIdValue(null)
+    setForm(EMPTY_FORM)
+  }, [currentProject?.id])
 
   useEffect(() => {
     if (!isVisible || !currentProject) {
@@ -684,7 +697,7 @@ export function TeamManagement({
   if (isScreenMode) {
     return (
       <>
-        <div className="flex h-full min-h-0 flex-col bg-background" data-testid="team-management">
+        <div className="flex h-full min-h-0 flex-col bg-background" data-testid="team-management" aria-busy={isLoading}>
           {header}
           {content}
         </div>
