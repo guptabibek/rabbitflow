@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -35,7 +35,10 @@ type LoginExperienceProps = {
   branding: ResolvedProjectBranding
 }
 
+const subscribeToHydration = () => () => {}
+
 export function LoginExperience({ branding }: LoginExperienceProps) {
+  const isReady = useSyncExternalStore(subscribeToHydration, () => true, () => false)
   const MFA_CODE_MIN_LENGTH = 6
   const MFA_CODE_MAX_LENGTH = 12
   const RESET_OTP_LENGTH = 6
@@ -255,6 +258,7 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               autoFocus
               autoComplete="email"
               data-testid="login-email-input"
+              disabled={!isReady}
             />
           </div>
           <div className="space-y-1.5">
@@ -268,10 +272,11 @@ export function LoginExperience({ branding }: LoginExperienceProps) {
               required
               autoComplete="current-password"
               data-testid="login-password-input"
+              disabled={!isReady}
             />
           </div>
           <div className="space-y-3 pt-1">
-            <Button type="submit" className="w-full" loading={isLoading} data-testid="login-submit-button">
+            <Button type="submit" className="w-full" disabled={!isReady} loading={isLoading} data-testid="login-submit-button">
               Sign In
             </Button>
             <Button

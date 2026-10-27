@@ -26,7 +26,15 @@ test.describe('Authentication', () => {
 
       expect(registerResponse.status()).toBe(201)
       expect(registerPayload.user.email).toBe(email)
-      await expect(page).toHaveURL(/\/dashboard$/)
+      if (registerPayload.signInRequired) {
+        expect(registerResponse.headers()['set-cookie']).toBeUndefined()
+        await expect(page).toHaveURL(/\/login$/)
+        expect((await page.request.get('/api/projects')).status()).toBe(401)
+        await login(page, email, E2E_TEST_PASSWORD)
+        expect((await seed.getUserByEmail(email))?.mfaEnabled).toBe(true)
+      } else {
+        await expect(page).toHaveURL(/\/dashboard$/)
+      }
 
       const createdUser = await seed.getUserByEmail(email)
       expect(createdUser?.email).toBe(email)
