@@ -37,7 +37,7 @@ cd rabbitflow
 cp .env.docker.example .env.docker
 ```
 
-Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`) and `CRON_SECRET` (`openssl rand -hex 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Never commit this file.
+Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`), `CRON_SECRET` (`openssl rand -hex 32`) and `MFA_ENCRYPTION_KEY` (`openssl rand -base64 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Preserve the MFA key in encrypted backups. Never commit this file.
 
 ```bash
 docker compose --env-file .env.docker config --quiet

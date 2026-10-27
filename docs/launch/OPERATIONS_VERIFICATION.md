@@ -10,13 +10,14 @@ The remediation used synthetic data and loopback-only containers. It did not dep
 - A local TLS edge and the production nginx template returned readiness 200. The trusted edge caused Secure, HttpOnly, SameSite cookies; an untrusted HTTP caller spoofing X-Forwarded-Proto=https did not control Secure.
 - A signed backup containing PostgreSQL, upload files and runtime keys/configuration was encrypted using OpenSSL CMS AES-256-GCM. Decryption and signature verification recovered byte-identical content. Modified ciphertext was rejected.
 - Recovery used a **new** database and upload volume. The recovered app served the original attachment bytes to the original session, rejected anonymous reads, and completed TOTP login using the recovered MFA encryption key. The source data was not reset or overwritten.
+- A fresh evaluation Compose project also completed mandatory admin MFA with an encrypted seed, work-item creation, authenticated cron and restart persistence. Both Compose stacks now reject a missing MFA encryption key. Preserve the existing key during upgrades; never regenerate it as a routine restart step.
 - A 10,001-issue restored synthetic dataset completed a paced 60-second/four-worker baseline (1500ms think time): 142 HTTP 200 responses, no failures, p75 224ms and p95 667.2ms. An earlier unpaced run failed the error budget with 57 HTTP 429 responses out of 582 requests. Those were the report endpoint's 60/minute limit per client/user, not treated as successes. Neither run establishes production multi-user capacity.
 
 These checks demonstrate the implementation path. They do not establish off-host durability, an operator's recovery time objective, external SMTP deliverability, or the actual live domain's proxy/secret configuration.
 
 ## Trusted TLS edge configuration
 
-Set `APP_TRUSTED_PROXY_CIDR` to the exact IPv4 address/CIDR of the proxy connecting to Docker nginx. Its default `127.0.0.1/32` does not trust arbitrary network clients. Do not use `0.0.0.0/0` or an unreviewed broad network. The edge must overwrite X-Forwarded-For and X-Forwarded-Proto using its actual connection information. Do not append untrusted client forwarding values.
+Set `APP_TRUSTED_PROXY_CIDR` to the exact IPv4 address/CIDR of the proxy connecting to Docker nginx. Its default `127.0.0.1/32` does not trust arbitrary network clients. Startup rejects `/0` (trust-all) CIDRs; do not use an unreviewed broad network. The edge must overwrite X-Forwarded-For and X-Forwarded-Proto using its actual connection information. Do not append untrusted client forwarding values.
 
 The nginx realip module accepts client identity only from that CIDR. Protocol mapping then accepts https only from the actual trusted peer. Direct callers retain the actual scheme. Validate nginx with `docker compose -f docker-compose.production.yml --env-file .env.production config --quiet` and inspect startup's `nginx -t` result.
 
