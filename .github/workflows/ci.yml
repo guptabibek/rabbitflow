@@ -6,7 +6,8 @@ permissions:
   contents: read
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Finish the running matrix; GitHub keeps only the newest pending revision.
+  cancel-in-progress: false
 jobs:
   verify:
     runs-on: ubuntu-latest

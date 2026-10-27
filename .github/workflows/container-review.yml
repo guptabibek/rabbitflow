@@ -1,0 +1,59 @@
+name: Container review
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/launch-readiness, main]
+    paths:
+      - Dockerfile
+      - docker/**
+      - docker-compose*.yml
+      - package*.json
+      - src/**
+      - tests/runtime/container-smoke.mjs
+      - .github/workflows/container-review.yml
+permissions:
+  contents: read
+jobs:
+  production-images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build reviewed application and infrastructure images
+        run: |
+          docker build -t rabbitflow:container-review .
+          docker build -f docker/nginx.Dockerfile -t rabbitflow-nginx:local .
+          docker build -f docker/postgres.Dockerfile -t rabbitflow-postgres:local .
+      - name: Verify production runtime with isolated synthetic data
+        run: node tests/runtime/container-smoke.mjs
+      - name: Scan application and service images
+        run: |
+          mkdir -p /tmp/rabbitflow-scan-cache /tmp/rabbitflow-scan-results
+          for pair in 'rabbitflow:container-review|app' 'rabbitflow-nginx:local|nginx' 'rabbitflow-postgres:local|postgres' 'alpine:3.24.3|cron' 'redis:7-alpine|redis'; do
+            image="${pair%|*}"
+            report="${pair#*|}"
+            docker image save "$image" > /tmp/rabbitflow-image.tar
+            docker run --rm \
+              -v /tmp/rabbitflow-image.tar:/scan/image.tar:ro \
+              -v /tmp/rabbitflow-scan-cache:/cache \
+              -v /tmp/rabbitflow-scan-results:/results \
+              aquasec/trivy:0.76.1 image --input /scan/image.tar \
+              --db-repository ghcr.io/aquasecurity/trivy-db:2 --cache-dir /cache \
+              --scanners vuln --severity HIGH,CRITICAL --format json \
+              --output "/results/$report.json" --no-progress
+          done
+          node - <<'JS'
+          const fs = require('fs'); let findings = 0
+          for (const name of fs.readdirSync('/tmp/rabbitflow-scan-results')) {
+            const report = JSON.parse(fs.readFileSync('/tmp/rabbitflow-scan-results/' + name))
+            const count = (report.Results || []).reduce((sum, entry) => sum + (entry.Vulnerabilities || []).length, 0)
+            findings += count
+            console.log(`::${count ? 'error' : 'notice'} title=Container vulnerabilities::${name}: ${count} high/critical findings; image=${report.Metadata?.ImageID || 'unknown'}`)
+          }
+          if (findings) process.exitCode = 1
+          JS
