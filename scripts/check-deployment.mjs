@@ -1,0 +1,28 @@
+// Read-only observation of the owner-provided deployment. Never sends credentials or mutates data.
+const origin = 'https://devops.rabbittech.com.np'
+const results = []
+for (const path of ['/', '/login', '/api/health/live', '/api/health/ready']) {
+  try {
+    const response = await fetch(origin + path, { redirect: 'manual', signal: AbortSignal.timeout(20_000) })
+    const result = { path, status: response.status, tls: 'verified', hsts: response.headers.has('strict-transport-security'), noSniff: response.headers.get('x-content-type-options') === 'nosniff' }
+    const location = response.headers.get('location')
+    if (location) result.redirectPath = new URL(location, origin).pathname
+    if (path.endsWith('/ready') && response.ok) {
+      const body = await response.json()
+      result.ready = body.status === 'ready' && body.checks?.database === 'ok' && ['ok', 'not-configured'].includes(body.checks?.redis)
+    }
+    result.pass = path === '/' ? [200, 301, 302, 303, 307, 308].includes(response.status) : response.ok && (!path.endsWith('/ready') || result.ready === true)
+    results.push(result)
+  } catch (error) {
+    results.push({ path, pass: false, error: error.cause?.code || error.name })
+  }
+}
+console.log(JSON.stringify({ origin, checkedAt: new Date().toISOString(), results }, null, 2))
+if (process.env.GITHUB_ACTIONS === 'true') {
+  // Keep safe evidence available as check annotations even when log archives are restricted.
+  for (const result of results) {
+    const message = JSON.stringify(result).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')
+    console.log(`::${result.pass ? 'notice' : 'error'} title=Read-only deployment observation::${message}`)
+  }
+}
+if (results.some(result => !result.pass)) process.exitCode = 1

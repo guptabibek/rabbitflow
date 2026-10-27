@@ -2,7 +2,7 @@ import net from 'node:net'
 import tls from 'node:tls'
 
 /** Synthetic SMTP sink. It never relays mail and refuses AUTH before verified TLS. */
-export async function startSmtpFixture({ key, cert, username, password, implicit = false, advertiseTls = true }) {
+export async function startSmtpFixture({ key, cert, username, password, implicit = false, advertiseTls = true, onMessage }) {
   const messages = []
   const sockets = new Set()
   const context = tls.createSecureContext({ key, cert })
@@ -17,7 +17,7 @@ export async function startSmtpFixture({ key, cert, username, password, implicit
       while ((end = buffer.indexOf('\r\n')) >= 0) {
         const line = buffer.slice(0, end); buffer = buffer.slice(end + 2)
         if (inData) {
-          if (line === '.') { messages.push(body); body = ''; inData = false; socket.write('250 Message accepted\r\n') }
+          if (line === '.') { messages.push(body); onMessage?.(body); body = ''; inData = false; socket.write('250 Message accepted\r\n') }
           else body += line.replace(/^\.\./, '.') + '\r\n'
           continue
         }

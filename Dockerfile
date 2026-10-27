@@ -61,10 +61,9 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # rather than drifting to whatever the range resolves to today.
 RUN --mount=type=secret,id=network_ca \
     if [ -f /run/secrets/network_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/network_ca; fi; \
-    PRISMA_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/prisma'].version")" \
-  && echo "Installing Prisma CLI ${PRISMA_VERSION}" \
-  && npm install --no-save --no-audit --no-fund \
-       --prefix /opt/prisma-cli "prisma@${PRISMA_VERSION}" \
+    node -e 'const fs=require("fs");const root=require("./package.json");const version=require("./package-lock.json").packages["node_modules/prisma"].version;fs.mkdirSync("/opt/prisma-cli",{recursive:true});fs.writeFileSync("/opt/prisma-cli/package.json",JSON.stringify({private:true,dependencies:{prisma:version},overrides:root.overrides}));' \
+  && npm install --omit=dev --no-fund --prefix /opt/prisma-cli \
+  && npm audit --omit=dev --audit-level=low --prefix /opt/prisma-cli \
   && npm cache clean --force
 
 # Needed only by the optional bootstrap seed, which runs as a plain script

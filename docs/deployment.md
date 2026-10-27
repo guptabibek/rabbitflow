@@ -8,7 +8,7 @@ Status: runbook prepared from code inspection; a clean full-stack deployment rem
 2. Configure MFA_ENCRYPTION_KEY and working SMTP; preserve the encryption key in encrypted backups. Set the real public origin in APP_URL. Do not assume `rabbitflow.rabbittech.com.np` exists.
 3. For first bootstrap only, set RUN_BOOTSTRAP_SEED=true and your administrator fields. Validate without exposing interpolated values: `docker compose -f docker-compose.production.yml --env-file .env.production config --quiet`.
 4. Run `docker compose -f docker-compose.production.yml --env-file .env.production up -d --build`. The entrypoint runs migrations before serving. Inspect app logs for migrations and seed failure; then verify login and creation of a work item, not only health.
-5. Terminate HTTPS at an external edge proxy. The Compose nginx listens on HTTP (default host port 3999); firewall this origin so clients cannot bypass the TLS edge. Configure the edge's forwarding headers intentionally; inspect `docker/nginx.production.conf.template`.
+5. Terminate HTTPS at an external edge proxy. The Compose nginx listens on HTTP (default host port 3999); firewall this origin so clients cannot bypass the TLS edge. Set APP_TRUSTED_PROXY_CIDR to the exact trusted edge address/CIDR and have the edge overwrite forwarding headers; inspect `docker/nginx.production.conf.template`. The default loopback CIDR does not trust arbitrary network clients.
 6. Verify `/api/health/live` and `/api/health/ready` through the edge and locally. Disable bootstrap after successful administrator verification. Configure monitoring and verify cron execution without logging the secret.
 
 Database and Redis are on an internal-only network without published host ports. App uploads persist in `app_uploads` at `/app/var/uploads`. The stack is a single-host deployment, not an HA guarantee. An internal-only Redis network also means application outbound SMTP/HTTPS must be validated through the app's edge network.
@@ -39,3 +39,5 @@ After rollout verify readiness, sign-in/MFA, project permissions, work-item edit
 ## Build networks with a private CA
 
 The Dockerfile accepts an optional BuildKit secret named `network_ca`. If an approved corporate proxy signs HTTPS responses, build using `docker build --secret id=network_ca,src=/path/to/approved-ca.pem -t rabbitflow:reviewed .` and the proxy's documented network/build-argument configuration. The CA is mounted only for package/engine downloads; it is not copied into the image. Do not disable TLS or checksum verification. Normal public-network builds do not need the secret. Docker VFS uses substantial disk space for repeated stages; ensure adequate free space and prune only your disposable build caches, never application volumes.
+
+The [operational verification guide](launch/OPERATIONS_VERIFICATION.md) records the tested TLS/SMTP and signed encrypted restore procedure, including the remaining off-host storage requirements.

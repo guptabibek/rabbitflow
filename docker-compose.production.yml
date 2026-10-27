@@ -106,6 +106,7 @@ services:
         condition: service_healthy
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN must be set}
+      APP_TRUSTED_PROXY_CIDR: ${APP_TRUSTED_PROXY_CIDR:-127.0.0.1/32}
     ports:
       - "${NGINX_PORT:-3999}:80"
     volumes:
@@ -120,7 +121,13 @@ services:
             exit 1
             ;;
         esac
-        envsubst '$$APP_DOMAIN' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
+        case "$${APP_TRUSTED_PROXY_CIDR}" in
+          ''|*[!0-9./]*)
+            echo "APP_TRUSTED_PROXY_CIDR must be an IPv4 address or CIDR" >&2
+            exit 1
+            ;;
+        esac
+        envsubst '$$APP_DOMAIN $$APP_TRUSTED_PROXY_CIDR' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf
         nginx -t -c /tmp/nginx.conf
         exec nginx -c /tmp/nginx.conf -g 'daemon off;'
     read_only: true
