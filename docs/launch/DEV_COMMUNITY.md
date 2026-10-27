@@ -20,11 +20,11 @@ A useful architectural review follows a single work-item edit through the API, a
 
 ## 3. Deploying RabbitFlow with Docker: configuration before convenience
 
-Clone the repository, copy `.env.docker.example` into a private `.env.docker`, generate independent JWT, cron and MFA encryption keys, and choose your own administrator email/password. Preserve the MFA key in encrypted backups. Validate with `docker compose --env-file .env.docker config --quiet`, then run `docker compose --env-file .env.docker up -d --build`.
+Clone the repository, copy `.env.docker.example` into a private `.env.docker` with mode 0600, generate independent JWT, cron and MFA encryption keys, and choose your own administrator email/password. Preserve the MFA key in encrypted backups. Validate with `docker compose --env-file .env.docker config --quiet`, then run `docker compose --env-file .env.docker up -d --build`.
 
 The entrypoint runs migrations and optionally bootstrap seeding. Read logs: a bootstrap failure is reported while the app still starts, so readiness alone is insufficient. Sign in and create a project/work item, then disable bootstrap. Use the production Compose file for private database networking and durable upload storage; the local stack is for evaluation.
 
-This tutorial must include clean-build evidence before publication. Prisma generation and native startup now work; see FINAL_LAUNCH_REPORT.md for Docker evidence and remaining release gates. Use docs/deployment.md for TLS, backup and recovery responsibilities.
+The container review built the production images and exercised isolated MFA, mutations, uploads and restart persistence. Use the exact source/image evidence in FINAL_LAUNCH_REPORT.md when adapting this walkthrough; it does not establish a provider's mail delivery or off-host recovery. Use docs/deployment.md for TLS, backup and recovery responsibilities.
 
 ## 4. Evaluating RabbitFlow alongside managed Agile tools
 

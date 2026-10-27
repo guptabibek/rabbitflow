@@ -29,12 +29,13 @@ These features exist in the codebase; their presence is not a production certifi
 
 ## Quick start: local Docker evaluation
 
-Requires Git, Docker Engine and Docker Compose v2. Use an isolated machine and synthetic data.
+Requires Git, OpenSSL, Docker Engine and Docker Compose v2. Use an isolated machine and synthetic data.
 
 ```bash
 git clone https://github.com/guptabibek/rabbitflow.git
 cd rabbitflow
 cp .env.docker.example .env.docker
+chmod 600 .env.docker
 ```
 
 Edit `.env.docker`: generate distinct `JWT_SECRET` (`openssl rand -base64 48`), `CRON_SECRET` (`openssl rand -hex 32`) and `MFA_ENCRYPTION_KEY` (`openssl rand -base64 32`), and set your own `SEED_ADMIN_EMAIL` and strong `SEED_ADMIN_PASSWORD`. Preserve the MFA key in encrypted backups. Never commit this file.
@@ -46,11 +47,11 @@ docker compose --env-file .env.docker up -d --build
 
 The evaluation stack listens on port 4080. Check `docker compose --env-file .env.docker logs app` for migration and seed results; a seed failure does not stop the app. Verify `/api/health/ready` returns HTTP 200, then sign in using your configured administrator. Set `RUN_BOOTSTRAP_SEED=false` after success. [Full instructions and caveats](docs/getting-started.md).
 
-Native builds and core browser journeys have been exercised with synthetic data, and the remediated dependency audit reports zero findings. Broader browser and operational release gates remain; consult the final report before using RabbitFlow for important data.
+Native builds, the production desktop/mobile browser matrix and isolated Docker checks have passed with synthetic data. The dependency audit reports zero findings. Live operational acceptance remains; consult the final report before using RabbitFlow for important data.
 
 ## Develop
 
-Use Node.js 24 (`.nvmrc`), npm, and PostgreSQL 16. The Docker runtime currently uses Node.js 22; the old README's Node 18 guidance was insufficient for the shipped TypeScript scripts.
+Use Node.js 24 (`.nvmrc`), npm, and PostgreSQL 16. The Docker runtime uses Node.js 22.
 
 ```bash
 npm ci
