@@ -1,10 +1,10 @@
 # Deployment, upgrades and recovery
 
-Status: runbook prepared from code inspection; a clean full-stack deployment remains a release gate. Use a staging machine and disposable data before production.
+Status: isolated production Compose startup, MFA, mutations, uploads and restart persistence were exercised by the Container review workflow. Live mail, off-host recovery and deployment acceptance remain operator checks; see [the final launch report](launch/FINAL_LAUNCH_REPORT.md). Rehearse with disposable staging data before production.
 
 ## Production Compose
 
-1. Copy `.env.example` to `.env.production` (there is no `.env.production.example`). Fill in APP_DOMAIN, APP_URL, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, DATABASE_URL, REDIS_PASSWORD, JWT_SECRET and CRON_SECRET. DATABASE_URL must use the internal `postgres` host and matching credentials. Use independently generated secrets; hexadecimal passwords avoid URL escaping mistakes.
+1. Copy `.env.example` to `.env.production` (there is no `.env.production.example`) and run `chmod 600 .env.production`. Fill in APP_DOMAIN, APP_URL, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, DATABASE_URL, REDIS_PASSWORD, JWT_SECRET and CRON_SECRET. DATABASE_URL must use the internal `postgres` host and matching credentials. Use independently generated secrets; hexadecimal passwords avoid URL escaping mistakes.
 2. Configure MFA_ENCRYPTION_KEY and working SMTP; preserve the encryption key in encrypted backups. Set the real public origin in APP_URL. Do not assume `rabbitflow.rabbittech.com.np` exists.
 3. For first bootstrap only, set RUN_BOOTSTRAP_SEED=true and your administrator fields. Validate without exposing interpolated values: `docker compose -f docker-compose.production.yml --env-file .env.production config --quiet`.
 4. Run `docker compose -f docker-compose.production.yml --env-file .env.production up -d --build`. The entrypoint runs migrations before serving. Inspect app logs for migrations and seed failure; then verify login and creation of a work item, not only health.
@@ -41,3 +41,11 @@ After rollout verify readiness, sign-in/MFA, project permissions, work-item edit
 The Dockerfile accepts an optional BuildKit secret named `network_ca`. If an approved corporate proxy signs HTTPS responses, build using `docker build --secret id=network_ca,src=/path/to/approved-ca.pem -t rabbitflow:reviewed .` and the proxy's documented network/build-argument configuration. The CA is mounted only for package/engine downloads; it is not copied into the image. Do not disable TLS or checksum verification. Normal public-network builds do not need the secret. Docker VFS uses substantial disk space for repeated stages; ensure adequate free space and prune only your disposable build caches, never application volumes.
 
 The [operational verification guide](launch/OPERATIONS_VERIFICATION.md) records the tested TLS/SMTP and signed encrypted restore procedure, including the remaining off-host storage requirements.
+
+The Compose build now produces the app, nginx and PostgreSQL images. Node stays on major 22 with Alpine 3.24; UID/GID 999 is retained for existing uploads. The runtime excludes global npm; bootstrap runs directly with Node and migrations use `/opt/prisma-cli/node_modules/prisma/build/index.js`. Native development still uses npm normally.
+
+The nginx image applies published Brotli/curl package fixes. The PostgreSQL image retains major 16 and its data path/entrypoint, rebuilding the pinned upstream gosu 1.20 source with Go 1.27.3. This does not migrate a database to a new major. Use `docker compose -f docker-compose.production.yml --env-file .env.production build --pull` when reviewing updated bases; record the resulting image digests and rehearse the upgrade on isolated restored data before changing a live service.
+
+Building needs Docker registries, `registry.npmjs.org`, `binaries.prisma.sh`, `dl-cdn.alpinelinux.org`, `proxy.golang.org` and `sum.golang.org` (plus their documented artifact-storage redirects). Go module checksum verification remains enabled. Restricted networks must allow the required hosts and use approved CA trust. The `Container review` workflow builds without deployment credentials, exercises an isolated synthetic stack and scans all five runtime images for high/critical findings; it never deploys or publishes an image.
+
+Keep provider settings and credentials in the deployment's private environment file. SMTP settings are consumed by the app. Off-host backups also require an operator-managed schedule/upload job, separate recovery-key custody and a restore drill. No configuration values need to be pasted into chat or public audit evidence.

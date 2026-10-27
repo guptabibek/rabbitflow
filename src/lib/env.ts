@@ -72,6 +72,13 @@ export function collectEnvIssues(env: NodeJS.ProcessEnv = process.env): EnvIssue
   }
 
   if (isProduction()) {
+    if (!env.MFA_ENCRYPTION_KEY?.trim()) {
+      issues.push({
+        variable: 'MFA_ENCRYPTION_KEY',
+        message: 'is required in production to encrypt authenticator seeds (generate with: openssl rand -base64 32)',
+      })
+    }
+
     if (!env.CRON_SECRET?.trim()) {
       issues.push({
         variable: 'CRON_SECRET',
@@ -114,10 +121,12 @@ let validated = false
  */
 export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   if (validated) return
-  validated = true
 
   const issues = collectEnvIssues(env)
-  if (issues.length === 0) return
+  if (issues.length === 0) {
+    validated = true
+    return
+  }
 
   const report = issues.map((issue) => `  - ${issue.variable} ${issue.message}`).join('\n')
   const message = `Invalid environment configuration:\n${report}\n\nSee .env.example for the full contract.`
@@ -127,4 +136,5 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   }
 
   console.warn(`WARNING: ${message}`)
+  validated = true
 }

@@ -27,7 +27,7 @@ Verify both trusted HTTPS and an untrusted spoof before exposing an origin. Rest
 
 Use a maintenance window or a consistent snapshot to stop application/cron writes while collecting the database and upload volume. Use restrictive temporary directories (`umask 077`). Follow [deployment.md](../deployment.md) for pg_dump and record the exact code/image and volume names.
 
-The following cryptographic steps were exercised with dedicated synthetic certificates. Production must use approved signing/recovery keys, stored separately from the backup destination; never use the one-day test certificates. Variables below name private local files, never literal key material:
+The following cryptographic steps were exercised with dedicated synthetic certificates. Production must use approved signing/recovery keys, stored separately from the backup destination; never use the short-lived synthetic audit certificates. Variables below name private local files, never literal key material:
 
 ```bash
 # bundle.tar contains database.dump, uploads.tar and protected runtime configuration.
@@ -48,12 +48,26 @@ openssl cms -verify -binary -inform DER -in recovered-signed.der \
 
 Only after signature verification should the bundle be extracted and PostgreSQL restored into a new empty database (`pg_restore --no-owner --exit-on-error`). Restore uploads into a new volume with their original ownership. Reuse the corresponding JWT/MFA keys, disable outbound integrations during the drill, and start the app using the production Compose environment (including `HOSTNAME=0.0.0.0`). Check session access, attachment bytes, anonymous denial and TOTP before accepting recovery.
 
-An encrypted file in this same cloud machine is **not** an off-host backup. The remaining owner input is the storage provider/bucket/path, approved access binding, retention policy and separate key custody. No upload, production restore or live-data operation is authorized by this runbook.
+An encrypted file in this same cloud machine is **not** an off-host backup. The operator must configure storage, the scheduled upload/access binding, retention and separate key custody privately, then test retrieval. These values do not need to be shared in chat. No upload, production restore or live-data operation is authorized by this runbook.
 
 ## Live deployment observation
 
-The `Read-only deployment observation` workflow checks only GET requests to `/`, `/login`, `/api/health/live` and `/api/health/ready` on the owner-provided hostname. It uses normal TLS validation, sends no credentials, does not dump response pages/cookies and does not infer the deployed commit from green CI. Its result must be read before claiming live health.
+The `Read-only deployment observation` workflow checks only GET requests to `/`, `/login`, `/api/health/live`, `/api/health/ready`, `/brand/rabbitflow-mark.png`, `/api/projects` and `/api/users` on the owner-provided hostname. It uses normal TLS validation, sends no credentials, does not dump response pages/cookies and does not infer the deployed commit from green CI. Its result must be read before claiming live health.
 
-A private/edge-restricted deployment may reject the runner; that would leave observation blocked, not prove an application defect. Authenticated live workflows, SMTP inbox delivery, off-host upload and any production restore need a specific approved target and credentials in secure environment settings. Do not send passwords, tokens or private keys in chat.
+A private/edge-restricted deployment may reject the runner; that would leave observation blocked, not prove an application defect. Authenticated live workflows, SMTP inbox delivery and off-host recovery remain operator checks in an isolated staging target configured through its private `.env` or secret store. Do not paste configuration or credentials in chat. No production restore is authorized by this review.
 
-On 2026-10-27, [run 40441837055](https://github.com/guptabibek/rabbitflow/actions/runs/40441837055) passed from GitHub's runner: `/` returned 307 to `/login`; `/login`, liveness and readiness returned 200; certificate validation, HSTS and nosniff were present; readiness confirmed database/Redis. This does not identify the deployed commit or prove authenticated operations. This supersedes the initial exact-match nosniff detector: the corrected check accepts combined proxy/application header values.
+On 2026-10-27, [run 40450702373](https://github.com/guptabibek/rabbitflow/actions/runs/40450702373) passed from GitHub's runner: `/` returned 307 to `/login`; `/login`, liveness, readiness and the readable brand image returned 200; anonymous projects/users APIs returned 401; certificate validation, HSTS and nosniff were present; readiness confirmed database/Redis. This does not identify the deployed commit or prove authenticated operations. This supersedes the initial exact-match nosniff detector: the corrected check accepts combined proxy/application header values.
+
+## Operator acceptance with private configuration
+
+Keep the real SMTP, storage and account configuration in the deployment's restricted `.env` or secret store. Merely setting a backup destination does not schedule a backup: RabbitFlow does not provide a built-in off-host uploader.
+
+Record these outcomes without copying configuration values, cookies, recovery codes or keys into public evidence:
+
+1. Identify the deployed source/image and the isolated synthetic staging account. Verify login, required MFA, project/work-item creation, uploads and anonymous/cross-project denial. Do not use production data for recovery testing.
+2. Request password reset for the staging account, verify delivery to its approved inbox, complete reset and confirm that the previous session and reused OTP are rejected. Confirm the real provider uses verified implicit TLS or STARTTLS; never relax certificate verification.
+3. Check authenticated cron execution, monitoring alerts, edge forwarding and origin/DB/cache access restrictions. Verify restart and configured-Redis recovery on staging.
+4. Run the operator-managed backup/upload job; retrieve an encrypted database/uploads/configuration backup from the off-host store and verify integrity before restoring into a new database and upload volume. Recover with separately held keys and verify attachment bytes and TOTP. Record backup age, elapsed recovery, retention and access controls against the operator's chosen RPO/RTO.
+5. Exercise representative users/workloads on the intended host, keep rate-limit responses visible as failures, and review CPU, memory, database/Redis and latency telemetry. Obtain independent installation and human workflow acceptance before declaring general availability.
+
+The audit's local mail sink and encrypted restore validate code paths. They cannot establish a provider's inbox delivery or off-host durability.

@@ -51,9 +51,22 @@ test.describe('Management form feedback', () => {
     const project = await seed.createProjectFixture({ name: makeProjectName('team-feedback') })
     const draftName = makeProjectName('retained-team')
 
-    await page.goto(`/projects/${project.id}/teams`)
-    await expect(page.getByTestId('team-management')).toBeVisible()
-    await page.getByRole('button', { name: 'New', exact: true }).click()
+    let releaseTeams: () => void = () => {}
+    const gate = new Promise<void>(resolve => { releaseTeams = resolve })
+    await page.route(`**/api/teams?projectId=${project.id}`, async route => {
+      await gate
+      await route.continue()
+    })
+    try {
+      await page.goto(`/projects/${project.id}/teams`)
+      await expect(page.getByTestId('team-management')).toHaveAttribute('aria-busy', 'true')
+      await page.getByRole('button', { name: 'New', exact: true }).click()
+      releaseTeams()
+      await expect(page.getByTestId('team-management')).toHaveAttribute('aria-busy', 'false')
+      await expect(page.getByTestId('team-name-input')).toHaveValue('')
+    } finally {
+      releaseTeams()
+    }
     await page.getByTestId('team-save-button').click()
     await expect(page.getByTestId('team-name-input')).toHaveAttribute('aria-invalid', 'true')
     await expect(page.getByText('Enter a team name.', { exact: true })).toBeVisible()

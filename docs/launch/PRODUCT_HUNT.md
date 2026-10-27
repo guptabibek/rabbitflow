@@ -12,7 +12,7 @@ Draft only. Verify current submission, maker and asset requirements at [Product 
 
 **Maker introduction / first comment:** “I maintain RabbitFlow and am preparing its first release. I want feedback on one practical journey: configure an isolated install, create a project and move a backlog item through a sprint. The repository explains deployment responsibilities and current limitations. Which part of that evaluation needs to be clearer?” Owner must confirm personal attribution before posting.
 
-**Media:** existing social card; authentic synthetic board, backlog, sprint and permissions captures; 90-second captioned walkthrough; exact asset dimensions rechecked against the current submission form. No fictional dashboard shots or invented testimonials.
+**Media:** available assets are the social card and genuine synthetic-data backlog, desktop board and mobile board captures. Sprint/permissions captures and a 90-second captioned walkthrough remain to be created; do not describe them as available. Recheck exact asset dimensions against the current submission form. No fictional dashboard shots or invented testimonials.
 
 **FAQ:** Self-hosted, not a hosted signup service. MIT licensed. No public demo yet. No published pricing/support SLA or benchmark. SMTP/TLS/backups/upgrades are operator responsibilities. Product feature parity with Jira is not claimed.
 

@@ -19,7 +19,7 @@ if [ "${RUN_BOOTSTRAP_SEED:-false}" = "true" ]; then
 	# Optional, and idempotent when it succeeds. A failure here must not become
 	# a restart loop that takes nginx and cron down with it, so report it and
 	# carry on serving.
-	if ! npm run db:seed:bootstrap; then
+	if ! node --experimental-strip-types /app/scripts/seed-bootstrap.mjs; then
 		echo "WARNING: bootstrap seed failed; starting without it." >&2
 		echo "         Create the first administrator manually." >&2
 	fi

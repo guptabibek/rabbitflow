@@ -12,7 +12,7 @@
 | NEXT_PUBLIC_APP_URL | Browser-visible origin; never place secrets in NEXT_PUBLIC variables |
 | REDIS_URL | Optional natively; if configured, readiness requires successful Redis ping |
 | REDIS_PASSWORD | Required by production Compose; use URL-safe hex if interpolating into a URL |
-| MFA_ENCRYPTION_KEY | Required by both Compose stacks: 32-byte hex/base64 key for stored MFA secrets; preserve and back up securely |
+| MFA_ENCRYPTION_KEY | Required in production and both Compose stacks: 32-byte hex/base64 key for stored MFA secrets; preserve and back up securely |
 | SMTP_HOST/PORT/SECURE/USER/PASS/FROM | Mail transport; password resets cannot deliver without it |
 | SMTP_TLS_REJECT_UNAUTHORIZED | Keep true; never weaken TLS checks |
 | RUN_BOOTSTRAP_SEED | Enable deliberately for first administrator, then disable |

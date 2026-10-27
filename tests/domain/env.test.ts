@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { collectEnvIssues } from '../../src/lib/env.ts'
+import { collectEnvIssues, validateEnv } from '../../src/lib/env.ts'
 
 /**
  * Regression tests for OPS-005.
@@ -75,4 +75,21 @@ test('OPS-005: production-only checks do not fire outside production', () => {
   // permitted.
   const issues = collectEnvIssues({ ...validEnv, ALLOW_HEADER_AUTH: 'true' })
   assert.deepEqual(issues, [])
+})
+
+test('production requires an MFA key and repeated failed validation stays closed', () => {
+  const runtimeEnv: Record<string, string | undefined> = process.env
+  const original = runtimeEnv.NODE_ENV
+  try {
+    runtimeEnv.NODE_ENV = 'production'
+    const configured = { ...validEnv, CRON_SECRET: 'c'.repeat(64), APP_URL: 'http://localhost', MFA_ENCRYPTION_KEY: 'm'.repeat(32) }
+    assert.deepEqual(collectEnvIssues(configured), [])
+    const missing = { ...configured, MFA_ENCRYPTION_KEY: '' }
+    assert.ok(issueFor(missing, 'MFA_ENCRYPTION_KEY'))
+    assert.throws(() => validateEnv(missing), /MFA_ENCRYPTION_KEY/)
+    assert.throws(() => validateEnv(missing), /MFA_ENCRYPTION_KEY/)
+  } finally {
+    if (original === undefined) delete runtimeEnv.NODE_ENV
+    else runtimeEnv.NODE_ENV = original
+  }
 })

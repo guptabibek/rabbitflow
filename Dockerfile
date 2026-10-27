@@ -1,16 +1,23 @@
 # Node 22, not 20: `scripts/seed-bootstrap.mjs` imports TypeScript directly and
 # runs under `--experimental-strip-types`, which does not exist before 22.6. The
 # repo's own `npm test` needs it too, so 20 could not run the code it shipped.
-FROM node:22-bookworm-slim AS base
+# Keep Node's supported major while using the maintained Alpine 3.24 packages.
+# The Debian 12 image carried OS findings outside the application's npm audit.
+FROM node:22-alpine3.24 AS base
 
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && groupadd --system nextjs \
-  && useradd --system --gid nextjs --create-home --home-dir /home/nextjs nextjs \
-  && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=secret,id=network_ca \
+    if [ -f /run/secrets/network_ca ]; then \
+      cat /etc/ssl/cert.pem /run/secrets/network_ca > /tmp/network-ca.pem; \
+      export SSL_CERT_FILE=/tmp/network-ca.pem; \
+    fi; \
+    apk add --no-cache openssl ca-certificates \
+  && if [ "$(getent group 999 | cut -d: -f1)" = ping ]; then delgroup ping; fi \
+  && addgroup -S -g 999 nextjs \
+  && adduser -S -D -u 999 -G nextjs -h /home/nextjs nextjs \
+  && rm -f /tmp/network-ca.pem
 
 FROM base AS deps
 
@@ -64,7 +71,8 @@ RUN --mount=type=secret,id=network_ca \
     node -e 'const fs=require("fs");const root=require("./package.json");const version=require("./package-lock.json").packages["node_modules/prisma"].version;fs.mkdirSync("/opt/prisma-cli",{recursive:true});fs.writeFileSync("/opt/prisma-cli/package.json",JSON.stringify({private:true,dependencies:{prisma:version},overrides:root.overrides}));' \
   && npm install --omit=dev --no-fund --prefix /opt/prisma-cli \
   && npm audit --omit=dev --audit-level=low --prefix /opt/prisma-cli \
-  && npm cache clean --force
+  && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Needed only by the optional bootstrap seed, which runs as a plain script
 # rather than through the built server:
